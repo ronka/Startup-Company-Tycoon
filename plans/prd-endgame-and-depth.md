@@ -26,7 +26,7 @@ A full playtest run surfaced one structural problem and several depth problems:
 - Choices (candidates, events, morale) carry real tradeoffs.
 - Remove the friction that makes a 50-week run feel like chores.
 
-**Non-goals (this cycle):** multiplayer, meta-progression between runs, monetization, sound, additional platforms beyond the current iOS/Android/web targets, save-format migrations beyond a version bump.
+**Non-goals (this cycle):** multiplayer, monetization, sound, additional platforms beyond the current iOS/Android/web targets, save-format migrations beyond a version bump, server-side anything (daily cadence runs on device time — see F12).
 
 ## 3. Design conventions (unchanged, apply to all features)
 
@@ -150,6 +150,55 @@ Target **30–50 cards** total, organized per era.
 - Stat tiles get a tap/long-press explainer (one sentence each: what feeds it, what it feeds).
 - First-run only: three short contextual hints (Team: "Devs raise product quality — quality wins market share"; Money: "Raise before runway drops under 8 weeks or terms get worse"; HQ: "Watch revenue vs. burn").
 - No modal tutorial, no forced walkthrough.
+### F12 — Daily cadence & retention (P0)
+
+Today a full run can be speedrun in one sitting. The product goal is a **daily game**: a limited number of actions per day, a reason to return tomorrow, and a reward for showing up — without the mechanic reading as a mobile-F2P energy shakedown.
+
+**Daily week budget.**
+- The player gets **5 game-weeks per real day**, refreshing at local midnight.
+- Unused weeks **bank up to a cap of 10** (two days' worth). Missing a day is never punished — the player returns to a *fatter* session, not a lost run.
+- 5 ticks ≈ a 5–10 minute session: enough to land a hire, resolve an event, and watch a trend move; not enough to outrun a funding crisis in one sitting. A crisis spotted on the last tick of today ("runway 6 weeks") is tomorrow's reason to open the app.
+- With F1/F3 exit pacing (runs ending week 60–120), a run becomes a **2–4 week daily campaign**.
+- Everything else stays playable at 0 remaining weeks: browsing tabs, queuing pending hires, reading news, answering an already-drawn decision card. Only `TICK` is gated.
+
+**Diegetic framing — no energy bar.**
+- Never display "energy 3/5 ⚡". The fiction carries the limit: the founder plans the week, then the team executes. Out-of-weeks copy: *"That's the week planned out — the team gets to work. Come back tomorrow."*
+- The Next Week button shows remaining days subtly (e.g. small dots under the label), disabled state uses the diegetic copy.
+
+**Daily reward: an appointment, not a login bonus.**
+- First session of each day opens with a **Morning Standup card** — pick 1 of 3 small boosts drawn from a dedicated daily pool (e.g. *"The team's energized"* +3 morale · *"A journalist called"* +4% hype · *"An angel friend wires a favor"* +$10K).
+- The reward is a *decision*, delivered through the existing event-card machinery — on-brand, and the engine stays pure.
+- Rewards bend the run, never trivialize it.
+
+**Forgiving streak.**
+
+| Streak | Reward |
+|---|---|
+| 3 days | Standup pool upgrades (better options start appearing) |
+| 7 days | One "golden" card: refresh all candidate pools, or +1 bonus week today |
+| 14 days | Rare standup option (e.g. "Board goodwill" — next raise at clean terms) |
+| Missed day | Streak **pauses** for one grace day; only resets after two consecutive missed days |
+
+**Re-engagement.**
+- Local push notifications via `expo-notifications`, tied to fiction and actual state, never generic: *"Week 34: your Series A decision is waiting"*, *"Runway is down to 4 weeks."* One per day max; opt-in prompt only after the player's first completed session (never on first launch).
+
+**Architecture.**
+- **Time never enters the engine.** `src/game/` stays pure and deterministic — no `Date`. The daily budget, streak, and standup grants live in the store layer (`src/state/game-store.tsx`), which persists `lastSessionDate`, `weeksRemaining`, `streak` alongside the save and expresses all rewards as ordinary `GameAction`s / injected event cards.
+- The sim harness and vitest suites run unthrottled by construction. Ship a dev-only "free play" toggle so playtesting isn't rate-limited.
+- **Clock cheating** (changing device date to refill weeks) is consciously accepted for a single-player game; revisit with server time only if leaderboards ever exist.
+
+**Interaction with other features.**
+- Raises F3/F4 urgency: every 5-tick session must contain at least one decision or notable beat. A 17-week silent stretch (observed in the MVP playtest) would be three straight days of empty tapping.
+- F9's fast-forward stays, but within the daily budget.
+
+**Rejected alternative (recorded deliberately):** strict "1 real day = 1 game week" appointment play (Wordle-style). Stronger ritual and weightier decisions, but sessions feel thin, runs stretch to 2–4 *months*, and a vacation wrecks the campaign. Budget + banking keeps the ritual while respecting that some days the player has 3 minutes and some days 20.
+
+**Acceptance criteria**
+- `TICK` is rejected by the store (not the engine) when the daily budget is exhausted; engine tests and `pnpm sim` are unaffected.
+- Budget refreshes at local midnight; banking caps at 10; behavior covered by store-level tests with a mocked clock.
+- Standup card appears exactly once per day on first session; streak table implemented with grace-day semantics.
+- No UI element renders a numeric/battery-style energy meter.
+- Notification fires at most once daily, references real game state, and deep-links into the run.
 
 ---
 
@@ -157,16 +206,18 @@ Target **30–50 cards** total, organized per era.
 
 | Priority | Features | Rationale |
 |---|---|---|
-| P0 | F1 exits + score, F2 stake display | Makes runs end and dilution matter; everything else amplifies this |
-| P1 | F3 eras, F4 deck expansion | Late-game threat + content so the year isn't silent |
+| P0 | F1 exits + score, F2 stake display, F12 daily cadence | Makes runs end, dilution matter, and the game a daily habit — the product's shape |
+| P1 | F3 eras, F4 deck expansion | Late-game threat + content so the year isn't silent (and every daily session has a beat) |
 | P2 | F5 funding, F6 candidates, F7 morale, F8 rivals, F9 UX pass | Depth and friction — each independent, parallelizable |
 | P3 | F10 web polish, F11 teaching | Cheap wins, anytime |
 
-F2, F9, F10 have no engine dependencies on the others and can ship immediately. F5–F8 all read era state, so land F3's state plumbing (even with placeholder dials) early.
+F2, F9, F10 have no engine dependencies on the others and can ship immediately. F12 is store-layer only and can also start immediately, but should ship to players together with (or after) F3/F4 — daily-gating the current content-dry mid-game would make three straight days of empty tapping. F5–F8 all read era state, so land F3's state plumbing (even with placeholder dials) early.
 
 ## 6. Success criteria for the release
 
 - Median run (balanced play) ends in 60–120 weeks with an exit or a Reckoning death — never in an infinite idle state.
+- Under the daily budget, that median run is a **2–4 week daily campaign**; a single day's session (5 ticks) takes 5–10 minutes and always contains at least one decision or notable beat.
 - A player can articulate the score loop after one run: "keep equity high, exit at peak valuation."
 - Sim harness demonstrates: aggressive > balanced > passive score spread across seeds, with all three outcomes represented.
 - Zero weeks without either a decision, a notable digest, or visible market movement in the first 40 weeks.
+- The daily mechanic never reads as an energy system: no meter UI, absence is never punished (banking, grace day), and the daily reward is always a choice, not a handout.

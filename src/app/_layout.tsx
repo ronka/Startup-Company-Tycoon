@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
+import { NotificationManager } from '@/components/game/notification-manager';
 import { GameProvider } from '@/state/game-store';
 import '@/src/global.css';
 
@@ -20,6 +21,7 @@ export default function RootLayout() {
     <GluestackUIProvider mode="dark">
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <GameProvider>
+          <NotificationManager />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="(game)" />

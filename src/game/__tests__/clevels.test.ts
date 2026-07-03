@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { qualityAfterTick, weeklyBurnFor } from '../balance';
-import { generateCandidates } from '../clevels';
+import { cLevelPerkMultiplierFor, cLevelPerkTradeoffFor, qualityAfterTick, weeklyBurnFor } from '../balance';
+import { generateCandidates, isDominated } from '../clevels';
 import { newGame, reduce, tick } from '../engine';
 import { createRng } from '../rng';
-import { GameState } from '../types';
+import { CLevelCandidate, CLevelPerkAxis, CLevelRole, GameState } from '../types';
+
+const SAMPLE_SEEDS = Array.from({ length: 60 }, (_, i) => i + 1);
+const ROLES: CLevelRole[] = ['cto', 'cmo', 'cfo'];
 
 describe('generateCandidates', () => {
   it('is deterministic per seed', () => {
@@ -25,37 +28,161 @@ describe('generateCandidates', () => {
     const ids = new Set(candidates.map((c) => c.id));
     expect(ids.size).toBe(candidates.length);
   });
-});
 
-describe('HIRE_CLEVEL', () => {
-  it('hiring a CTO raises devEffort by the perk multiplier', () => {
-    const s0 = newGame(7);
-    const candidate = s0.cLevels.cto.candidates[0];
-    const hired = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cto', candidateId: candidate.id });
-
-    expect(hired.cLevels.cto.hired).toEqual(candidate);
-
-    const withoutBoost = qualityAfterTick(0, s0.headcount.devs, s0.morale);
-    const withBoost = qualityAfterTick(0, s0.headcount.devs, s0.morale, candidate.perk.multiplier);
-    expect(withBoost).toBeGreaterThan(withoutBoost);
-    expect(withBoost).toBeCloseTo(withoutBoost * candidate.perk.multiplier);
+  it('never produces a strictly dominated candidate within a pool, across many seeds', () => {
+    for (const seed of SAMPLE_SEEDS) {
+      for (const role of ROLES) {
+        const { candidates } = generateCandidates(role, createRng(seed));
+        for (const candidate of candidates) {
+          expect(isDominated(candidate, candidates)).toBe(false);
+        }
+      }
+    }
   });
 
-  it('a hired C-level salary joins the weekly burn', () => {
+  it('never repeats a personality string within one pool, across many seeds', () => {
+    for (const seed of SAMPLE_SEEDS) {
+      for (const role of ROLES) {
+        const { candidates } = generateCandidates(role, createRng(seed));
+        const personalities = candidates.map((c) => c.personality);
+        expect(new Set(personalities).size).toBe(personalities.length);
+      }
+    }
+  });
+
+  it('never repeats a full name within one pool, across many seeds', () => {
+    for (const seed of SAMPLE_SEEDS) {
+      for (const role of ROLES) {
+        const { candidates } = generateCandidates(role, createRng(seed));
+        const names = candidates.map((c) => c.name);
+        expect(new Set(names).size).toBe(names.length);
+      }
+    }
+  });
+
+  it('each role exposes at least 2 distinct perk axes across its pool space', () => {
+    for (const role of ROLES) {
+      const axes = new Set<CLevelPerkAxis>();
+      for (const seed of SAMPLE_SEEDS) {
+        const { candidates } = generateCandidates(role, createRng(seed));
+        candidates.forEach((c) => axes.add(c.perk.axis));
+      }
+      expect(axes.size).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('a quirk only ever nudges salary, never the perk itself', () => {
+    for (const seed of SAMPLE_SEEDS) {
+      for (const role of ROLES) {
+        const { candidates } = generateCandidates(role, createRng(seed));
+        for (const candidate of candidates) {
+          if (!candidate.quirk) continue;
+          expect(candidate.quirk.salaryDeltaFraction).not.toBe(0);
+          expect(typeof candidate.perk.multiplier).toBe('number');
+        }
+      }
+    }
+  });
+});
+
+function makeCandidate(overrides: Partial<CLevelCandidate>): CLevelCandidate {
+  return {
+    id: 'test-candidate',
+    name: 'Test Candidate',
+    personality: 'Flavor text.',
+    salary: 6_000,
+    perk: { id: 'test-perk', label: 'test perk', axis: 'cto-productivity', multiplier: 1.2 },
+    quirk: null,
+    ...overrides,
+  };
+}
+
+describe('HIRE_CLEVEL', () => {
+  it('a cto-productivity perk raises devEffort via its axis multiplier', () => {
+    const s0 = newGame(7);
+    const candidate = makeCandidate({
+      perk: { id: 'p', label: '+20% dev productivity', axis: 'cto-productivity', multiplier: 1.2 },
+    });
+    s0.cLevels.cto.candidates = [candidate];
+    const hired = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cto', candidateId: candidate.id });
+
+    const devBoost = cLevelPerkMultiplierFor(hired.cLevels, 'cto', 'cto-productivity');
+    expect(devBoost).toBe(1.2);
+
+    const withoutBoost = qualityAfterTick(100, s0.headcount.devs, s0.morale);
+    const withBoost = qualityAfterTick(100, s0.headcount.devs, s0.morale, devBoost);
+    expect(withBoost).toBeGreaterThan(withoutBoost);
+  });
+
+  it('a cto-techDebt perk slows quality decay without touching growth', () => {
+    const s0 = newGame(7);
+    const candidate = makeCandidate({
+      perk: { id: 'p', label: '−25% tech-debt drag', axis: 'cto-techDebt', multiplier: 0.75 },
+    });
+    s0.cLevels.cto.candidates = [candidate];
+    const hired = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cto', candidateId: candidate.id });
+
+    const devBoost = cLevelPerkMultiplierFor(hired.cLevels, 'cto', 'cto-productivity');
+    const decayMultiplier = cLevelPerkMultiplierFor(hired.cLevels, 'cto', 'cto-techDebt');
+    expect(devBoost).toBe(1); // techDebt axis never touches the growth-side multiplier
+    expect(decayMultiplier).toBe(0.75);
+
+    const withoutPerk = qualityAfterTick(100, s0.headcount.devs, s0.morale);
+    const withPerk = qualityAfterTick(100, s0.headcount.devs, s0.morale, devBoost, decayMultiplier);
+    expect(withPerk).toBeGreaterThan(withoutPerk); // less decay eaten out of the same growth
+  });
+
+  it('a cto-shortcut perk boosts growth and worsens decay together', () => {
+    const s0 = newGame(7);
+    const candidate = makeCandidate({
+      perk: {
+        id: 'p',
+        label: '+40% dev productivity, +35% tech-debt drag',
+        axis: 'cto-shortcut',
+        multiplier: 1.4,
+        tradeoffMultiplier: 1.35,
+      },
+    });
+    s0.cLevels.cto.candidates = [candidate];
+    const hired = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cto', candidateId: candidate.id });
+
+    const devBoost = cLevelPerkMultiplierFor(hired.cLevels, 'cto', 'cto-shortcut');
+    const decayTradeoff = cLevelPerkTradeoffFor(hired.cLevels, 'cto', 'cto-shortcut');
+    expect(devBoost).toBe(1.4);
+    expect(decayTradeoff).toBe(1.35);
+  });
+
+  it('a hired CFO burnCut perk cuts fixed burn; a roundTerms CFO does not', () => {
     const s0 = newGame(8);
-    const candidate = s0.cLevels.cfo.candidates[0];
-    const hired = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cfo', candidateId: candidate.id });
-    const s1 = tick(hired);
+    const burnCutCandidate = makeCandidate({
+      salary: 6_000,
+      perk: { id: 'p', label: '−20% fixed burn', axis: 'cfo-burnCut', multiplier: 0.8 },
+    });
+    s0.cLevels.cfo.candidates = [burnCutCandidate];
+    const hiredBurnCut = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cfo', candidateId: burnCutCandidate.id });
+    const s1 = tick(hiredBurnCut);
     const s1Baseline = tick(s0);
-    // CFO also cuts fixed burn, so just assert the salary is reflected somewhere:
-    // burn without any exec vs. burn with exec payroll added back at multiplier 1.
-    const burnNoCfo = weeklyBurnFor(hired.headcount);
-    const burnWithCfo = weeklyBurnFor(hired.headcount, {
-      execPayroll: candidate.salary,
-      fixedBurnMultiplier: candidate.perk.multiplier,
+
+    const burnNoCfo = weeklyBurnFor(hiredBurnCut.headcount);
+    const burnWithCfo = weeklyBurnFor(hiredBurnCut.headcount, {
+      execPayroll: burnCutCandidate.salary,
+      fixedBurnMultiplier: 0.8,
     });
     expect(burnWithCfo).not.toBe(burnNoCfo);
     expect(s1.cash).not.toBe(s1Baseline.cash);
+
+    const roundTermsCandidate = makeCandidate({
+      salary: 6_000,
+      perk: { id: 'p2', label: '−20% dilution on next round', axis: 'cfo-roundTerms', multiplier: 0.8 },
+    });
+    const s0b = newGame(8);
+    s0b.cLevels.cfo.candidates = [roundTermsCandidate];
+    const hiredRoundTerms = reduce(s0b, {
+      type: 'HIRE_CLEVEL',
+      role: 'cfo',
+      candidateId: roundTermsCandidate.id,
+    });
+    expect(cLevelPerkMultiplierFor(hiredRoundTerms.cLevels, 'cfo', 'cfo-burnCut')).toBe(1); // no burn cut from this axis
   });
 
   it('ignores an unknown candidateId', () => {

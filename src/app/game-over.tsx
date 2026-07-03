@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { GameOverReason } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
+import { formatMoney } from '@/lib/format';
 import { useGame } from '@/state/game-store';
 
 const HEADLINE: Record<GameOverReason, string> = {
@@ -43,6 +44,10 @@ export default function GameOverScreen() {
         <ThemedText themeColor="textSecondary" style={styles.subtitle}>
           {SUBTITLE[state.gameOver](state.week)}
         </ThemedText>
+        <ThemedText type="title" style={styles.score}>
+          {formatMoney(state.finalScore ?? 0)}
+        </ThemedText>
+        <ThemedText themeColor="textSecondary">Final score</ThemedText>
       </View>
       <PrimaryButton label="New Game" onPress={startFresh} />
     </View>
@@ -65,5 +70,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: 'center',
+  },
+  score: {
+    textAlign: 'center',
+    marginTop: Spacing.three,
   },
 });

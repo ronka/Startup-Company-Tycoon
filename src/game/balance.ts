@@ -3,8 +3,18 @@
  * functions so the whole economy can be reasoned about and retuned in one file.
  */
 
-import { EventStat, TimedEffect } from './events/types';
-import { C_LEVEL_ROLES, CLevelRole, CLevels, Headcount, ROUND_ORDER, Role, RoundType, Stage } from './types';
+import { Era, EventStat, TimedEffect } from './events/types';
+import {
+  C_LEVEL_ROLES,
+  CLevelPerkAxis,
+  CLevelRole,
+  CLevels,
+  Headcount,
+  ROUND_ORDER,
+  Role,
+  RoundType,
+  Stage,
+} from './types';
 
 /** The state slice `weeklyStatsFor` needs — matches a subset of `GameState`. */
 export interface WeeklyStatsInput {
@@ -14,10 +24,12 @@ export interface WeeklyStatsInput {
   productQuality: number;
   marketShare: number;
   cash: number;
+  era: Era;
+  moraleLeverActive: boolean;
 }
 
 /** Bump when the shape of a saved GameState changes incompatibly. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 5;
 
 // ── Insolvency ───────────────────────────────────────────────────────────
 /** Consecutive weeks with cash < 0 before the run ends in bankruptcy, regardless of rounds left. */
@@ -58,10 +70,10 @@ export function payrollFor(headcount: Headcount): number {
  */
 export function weeklyBurnFor(
   headcount: Headcount,
-  options: { execPayroll?: number; fixedBurnMultiplier?: number } = {},
+  options: { execPayroll?: number; fixedBurnMultiplier?: number; moraleLeverCost?: number } = {},
 ): number {
-  const { execPayroll = 0, fixedBurnMultiplier = 1 } = options;
-  return payrollFor(headcount) + FIXED_WEEKLY_BURN * fixedBurnMultiplier + execPayroll;
+  const { execPayroll = 0, fixedBurnMultiplier = 1, moraleLeverCost = 0 } = options;
+  return payrollFor(headcount) + FIXED_WEEKLY_BURN * fixedBurnMultiplier + execPayroll + moraleLeverCost;
 }
 
 /**
@@ -92,16 +104,19 @@ export function devEffort(devs: number): number {
  * One week of quality evolution: dev effort (scaled by morale and an optional
  * CTO perk) grows it, tech-debt drag decays it proportionally to its current
  * value (so quality asymptotes rather than growing unbounded, and bleeds
- * toward zero with no devs at all).
+ * toward zero with no devs at all). `decayMultiplier` lets a CTO's
+ * tech-debt-reduction perk (or a shortcut perk's tradeoff cost) move the drag
+ * rate independently of the growth-side `devBoost`.
  */
 export function qualityAfterTick(
   quality: number,
   devs: number,
   morale: number,
   devBoost: number = 1,
+  decayMultiplier: number = 1,
 ): number {
   const growth = devEffort(devs) * QUALITY_GROWTH_RATE * moraleFactor(morale) * devBoost;
-  const decay = quality * QUALITY_DECAY_RATE;
+  const decay = quality * QUALITY_DECAY_RATE * decayMultiplier;
   return Math.max(0, quality + growth - decay);
 }
 
@@ -130,9 +145,9 @@ export function revenueFor(
   return quality * marketShare * hype * salesFactor * REVENUE_PER_QUALITY_SHARE;
 }
 
-/** Company valuation: revenue capitalized at an industry multiple, boosted by hype. */
-export function valuationFor(revenue: number, hype: number): number {
-  return revenue * INDUSTRY_MULTIPLE * hype;
+/** Company valuation: revenue capitalized at an industry multiple (compressed in Reckoning), boosted by hype. */
+export function valuationFor(revenue: number, hype: number, era: Era = 'scrappy'): number {
+  return revenue * INDUSTRY_MULTIPLE * ERA_VALUATION_MULTIPLE_MULTIPLIER[era] * hype;
 }
 
 export interface WeeklyStats {
@@ -151,16 +166,17 @@ export interface WeeklyStats {
 export function weeklyStatsFor(state: WeeklyStatsInput): WeeklyStats {
   const burn = weeklyBurnFor(state.headcount, {
     execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplier(state.cLevels, 'cfo'),
+    fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
+    moraleLeverCost: state.moraleLeverActive ? MORALE_LEVER_WEEKLY_COST : 0,
   });
-  const effectiveHype = state.hype * cLevelPerkMultiplier(state.cLevels, 'cmo');
+  const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
   const revenue = revenueFor(
     state.productQuality,
     state.marketShare,
     effectiveHype,
     salesFactorFor(state.headcount.sales),
   );
-  const valuation = valuationFor(revenue, effectiveHype);
+  const valuation = valuationFor(revenue, effectiveHype, state.era);
   const runway = runwayWeeks(state.cash, burn - revenue);
   return { burn, revenue, valuation, runway };
 }
@@ -168,6 +184,12 @@ export function weeklyStatsFor(state: WeeklyStatsInput): WeeklyStats {
 // ── Team management: hiring & morale ────────────────────────────────────
 /** Morale drifts toward this baseline every week absent other pressure. */
 export const MORALE_BASELINE = 70;
+/** Era-adjusted morale baseline: Reckoning's layoff fear and down-round dread drag the resting point down. */
+export const ERA_MORALE_BASELINE: Record<Era, number> = {
+  scrappy: MORALE_BASELINE,
+  boom: MORALE_BASELINE,
+  reckoning: MORALE_BASELINE - 15,
+};
 /** Fraction of the gap to baseline closed each week. */
 export const MORALE_DRIFT_RATE = 0.08;
 /** Morale points lost per 100% of total staff cut in a single week's batch. */
@@ -178,6 +200,25 @@ export const MIN_MORALE_FACTOR = 0.5;
 export const MAX_MORALE_FACTOR = 1.5;
 /** Firing this fraction or more of a role's current headcount in one batch warrants a confirm dialog. */
 export const LAYOFF_CONFIRM_THRESHOLD = 0.2;
+
+// ── Morale thresholds & levers ──────────────────────────────────────────
+/** Below this morale, each week carries a seeded risk a random hire quits outright. */
+export const MORALE_ATTRITION_THRESHOLD = 40;
+/** Weekly probability of an attrition event once morale is under the threshold. */
+export const MORALE_ATTRITION_CHANCE = 0.15;
+/** Below this (lower) morale, dev effort and sales output both take a flat productivity penalty, on top of the continuous `moraleFactor` curve. */
+export const MORALE_CRISIS_THRESHOLD = 25;
+/** Multiplier applied to dev effort and sales factor while morale is in crisis. */
+export const MORALE_CRISIS_PRODUCTIVITY_MULTIPLIER = 0.7;
+/** Weekly cash cost of running the team-offsite/perks morale lever. */
+export const MORALE_LEVER_WEEKLY_COST = 3_000;
+/** Morale points the lever adds back on tick while active. */
+export const MORALE_LEVER_BOOST = 8;
+
+/** Flat penalty (1 = none) applied to dev effort and sales factor once morale drops into crisis. */
+export function moraleCrisisMultiplier(morale: number): number {
+  return morale < MORALE_CRISIS_THRESHOLD ? MORALE_CRISIS_PRODUCTIVITY_MULTIPLIER : 1;
+}
 
 export function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -193,21 +234,26 @@ export function moraleFactor(morale: number): number {
 }
 
 /**
- * One week of morale evolution: drifts toward baseline, then takes a hit
- * scaled by the fraction of total staff cut this week (hiring alone never
- * hurts morale; only net headcount reductions do).
+ * One week of morale evolution: drifts toward an era-dependent baseline
+ * (Reckoning's layoff-fear/down-round dread pulls the baseline down even
+ * with no layoffs — see `ERA_MORALE_BASELINE`), then takes a hit scaled by
+ * the fraction of total staff cut this week (hiring alone never hurts
+ * morale; only net headcount reductions do), then a morale-lever boost if
+ * the team offsite/perks budget is active.
  */
 export function moraleAfterTick(
   morale: number,
   headcountBefore: Headcount,
   headcountAfter: Headcount,
+  era: Era = 'scrappy',
+  leverBoost: number = 0,
 ): number {
   const totalBefore = totalHeadcount(headcountBefore);
   const totalAfter = totalHeadcount(headcountAfter);
   const cutFraction = totalBefore > 0 ? Math.max(0, (totalBefore - totalAfter) / totalBefore) : 0;
   const layoffHit = cutFraction * MORALE_HIT_PER_LAYOFF_FRACTION;
-  const drifted = morale + (MORALE_BASELINE - morale) * MORALE_DRIFT_RATE;
-  return clamp(drifted - layoffHit, 0, 100);
+  const drifted = morale + (ERA_MORALE_BASELINE[era] - morale) * MORALE_DRIFT_RATE;
+  return clamp(drifted - layoffHit + leverBoost, 0, 100);
 }
 
 /**
@@ -227,9 +273,16 @@ export function cLevelPayroll(cLevels: CLevels): number {
   return C_LEVEL_ROLES.reduce((sum, role) => sum + (cLevels[role].hired?.salary ?? 0), 0);
 }
 
-/** The active perk multiplier for a seat, or 1 (no-op) if it's empty. */
-export function cLevelPerkMultiplier(cLevels: CLevels, role: CLevelRole): number {
-  return cLevels[role].hired?.perk.multiplier ?? 1;
+/** The hired seat's perk multiplier for one specific axis, or 1 (no-op) if empty or on a different axis. */
+export function cLevelPerkMultiplierFor(cLevels: CLevels, role: CLevelRole, axis: CLevelPerkAxis): number {
+  const hired = cLevels[role].hired;
+  return hired && hired.perk.axis === axis ? hired.perk.multiplier : 1;
+}
+
+/** The hired seat's tradeoff-side multiplier for one specific axis (e.g. cto-shortcut's decay cost), or 1 if none. */
+export function cLevelPerkTradeoffFor(cLevels: CLevels, role: CLevelRole, axis: CLevelPerkAxis): number {
+  const hired = cLevels[role].hired;
+  return hired && hired.perk.axis === axis ? (hired.perk.tradeoffMultiplier ?? 1) : 1;
 }
 
 // ── Funding ──────────────────────────────────────────────────────────────
@@ -267,6 +320,17 @@ export const BRIDGE_CASH_MULTIPLIER = 0.6;
 /** No single round can sell more than this much of the company. */
 export const MAX_DILUTION_PER_ROUND = 0.9;
 
+/** A closed round locks out the next raise for this many weeks — no back-to-back rounds. */
+export const ROUND_COOLDOWN_WEEKS = 7;
+
+/** Extra dilution discount from the Morning Standup's rare "clean terms" reward (Task 15). One-time use. */
+export const CLEAN_RAISE_TERMS_DILUTION_MULTIPLIER = 0.7;
+
+/** Whether a round can be raised this week, given when the last one closed. */
+export function canRaiseRound(week: number, lastRoundRaisedWeek: number | null): boolean {
+  return lastRoundRaisedWeek === null || week - lastRoundRaisedWeek >= ROUND_COOLDOWN_WEEKS;
+}
+
 export interface RoundTerms {
   round: RoundType;
   amount: number;
@@ -277,23 +341,31 @@ export interface RoundTerms {
 /**
  * Computed (not negotiated) terms for the next round: size scales with
  * valuation and hype off a per-round floor; runway under the bridge
- * threshold triggers worse terms (more dilution, less cash).
+ * threshold triggers worse terms (more dilution, less cash); the era then
+ * layers its own climate on top — Boom rounds are cheaper and larger,
+ * Reckoning rounds are brutally dilutive and stingy with cash (see
+ * `ERA_DILUTION_MULTIPLIER` / `ERA_ROUND_CASH_MULTIPLIER`). A CFO's
+ * round-terms perk (`cfoDilutionMultiplier`) shaves further off the dilution.
  */
 export function roundTermsFor(
   round: RoundType,
   valuation: number,
   hype: number,
   runwayLeftWeeks: number,
+  era: Era = 'scrappy',
+  cfoDilutionMultiplier: number = 1,
 ): RoundTerms {
   const isBridge = runwayLeftWeeks < BRIDGE_RUNWAY_THRESHOLD_WEEKS;
   const baseDilution = ROUND_BASE_DILUTION[round];
+  const bridgedDilution = isBridge ? baseDilution * BRIDGE_DILUTION_MULTIPLIER : baseDilution;
   const dilution = Math.min(
     MAX_DILUTION_PER_ROUND,
-    isBridge ? baseDilution * BRIDGE_DILUTION_MULTIPLIER : baseDilution,
+    bridgedDilution * ERA_DILUTION_MULTIPLIER[era] * cfoDilutionMultiplier,
   );
   const scaledAmount = Math.max(valuation, 0) * hype * baseDilution;
   const baseAmount = Math.max(scaledAmount, ROUND_MIN_AMOUNT[round]);
-  const amount = isBridge ? baseAmount * BRIDGE_CASH_MULTIPLIER : baseAmount;
+  const bridgedAmount = isBridge ? baseAmount * BRIDGE_CASH_MULTIPLIER : baseAmount;
+  const amount = bridgedAmount * ERA_ROUND_CASH_MULTIPLIER[era];
   return { round, amount, dilution, isBridge };
 }
 
@@ -301,6 +373,26 @@ export function roundTermsFor(
 export function applyDilution(equity: number, dilution: number): number {
   return clamp(equity * (1 - dilution), 0, 1);
 }
+
+/**
+ * Founder take-home at the given valuation: the run's score-in-progress
+ * (and, at exit, the score itself — see `src/game/score.ts`).
+ */
+export function founderStakeFor(founderEquity: number, valuation: number): number {
+  return founderEquity * valuation;
+}
+
+// ── Exits: acquisition ───────────────────────────────────────────────────
+/** Offer price for an acquisition-offer card: a multiplier of valuation at the moment it's answered. */
+export function acquisitionOfferValuationFor(currentValuation: number, valuationMultiplier: number): number {
+  return currentValuation * valuationMultiplier;
+}
+
+// ── Exits: IPO ───────────────────────────────────────────────────────────
+/** Weekly revenue that must be sustained (see below) before an IPO is offered. */
+export const IPO_REVENUE_BAR = 150_000;
+/** Consecutive weeks revenue must clear `IPO_REVENUE_BAR` before the IPO becomes available. */
+export const IPO_SUSTAIN_WEEKS = 4;
 
 /** The next raisable round, or null once seed/A/B are all done. */
 export function nextRound(roundsRaised: number): RoundType | null {
@@ -310,6 +402,64 @@ export function nextRound(roundsRaised: number): RoundType | null {
 export function hasRoundsAvailable(roundsRaised: number): boolean {
   return roundsRaised < ROUND_ORDER.length;
 }
+
+// ── Eras ─────────────────────────────────────────────────────────────────
+/** Week range (inclusive) the Boom era can start; the exact week is jittered per seed. */
+export const BOOM_START_WEEK_MIN = 25;
+export const BOOM_START_WEEK_MAX = 35;
+/** Week range (inclusive) the Reckoning era can start; jittered per seed, independent of Boom's roll. */
+export const RECKONING_START_WEEK_MIN = 55;
+export const RECKONING_START_WEEK_MAX = 70;
+
+/** Which era `week` falls in, given this run's (seeded, jittered) transition weeks. */
+export function eraForWeek(week: number, boomStartWeek: number, reckoningStartWeek: number): Era {
+  if (week >= reckoningStartWeek) return 'reckoning';
+  if (week >= boomStartWeek) return 'boom';
+  return 'scrappy';
+}
+
+// ── Era dials ────────────────────────────────────────────────────────────
+/** The IPO window is only open during the Boom — shut before it and slammed shut again once Reckoning hits. */
+export const ERA_IPO_WINDOW_OPEN: Record<Era, boolean> = {
+  scrappy: false,
+  boom: true,
+  reckoning: false,
+};
+
+/** Hype decay-rate multiplier per era: Boom hype lingers (slower decay), Reckoning snaps back to neutral fastest. */
+export const ERA_HYPE_DECAY_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 0.5,
+  reckoning: 1.5,
+};
+
+/** Round dilution multiplier per era: Boom terms are cheaper, Reckoning terms are brutally dilutive. */
+export const ERA_DILUTION_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 0.75,
+  reckoning: 1.75,
+};
+
+/** Round cash-amount multiplier per era: Boom money is abundant, Reckoning money is stingy. */
+export const ERA_ROUND_CASH_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 1.5,
+  reckoning: 0.5,
+};
+
+/** Rival growth-rate multiplier per era: Boom capital sharpens every competitor further. */
+export const ERA_RIVAL_GROWTH_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 1.4,
+  reckoning: 1,
+};
+
+/** Valuation-multiple compression per era: Reckoning investors pay for far less revenue multiple. */
+export const ERA_VALUATION_MULTIPLE_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 1,
+  reckoning: 0.5,
+};
 
 // ── Timeline events ──────────────────────────────────────────────────────
 /** Combined multiplier from every active timed effect targeting `stat` (1 if none). */
@@ -321,9 +471,12 @@ export function timedMultiplierFor(stat: EventStat, effects: TimedEffect[]): num
 /** Fraction of the gap to neutral (1.0) that hype closes each week, absent new events. */
 export const HYPE_DECAY_RATE = 0.05;
 
-/** One week of hype decay: drifts back toward the neutral baseline of 1.0. */
-export function hypeAfterTick(hype: number): number {
-  return hype + (1.0 - hype) * HYPE_DECAY_RATE;
+/**
+ * One week of hype decay: drifts back toward the neutral baseline of 1.0, at
+ * an era-adjusted rate further slowed by a CMO's hype-decay perk, if any.
+ */
+export function hypeAfterTick(hype: number, era: Era = 'scrappy', cmoDecayMultiplier: number = 1): number {
+  return hype + (1.0 - hype) * HYPE_DECAY_RATE * ERA_HYPE_DECAY_MULTIPLIER[era] * cmoDecayMultiplier;
 }
 
 // ── Market share ─────────────────────────────────────────────────────────

@@ -4,12 +4,14 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { ProgressBar } from '@/components/game/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import type { Era } from '@/game/events/types';
 import { useTheme } from '@/hooks/use-theme';
 import { useGame } from '@/state/game-store';
 
 const HYPE_MIN = 0.5;
 const HYPE_MAX = 2.5;
-const ERAS = ['Scrappy', 'Boom', 'Reckoning'] as const;
+const ERA_ORDER: Era[] = ['scrappy', 'boom', 'reckoning'];
+const ERA_LABEL: Record<Era, string> = { scrappy: 'Scrappy', boom: 'Boom', reckoning: 'Reckoning' };
 const RIVAL_COLORS = ['#f59e0b', '#ef4444'];
 
 export default function MarketScreen() {
@@ -19,10 +21,8 @@ export default function MarketScreen() {
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  const restOfMarket = Math.max(
-    0,
-    1 - state.marketShare - state.rivals[0].marketShare - state.rivals[1].marketShare,
-  );
+  const rivalShareTotal = state.rivals.reduce((sum, rival) => sum + rival.marketShare, 0);
+  const restOfMarket = Math.max(0, 1 - state.marketShare - rivalShareTotal);
   const hypePercent = ((state.hype - HYPE_MIN) / (HYPE_MAX - HYPE_MIN)) * 100;
 
   return (
@@ -38,6 +38,7 @@ export default function MarketScreen() {
               label={rival.name}
               percent={rival.marketShare * 100}
               color={RIVAL_COLORS[index % RIVAL_COLORS.length]}
+              edge={rival.productQuality - state.productQuality}
             />
           ))}
           <ShareRow label="Rest of market" percent={restOfMarket * 100} color="#80808080" />
@@ -58,12 +59,12 @@ export default function MarketScreen() {
             Era
           </ThemedText>
           <View style={styles.eraStrip}>
-            {ERAS.map((era) => (
+            {ERA_ORDER.map((era) => (
               <View key={era} style={styles.eraStop}>
-                <ThemedText type="small" themeColor={era === 'Scrappy' ? 'text' : 'textSecondary'}>
-                  {era}
+                <ThemedText type="small" themeColor={era === state.era ? 'text' : 'textSecondary'}>
+                  {ERA_LABEL[era]}
                 </ThemedText>
-                {era === 'Scrappy' ? (
+                {era === state.era ? (
                   <ThemedText type="small" style={styles.hereMarker}>
                     ▲ you are here
                   </ThemedText>
@@ -77,14 +78,38 @@ export default function MarketScreen() {
   );
 }
 
-function ShareRow({ label, percent, color }: { label: string; percent: number; color: string }) {
+function ShareRow({
+  label,
+  percent,
+  color,
+  edge,
+}: {
+  label: string;
+  percent: number;
+  color: string;
+  /** Your product quality minus this rival's — positive means you have the edge. */
+  edge?: number;
+}) {
+  const edgeLabel =
+    edge === undefined
+      ? null
+      : edge >= 0
+        ? `+${Math.round(edge)} edge`
+        : `${Math.round(edge)} behind`;
   return (
     <View style={styles.shareRow}>
       <View style={styles.shareLabelRow}>
         <ThemedText type="small">{label}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {percent.toFixed(1)}%
-        </ThemedText>
+        <View style={styles.shareLabelRight}>
+          {edgeLabel ? (
+            <ThemedText type="small" themeColor={edge! >= 0 ? 'success' : 'danger'}>
+              {edgeLabel}
+            </ThemedText>
+          ) : null}
+          <ThemedText type="small" themeColor="textSecondary">
+            {percent.toFixed(1)}%
+          </ThemedText>
+        </View>
       </View>
       <ProgressBar percent={percent} color={color} />
     </View>
@@ -110,6 +135,10 @@ const styles = StyleSheet.create({
   shareLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  shareLabelRight: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   hypeSection: {
     gap: Spacing.two,

@@ -4,7 +4,9 @@ import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { acquisitionOfferValuationFor } from '@/game/balance';
 import type { EventCard, EventEffects, EventStat, StatDelta } from '@/game/events/types';
+import { formatMoney } from '@/lib/format';
 
 const STAT_LABEL: Record<EventStat, string> = {
   cash: 'cash',
@@ -22,7 +24,11 @@ function formatDelta(delta: StatDelta): string {
   return `${sign}${delta.amount} ${STAT_LABEL[delta.stat]}`;
 }
 
-function summarizeEffects(effects: EventEffects): string {
+function summarizeEffects(effects: EventEffects, valuation: number): string {
+  if (effects.acquisitionOffer) {
+    const offer = acquisitionOfferValuationFor(valuation, effects.acquisitionOffer.valuationMultiplier);
+    return `Ends the run — acquired for ~${formatMoney(offer)}`;
+  }
   const parts = (effects.deltas ?? []).map(formatDelta);
   if (effects.timedEffect) {
     const { stat, multiplier, weeksLeft } = effects.timedEffect;
@@ -35,9 +41,12 @@ function summarizeEffects(effects: EventEffects): string {
 /** Blocks the HQ screen until the player answers a decision card. */
 export function DecisionModal({
   card,
+  valuation,
   onChoose,
 }: {
   card: EventCard | null;
+  /** Current valuation, used to preview acquisition-offer amounts live. */
+  valuation: number;
   onChoose: (choiceIndex: number) => void;
 }) {
   return (
@@ -58,7 +67,7 @@ export function DecisionModal({
                     onPress={() => onChoose(index)}
                   />
                   <ThemedText type="small" themeColor="textSecondary">
-                    {summarizeEffects(choice.effects)}
+                    {summarizeEffects(choice.effects, valuation)}
                   </ThemedText>
                 </View>
               ))}

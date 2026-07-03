@@ -4,7 +4,7 @@
  */
 
 import { nextInt } from './rng';
-import { CLevelCandidate, CLevelPerk, CLevelRole, RngState } from './types';
+import { CLevelCandidate, CLevelPerk, CLevelPerkAxis, CLevelQuirk, CLevelRole, RngState } from './types';
 
 const FIRST_NAMES = [
   'Priya',
@@ -54,31 +54,179 @@ const PERSONALITIES: Record<CLevelRole, string[]> = {
   ],
 };
 
-const PERK_TABLE: Record<CLevelRole, CLevelPerk[]> = {
+/** Per-role, per-axis perk tiers. Salary ranges never overlap *within an axis*
+ * (a higher tier's minimum always clears the lower tier's maximum, even after
+ * the widest quirk adjustment), so no candidate can ever offer strictly
+ * better perk power at equal-or-lower cost than a same-axis peer — the
+ * dominance the property test in clevels.test.ts checks for. */
+interface PerkTier {
+  id: string;
+  label: string;
+  axis: CLevelPerkAxis;
+  multiplier: number;
+  tradeoffMultiplier?: number;
+  salaryRange: [number, number];
+}
+
+const PERK_TABLE: Record<CLevelRole, PerkTier[]> = {
   cto: [
-    { id: 'cto-dev-boost-10', label: '+10% dev productivity', multiplier: 1.1 },
-    { id: 'cto-dev-boost-15', label: '+15% dev productivity', multiplier: 1.15 },
-    { id: 'cto-dev-boost-25', label: '+25% dev productivity', multiplier: 1.25 },
+    {
+      id: 'cto-productivity-1',
+      label: '+10% dev productivity',
+      axis: 'cto-productivity',
+      multiplier: 1.1,
+      salaryRange: [6_000, 6_600],
+    },
+    {
+      id: 'cto-productivity-2',
+      label: '+20% dev productivity',
+      axis: 'cto-productivity',
+      multiplier: 1.2,
+      salaryRange: [7_400, 8_000],
+    },
+    {
+      id: 'cto-techdebt-1',
+      label: '−15% tech-debt drag',
+      axis: 'cto-techDebt',
+      multiplier: 0.85,
+      salaryRange: [6_200, 6_800],
+    },
+    {
+      id: 'cto-techdebt-2',
+      label: '−25% tech-debt drag',
+      axis: 'cto-techDebt',
+      multiplier: 0.75,
+      salaryRange: [7_600, 8_200],
+    },
+    {
+      id: 'cto-shortcut-1',
+      label: '+25% dev productivity, +20% tech-debt drag',
+      axis: 'cto-shortcut',
+      multiplier: 1.25,
+      tradeoffMultiplier: 1.2,
+      salaryRange: [6_000, 6_600],
+    },
+    {
+      id: 'cto-shortcut-2',
+      label: '+40% dev productivity, +35% tech-debt drag',
+      axis: 'cto-shortcut',
+      multiplier: 1.4,
+      tradeoffMultiplier: 1.35,
+      salaryRange: [7_400, 8_000],
+    },
   ],
   cmo: [
-    { id: 'cmo-hype-10', label: '+10% hype impact', multiplier: 1.1 },
-    { id: 'cmo-hype-15', label: '+15% hype impact', multiplier: 1.15 },
-    { id: 'cmo-hype-20', label: '+20% hype impact', multiplier: 1.2 },
+    {
+      id: 'cmo-hypegain-1',
+      label: '+10% hype impact',
+      axis: 'cmo-hypeGain',
+      multiplier: 1.1,
+      salaryRange: [5_000, 5_600],
+    },
+    {
+      id: 'cmo-hypegain-2',
+      label: '+20% hype impact',
+      axis: 'cmo-hypeGain',
+      multiplier: 1.2,
+      salaryRange: [6_400, 7_000],
+    },
+    {
+      id: 'cmo-hypedecay-1',
+      label: '−20% hype decay (hype lingers)',
+      axis: 'cmo-hypeDecay',
+      multiplier: 0.8,
+      salaryRange: [5_200, 5_800],
+    },
+    {
+      id: 'cmo-hypedecay-2',
+      label: '−35% hype decay (hype lingers)',
+      axis: 'cmo-hypeDecay',
+      multiplier: 0.65,
+      salaryRange: [6_600, 7_200],
+    },
   ],
   cfo: [
-    { id: 'cfo-burn-cut-10', label: '−10% fixed burn', multiplier: 0.9 },
-    { id: 'cfo-burn-cut-15', label: '−15% fixed burn', multiplier: 0.85 },
-    { id: 'cfo-burn-cut-20', label: '−20% fixed burn', multiplier: 0.8 },
+    {
+      id: 'cfo-burncut-1',
+      label: '−10% fixed burn',
+      axis: 'cfo-burnCut',
+      multiplier: 0.9,
+      salaryRange: [5_500, 6_100],
+    },
+    {
+      id: 'cfo-burncut-2',
+      label: '−20% fixed burn',
+      axis: 'cfo-burnCut',
+      multiplier: 0.8,
+      salaryRange: [6_900, 7_500],
+    },
+    {
+      id: 'cfo-roundterms-1',
+      label: '−10% dilution on next round',
+      axis: 'cfo-roundTerms',
+      multiplier: 0.9,
+      salaryRange: [5_700, 6_300],
+    },
+    {
+      id: 'cfo-roundterms-2',
+      label: '−20% dilution on next round',
+      axis: 'cfo-roundTerms',
+      multiplier: 0.8,
+      salaryRange: [7_100, 7_700],
+    },
   ],
 };
 
-const SALARY_RANGE: Record<CLevelRole, [number, number]> = {
-  cto: [6_000, 9_000],
-  cmo: [5_000, 8_000],
-  cfo: [5_500, 8_500],
+const QUIRKS: Record<CLevelRole, CLevelQuirk[]> = {
+  cto: [
+    { label: 'Negotiates hard.', salaryDeltaFraction: 0.04 },
+    { label: 'Just happy to be building something.', salaryDeltaFraction: -0.04 },
+  ],
+  cmo: [
+    { label: 'Negotiates hard.', salaryDeltaFraction: 0.04 },
+    { label: 'Took the job for the mission, not the money.', salaryDeltaFraction: -0.04 },
+  ],
+  cfo: [
+    { label: 'Negotiates hard.', salaryDeltaFraction: 0.04 },
+    { label: 'Underpriced themselves at their last three jobs.', salaryDeltaFraction: -0.04 },
+  ],
 };
 
+/** Chance (0–99) any given candidate is generated with a quirk. */
+const QUIRK_CHANCE_PERCENT = 40;
+
 const CANDIDATES_PER_OFFER = 3;
+
+/** Whether higher `multiplier` is mechanically better on this axis (used only to rank same-axis perks for the dominance check). */
+const HIGHER_IS_BETTER: Record<CLevelPerkAxis, boolean> = {
+  'cto-productivity': true,
+  'cto-techDebt': false,
+  'cto-shortcut': true,
+  'cmo-hypeGain': true,
+  'cmo-hypeDecay': false,
+  'cfo-burnCut': false,
+  'cfo-roundTerms': false,
+};
+
+/** A single comparable scalar for a perk's mechanical strength — higher is always better. Only meaningful between perks on the *same* axis. */
+export function perkPower(perk: CLevelPerk): number {
+  return HIGHER_IS_BETTER[perk.axis] ? perk.multiplier : -perk.multiplier;
+}
+
+/**
+ * True if some other candidate in the same pool offers strictly greater perk
+ * power on the same axis at equal-or-lower salary — i.e. `candidate` is a
+ * strictly worse deal than an available alternative.
+ */
+export function isDominated(candidate: CLevelCandidate, pool: CLevelCandidate[]): boolean {
+  return pool.some(
+    (other) =>
+      other.id !== candidate.id &&
+      other.perk.axis === candidate.perk.axis &&
+      perkPower(other.perk) > perkPower(candidate.perk) &&
+      other.salary <= candidate.salary,
+  );
+}
 
 /** Draw a fresh standing offer of candidates for a C-level seat. */
 export function generateCandidates(
@@ -87,28 +235,62 @@ export function generateCandidates(
 ): { candidates: CLevelCandidate[]; rng: RngState } {
   let r = rng;
   const candidates: CLevelCandidate[] = [];
+  const usedNames = new Set<string>();
+
+  // Shuffle (Fisher-Yates, seeded) so the offer never repeats a personality line.
+  const personalities = [...PERSONALITIES[role]];
+  for (let i = personalities.length - 1; i > 0; i--) {
+    let j: number;
+    [j, r] = nextInt(r, 0, i);
+    [personalities[i], personalities[j]] = [personalities[j], personalities[i]];
+  }
 
   for (let i = 0; i < CANDIDATES_PER_OFFER; i++) {
     let firstIdx: number;
     let lastIdx: number;
-    let personalityIdx: number;
-    let perkIdx: number;
-    let rawSalary: number;
-    let idSeed: number;
+    let fullName: string;
+    do {
+      [firstIdx, r] = nextInt(r, 0, FIRST_NAMES.length - 1);
+      [lastIdx, r] = nextInt(r, 0, LAST_NAMES.length - 1);
+      fullName = `${FIRST_NAMES[firstIdx]} ${LAST_NAMES[lastIdx]}`;
+    } while (usedNames.has(fullName));
+    usedNames.add(fullName);
 
-    [firstIdx, r] = nextInt(r, 0, FIRST_NAMES.length - 1);
-    [lastIdx, r] = nextInt(r, 0, LAST_NAMES.length - 1);
-    [personalityIdx, r] = nextInt(r, 0, PERSONALITIES[role].length - 1);
-    [perkIdx, r] = nextInt(r, 0, PERK_TABLE[role].length - 1);
-    [rawSalary, r] = nextInt(r, SALARY_RANGE[role][0], SALARY_RANGE[role][1]);
+    let tierIdx: number;
+    [tierIdx, r] = nextInt(r, 0, PERK_TABLE[role].length - 1);
+    const tier = PERK_TABLE[role][tierIdx];
+
+    let rawSalary: number;
+    [rawSalary, r] = nextInt(r, tier.salaryRange[0], tier.salaryRange[1]);
+
+    let quirkRoll: number;
+    [quirkRoll, r] = nextInt(r, 0, 99);
+    let quirk: CLevelQuirk | null = null;
+    if (quirkRoll < QUIRK_CHANCE_PERCENT) {
+      let quirkIdx: number;
+      [quirkIdx, r] = nextInt(r, 0, QUIRKS[role].length - 1);
+      quirk = QUIRKS[role][quirkIdx];
+    }
+    const salary = Math.round((rawSalary * (1 + (quirk?.salaryDeltaFraction ?? 0))) / 100) * 100;
+
+    let idSeed: number;
     [idSeed, r] = nextInt(r, 0, 999_999);
+
+    const perk: CLevelPerk = {
+      id: tier.id,
+      label: tier.label,
+      axis: tier.axis,
+      multiplier: tier.multiplier,
+      ...(tier.tradeoffMultiplier !== undefined ? { tradeoffMultiplier: tier.tradeoffMultiplier } : {}),
+    };
 
     candidates.push({
       id: `${role}-${idSeed}-${r.counter}`,
-      name: `${FIRST_NAMES[firstIdx]} ${LAST_NAMES[lastIdx]}`,
-      personality: PERSONALITIES[role][personalityIdx],
-      salary: Math.round(rawSalary / 100) * 100,
-      perk: PERK_TABLE[role][perkIdx],
+      name: fullName,
+      personality: personalities[i],
+      salary,
+      perk,
+      quirk,
     });
   }
 

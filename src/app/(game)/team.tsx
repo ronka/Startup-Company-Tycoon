@@ -4,13 +4,22 @@ import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 
 import { CandidatePicker, type CandidatePickerHandle } from '@/components/game/candidate-picker';
 import { CLevelCard } from '@/components/game/clevel-card';
+import { FirstRunHint } from '@/components/game/first-run-hint';
 import { MoraleBar } from '@/components/game/morale-bar';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { Stepper } from '@/components/game/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { LAYOFF_CONFIRM_THRESHOLD, cLevelPayroll, cLevelPerkMultiplier, weeklyBurnFor } from '@/game/balance';
+import {
+  C_LEVEL_DEPARTURE_MORALE_HIT,
+  LAYOFF_CONFIRM_THRESHOLD,
+  MORALE_LEVER_BOOST,
+  MORALE_LEVER_WEEKLY_COST,
+  cLevelPayroll,
+  cLevelPerkMultiplierFor,
+  weeklyBurnFor,
+} from '@/game/balance';
 import { CLevelRole, ROLES, Role } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
@@ -32,6 +41,7 @@ export default function TeamScreen() {
   const { state, dispatch } = useGame();
   const theme = useTheme();
   const [confirmRole, setConfirmRole] = useState<Role | null>(null);
+  const [confirmFireRole, setConfirmFireRole] = useState<CLevelRole | null>(null);
   const ctoPickerRef = useRef<CandidatePickerHandle>(null);
   const cmoPickerRef = useRef<CandidatePickerHandle>(null);
   const cfoPickerRef = useRef<CandidatePickerHandle>(null);
@@ -44,13 +54,16 @@ export default function TeamScreen() {
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
+  const moraleLeverCost = state.moraleLeverActive ? MORALE_LEVER_WEEKLY_COST : 0;
   const pendingBurn = weeklyBurnFor(state.pendingHeadcount, {
     execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplier(state.cLevels, 'cfo'),
+    fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
+    moraleLeverCost,
   });
   const currentBurn = weeklyBurnFor(state.headcount, {
     execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplier(state.cLevels, 'cfo'),
+    fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
+    moraleLeverCost,
   });
 
   const increment = (role: Role) => dispatch({ type: 'SET_PENDING_HIRES', role, delta: 1 });
@@ -58,7 +71,14 @@ export default function TeamScreen() {
   const hireCLevel = (role: CLevelRole, candidateId: string) =>
     dispatch({ type: 'HIRE_CLEVEL', role, candidateId });
 
-  const fireCLevel = (role: CLevelRole) => dispatch({ type: 'FIRE_CLEVEL', role });
+  const requestFire = (role: CLevelRole) => setConfirmFireRole(role);
+
+  const confirmFire = () => {
+    if (confirmFireRole) dispatch({ type: 'FIRE_CLEVEL', role: confirmFireRole });
+    setConfirmFireRole(null);
+  };
+
+  const toggleMoraleLever = () => dispatch({ type: 'SET_MORALE_LEVER', active: !state.moraleLeverActive });
 
   const requestDecrement = (role: Role) => {
     const active = state.headcount[role];
@@ -81,6 +101,8 @@ export default function TeamScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">Team</ThemedText>
 
+        <FirstRunHint id="team" text="Devs raise product quality — quality wins market share." />
+
         <View style={styles.moraleBlock}>
           <View style={styles.moraleHeader}>
             <ThemedText type="small" themeColor="textSecondary">
@@ -90,6 +112,20 @@ export default function TeamScreen() {
           </View>
           <MoraleBar morale={state.morale} />
         </View>
+
+        <ThemedView type="backgroundElement" style={styles.leverCard}>
+          <View style={styles.leverHeader}>
+            <ThemedText type="smallBold">Team offsite &amp; perks</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {formatMoney(MORALE_LEVER_WEEKLY_COST)}/wk · +{MORALE_LEVER_BOOST} morale/wk
+            </ThemedText>
+          </View>
+          <PrimaryButton
+            variant={state.moraleLeverActive ? 'secondary' : 'primary'}
+            label={state.moraleLeverActive ? 'Turn off' : 'Turn on'}
+            onPress={toggleMoraleLever}
+          />
+        </ThemedView>
 
         <View style={styles.steppers}>
           {ROLES.map((role) => (
@@ -131,7 +167,7 @@ export default function TeamScreen() {
                 key={role}
                 title={C_LEVEL_TITLE[role]}
                 hired={state.cLevels[role].hired}
-                onFire={() => fireCLevel(role)}
+                onFire={() => requestFire(role)}
                 onViewCandidates={() => pickerRefs[role].current?.present()}
               />
             ))}
@@ -166,6 +202,28 @@ export default function TeamScreen() {
         </View>
       </Modal>
 
+      <Modal visible={confirmFireRole !== null} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <ThemedView type="backgroundElement" style={styles.modalCard}>
+            <ThemedText type="smallBold">Let them go?</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
+              {confirmFireRole
+                ? `Firing your ${C_LEVEL_TITLE[confirmFireRole]} costs the team ${C_LEVEL_DEPARTURE_MORALE_HIT} morale.`
+                : ''}
+            </ThemedText>
+            <View style={styles.modalActions}>
+              <PrimaryButton
+                variant="secondary"
+                label="Cancel"
+                onPress={() => setConfirmFireRole(null)}
+                style={styles.modalButton}
+              />
+              <PrimaryButton variant="primary" label="Confirm" onPress={confirmFire} style={styles.modalButton} />
+            </View>
+          </ThemedView>
+        </View>
+      </Modal>
+
       {(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => (
         <CandidatePicker
           key={role}
@@ -195,6 +253,18 @@ const styles = StyleSheet.create({
   moraleHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  leverCard: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  leverHeader: {
+    gap: Spacing.half,
+    flexShrink: 1,
   },
   steppers: {
     gap: Spacing.three,

@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import type { CLevelCandidate } from '@/game/types';
+import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 
 export interface CandidatePickerHandle {
@@ -26,6 +27,7 @@ export function CandidatePicker({
   ref?: Ref<CandidatePickerHandle>;
 }) {
   const sheetRef = useRef<BottomSheetModal>(null);
+  const theme = useTheme();
 
   useImperativeHandle(ref, () => ({
     present: () => sheetRef.current?.present(),
@@ -33,7 +35,10 @@ export function CandidatePicker({
   }));
 
   return (
-    <BottomSheetModal ref={sheetRef} enablePanDownToClose>
+    <BottomSheetModal
+      ref={sheetRef}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: theme.background }}>
       <BottomSheetView style={styles.sheet}>
         <ThemedText type="smallBold">{title} candidates</ThemedText>
         {candidates.map((candidate) => (
@@ -45,6 +50,11 @@ export function CandidatePicker({
             <ThemedText type="small" themeColor="textSecondary">
               {candidate.perk.label} · {formatMoney(candidate.salary)}/wk
             </ThemedText>
+            {candidate.quirk ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.quirk}>
+                Quirk: {candidate.quirk.label}
+              </ThemedText>
+            ) : null}
             <PrimaryButton
               label="Hire"
               onPress={() => {
@@ -69,5 +79,8 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
     alignItems: 'flex-start',
+  },
+  quirk: {
+    fontStyle: 'italic',
   },
 });

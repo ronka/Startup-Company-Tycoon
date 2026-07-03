@@ -2,11 +2,26 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BANKRUPTCY_FUSE_WEEKS,
+  BOOM_START_WEEK_MAX,
+  BOOM_START_WEEK_MIN,
   DEV_EFFORT_EXPONENT,
   DEV_EFFORT_PER_DEV,
+  ERA_DILUTION_MULTIPLIER,
+  ERA_HYPE_DECAY_MULTIPLIER,
+  ERA_IPO_WINDOW_OPEN,
+  ERA_MORALE_BASELINE,
+  ERA_ROUND_CASH_MULTIPLIER,
+  ERA_VALUATION_MULTIPLE_MULTIPLIER,
   FIXED_WEEKLY_BURN,
   HYPE_DECAY_RATE,
   INDUSTRY_MULTIPLE,
+  IPO_SUSTAIN_WEEKS,
+  MORALE_ATTRITION_THRESHOLD,
+  MORALE_CRISIS_PRODUCTIVITY_MULTIPLIER,
+  MORALE_CRISIS_THRESHOLD,
+  MORALE_LEVER_WEEKLY_COST,
+  RECKONING_START_WEEK_MAX,
+  RECKONING_START_WEEK_MIN,
   REVENUE_PER_QUALITY_SHARE,
   STARTING_CASH,
   STARTING_HEADCOUNT,
@@ -18,16 +33,22 @@ import {
   clamp,
   devEffort,
   hypeAfterTick,
+  moraleAfterTick,
+  moraleCrisisMultiplier,
   payrollFor,
   qualityAfterTick,
   revenueFor,
+  roundTermsFor,
   salesFactorFor,
   shareShiftFor,
   supportProtectionFactor,
   valuationFor,
   weeklyBurnFor,
 } from '../balance';
-import { newGame, reduce, tick } from '../engine';
+import { isNotableWeek } from '../digest';
+import { newGame, reduce, tick, tickMany } from '../engine';
+import { BOOM_DECK } from '../events/boom';
+import { RECKONING_DECK } from '../events/reckoning';
 import { SCRAPPY_DECK } from '../events/scrappy';
 import { rivalGrowthMultiplier } from '../rivals';
 import { GameState } from '../types';
@@ -37,6 +58,10 @@ const tickN = (state: GameState, n: number): GameState => {
   for (let i = 0; i < n; i++) s = tick(s);
   return s;
 };
+
+/** Every era's unique card ids — pre-seeding this as `drawnEventIds` isolates a
+ * long-running test from any decision card (across every era) freezing tick(). */
+const ALL_ERA_EVENT_IDS = [...SCRAPPY_DECK, ...BOOM_DECK, ...RECKONING_DECK].map((c) => c.id);
 
 describe('newGame', () => {
   it('produces the documented starting shape', () => {
@@ -121,7 +146,7 @@ describe('valuationHistory', () => {
     let s: GameState = {
       ...newGame(1),
       cash: 50_000_000,
-      drawnEventIds: SCRAPPY_DECK.map((c) => c.id),
+      drawnEventIds: ALL_ERA_EVENT_IDS,
     };
     const weeks = VALUATION_HISTORY_CAP + 20;
     for (let i = 0; i < weeks; i++) {
@@ -166,6 +191,51 @@ describe('tick', () => {
     // does not mutate the input
     expect(s0.week).toBe(0);
     expect(s0.cash).toBe(STARTING_CASH);
+  });
+});
+
+describe('tickMany (fast-forward)', () => {
+  it('is deterministic: same seed and weeks produce the same end state', () => {
+    const a = tickMany(newGame(11), 5);
+    const b = tickMany(newGame(11), 5);
+    expect(a).toEqual(b);
+  });
+
+  it('matches manual step-by-step ticking, stopping the instant a week is notable (or maxWeeks runs out)', () => {
+    const s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1000 };
+    let manual = s0;
+    for (let i = 0; i < 5; i++) {
+      if (manual.gameOver || manual.pendingEvent) break;
+      const next = tick(manual);
+      const weekEntries = next.newsLog.filter((entry) => entry.week === next.week);
+      manual = next;
+      if (manual.gameOver || manual.pendingEvent || isNotableWeek(weekEntries)) break;
+    }
+    expect(tickMany(s0, 5)).toEqual(manual);
+  });
+
+  it('stops the moment a decision card is drawn, without answering it', () => {
+    const s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1 };
+    const result = tickMany(s0, 10);
+    expect(result.pendingEvent).not.toBeNull();
+    expect(result.week).toBeLessThan(10);
+  });
+
+  it('stops on game over instead of ticking a frozen state', () => {
+    const s0: GameState = { ...newGame(11), cash: -1, weeksInTheRed: 2, weeksUntilNextEvent: 1000 };
+    const result = tickMany(s0, 10);
+    expect(result.gameOver).toBe('bankruptcy');
+  });
+
+  it('never advances past a notable week even mid-run', () => {
+    // Force a morale-band crossing on the very first tick by cratering morale
+    // before advancing — the digest entry should halt the fast-forward at week 1.
+    let s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1000, morale: 71 };
+    s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: -3 });
+    s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'sales', delta: -1 });
+    s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'support', delta: -1 });
+    const result = tickMany(s0, 10);
+    expect(result.week).toBe(1);
   });
 });
 
@@ -270,6 +340,152 @@ describe('determinism', () => {
   });
 });
 
+describe('eras', () => {
+  // Auto-answers any decision card with choice 0 ("An Early Feeler"'s choice
+  // 0 is decline-and-continue, not accept-and-end — see events/scrappy.ts)
+  // so a long era-transition playthrough never stalls on a pending card.
+  // Advances exactly one real week per call (answering inline, no second
+  // tick) so a `while (s.week < target)` loop can never overshoot past an
+  // exact target week.
+  const tickAutoAnswer = (state: GameState): GameState => {
+    let s = tick(state);
+    if (s.pendingEvent) {
+      s = reduce(s, { type: 'ANSWER_EVENT', choiceIndex: 0 });
+    }
+    return s;
+  };
+
+  it('rolls boomStartWeek/reckoningStartWeek once, deterministically per seed, within their tunable ranges', () => {
+    const a = newGame(50);
+    const b = newGame(50);
+    expect(a.boomStartWeek).toBe(b.boomStartWeek);
+    expect(a.reckoningStartWeek).toBe(b.reckoningStartWeek);
+    expect(a.boomStartWeek).toBeGreaterThanOrEqual(BOOM_START_WEEK_MIN);
+    expect(a.boomStartWeek).toBeLessThanOrEqual(BOOM_START_WEEK_MAX);
+    expect(a.reckoningStartWeek).toBeGreaterThanOrEqual(RECKONING_START_WEEK_MIN);
+    expect(a.reckoningStartWeek).toBeLessThanOrEqual(RECKONING_START_WEEK_MAX);
+  });
+
+  it('a different seed can roll a different transition week', () => {
+    const weeks = new Set([newGame(1).boomStartWeek, newGame(2).boomStartWeek, newGame(3).boomStartWeek]);
+    expect(weeks.size).toBeGreaterThan(1);
+  });
+
+  it('starts scrappy and advances through boom into reckoning at exactly the seeded weeks, with a news entry each time', () => {
+    // Ample cash isolates era-schedule mechanics from the bankruptcy fuse
+    // over what can be a 70-week playthrough.
+    let s: GameState = { ...newGame(51), cash: 10_000_000 };
+    expect(s.era).toBe('scrappy');
+    const { boomStartWeek, reckoningStartWeek } = s;
+
+    while (s.week < boomStartWeek) {
+      s = tickAutoAnswer(s);
+    }
+    expect(s.era).toBe('boom');
+    expect(s.week).toBe(boomStartWeek);
+    // A same-week card draw (e.g. a flag-chained follow-up) can also prepend
+    // a newsLog entry, so find the era entry rather than assume index 0.
+    expect(s.newsLog.find((e) => e.kind === 'era')).toMatchObject({
+      week: boomStartWeek,
+      kind: 'era',
+      title: 'The Boom Begins',
+    });
+
+    while (s.week < reckoningStartWeek) {
+      s = tickAutoAnswer(s);
+    }
+    expect(s.era).toBe('reckoning');
+    expect(s.week).toBe(reckoningStartWeek);
+    expect(s.newsLog.find((e) => e.kind === 'era')).toMatchObject({
+      week: reckoningStartWeek,
+      kind: 'era',
+      title: 'The Reckoning Arrives',
+    });
+  });
+});
+
+describe('era balance dials', () => {
+  it('hype decays slower in Boom and faster in Reckoning than the Scrappy baseline', () => {
+    const scrappyNext = hypeAfterTick(2.0, 'scrappy');
+    const boomNext = hypeAfterTick(2.0, 'boom');
+    const reckoningNext = hypeAfterTick(2.0, 'reckoning');
+    // Slower decay from a hot hype level means staying further from the 1.0 baseline.
+    expect(boomNext).toBeGreaterThan(scrappyNext);
+    expect(reckoningNext).toBeLessThan(scrappyNext);
+    expect(boomNext).toBeCloseTo(2.0 + (1.0 - 2.0) * HYPE_DECAY_RATE * ERA_HYPE_DECAY_MULTIPLIER.boom);
+    expect(reckoningNext).toBeCloseTo(
+      2.0 + (1.0 - 2.0) * HYPE_DECAY_RATE * ERA_HYPE_DECAY_MULTIPLIER.reckoning,
+    );
+  });
+
+  it('valuation multiple is compressed in Reckoning, unchanged in Scrappy/Boom', () => {
+    const scrappy = valuationFor(10_000, 1, 'scrappy');
+    const boom = valuationFor(10_000, 1, 'boom');
+    const reckoning = valuationFor(10_000, 1, 'reckoning');
+    expect(boom).toBe(scrappy);
+    expect(reckoning).toBeLessThan(scrappy);
+    expect(reckoning).toBeCloseTo(scrappy * ERA_VALUATION_MULTIPLE_MULTIPLIER.reckoning);
+  });
+
+  it('round terms are cheaper (less dilution, more cash) in Boom and brutal in Reckoning', () => {
+    const scrappy = roundTermsFor('seriesA', 5_000_000, 1, 20, 'scrappy');
+    const boom = roundTermsFor('seriesA', 5_000_000, 1, 20, 'boom');
+    const reckoning = roundTermsFor('seriesA', 5_000_000, 1, 20, 'reckoning');
+    expect(boom.dilution).toBeLessThan(scrappy.dilution);
+    expect(boom.amount).toBeGreaterThan(scrappy.amount);
+    expect(reckoning.dilution).toBeGreaterThan(scrappy.dilution);
+    expect(reckoning.amount).toBeLessThan(scrappy.amount);
+    expect(boom.dilution).toBeCloseTo(scrappy.dilution * ERA_DILUTION_MULTIPLIER.boom);
+    expect(boom.amount).toBeCloseTo(scrappy.amount * ERA_ROUND_CASH_MULTIPLIER.boom);
+    expect(reckoning.dilution).toBeCloseTo(scrappy.dilution * ERA_DILUTION_MULTIPLIER.reckoning);
+    expect(reckoning.amount).toBeCloseTo(scrappy.amount * ERA_ROUND_CASH_MULTIPLIER.reckoning);
+  });
+
+  it('rivals grow faster in Boom than in Scrappy/Reckoning at the same roundsRaised', () => {
+    const scrappy = rivalGrowthMultiplier(1, 'scrappy');
+    const boom = rivalGrowthMultiplier(1, 'boom');
+    const reckoning = rivalGrowthMultiplier(1, 'reckoning');
+    expect(boom).toBeGreaterThan(scrappy);
+    expect(reckoning).toBe(scrappy);
+  });
+
+  it('morale baseline is lower in Reckoning, pulling morale down even with no layoffs', () => {
+    const headcount = STARTING_HEADCOUNT;
+    const scrappyMorale = moraleAfterTick(60, headcount, headcount, 'scrappy');
+    const reckoningMorale = moraleAfterTick(60, headcount, headcount, 'reckoning');
+    expect(reckoningMorale).toBeLessThan(scrappyMorale);
+    expect(ERA_MORALE_BASELINE.reckoning).toBeLessThan(ERA_MORALE_BASELINE.scrappy);
+  });
+
+  it('IPO window is only open in Boom', () => {
+    expect(ERA_IPO_WINDOW_OPEN.scrappy).toBe(false);
+    expect(ERA_IPO_WINDOW_OPEN.boom).toBe(true);
+    expect(ERA_IPO_WINDOW_OPEN.reckoning).toBe(false);
+  });
+
+  it('tick() flips ipoWindowOpen open exactly on the Boom transition and shut again on Reckoning', () => {
+    let s: GameState = { ...newGame(51), cash: 10_000_000 };
+    expect(s.ipoWindowOpen).toBe(false);
+    const { boomStartWeek, reckoningStartWeek } = s;
+
+    while (s.week < boomStartWeek) s = tickAutoAnswerEras(s);
+    expect(s.ipoWindowOpen).toBe(true);
+
+    while (s.week < reckoningStartWeek) s = tickAutoAnswerEras(s);
+    expect(s.ipoWindowOpen).toBe(false);
+  });
+});
+
+// One real week per call, answering any pending decision inline (no second
+// tick) so a `while (s.week < target)` loop can't overshoot an exact week.
+function tickAutoAnswerEras(state: GameState): GameState {
+  let s = tick(state);
+  if (s.pendingEvent) {
+    s = reduce(s, { type: 'ANSWER_EVENT', choiceIndex: 0 });
+  }
+  return s;
+}
+
 describe('bankruptcy', () => {
   it('ends the run after 3 consecutive weeks of negative cash, even with rounds unraised, and then freezes', () => {
     const MAX_WEEKS = 500; // safety cap so a broken economy fails loudly, not by hanging
@@ -279,7 +495,7 @@ describe('bankruptcy', () => {
     // fuse must still fire even though a round is technically raisable.
     let s: GameState = {
       ...newGame(3),
-      drawnEventIds: SCRAPPY_DECK.map((c) => c.id),
+      drawnEventIds: ALL_ERA_EVENT_IDS,
     };
     let weeks = 0;
     while (!s.gameOver && weeks < MAX_WEEKS) {
@@ -334,6 +550,56 @@ describe('weeksInTheRed', () => {
   });
 });
 
+describe('GO_PUBLIC / IPO eligibility', () => {
+  const eligible: Partial<GameState> = {
+    stage: 'growth',
+    ipoWindowOpen: true,
+    weeksRevenueAboveIpoBar: IPO_SUSTAIN_WEEKS,
+  };
+
+  it('ends the run with gameOver "ipo" and a nonzero score when eligible', () => {
+    let s: GameState = { ...newGame(20), ...eligible, founderEquity: 0.4, productQuality: 1_000_000 };
+    s = reduce(s, { type: 'GO_PUBLIC' });
+    expect(s.gameOver).toBe('ipo');
+    expect(s.finalScore).toBeGreaterThan(0);
+  });
+
+  it('is rejected before growth stage even with revenue sustained', () => {
+    let s: GameState = { ...newGame(21), ...eligible, stage: 'seriesA' };
+    s = reduce(s, { type: 'GO_PUBLIC' });
+    expect(s.gameOver).toBeNull();
+    expect(s.finalScore).toBeNull();
+  });
+
+  it('is rejected when the sustain bar has not been held long enough', () => {
+    let s: GameState = { ...newGame(22), ...eligible, weeksRevenueAboveIpoBar: IPO_SUSTAIN_WEEKS - 1 };
+    s = reduce(s, { type: 'GO_PUBLIC' });
+    expect(s.gameOver).toBeNull();
+  });
+
+  it('is rejected while the IPO window is shut', () => {
+    let s: GameState = { ...newGame(23), ...eligible, ipoWindowOpen: false };
+    s = reduce(s, { type: 'GO_PUBLIC' });
+    expect(s.gameOver).toBeNull();
+  });
+
+  it('is rejected while a decision card is pending', () => {
+    let s: GameState = { ...newGame(24), ...eligible, pendingEvent: SCRAPPY_DECK.find((c) => c.kind === 'decision')! };
+    s = reduce(s, { type: 'GO_PUBLIC' });
+    expect(s.gameOver).toBeNull();
+  });
+
+  it('tracks weeksRevenueAboveIpoBar across ticks: resets the moment revenue dips below the bar', () => {
+    let s: GameState = { ...newGame(25), productQuality: 1_000_000, marketShare: 1 };
+    s = tick(s);
+    expect(s.weeksRevenueAboveIpoBar).toBeGreaterThan(0);
+
+    s = { ...s, productQuality: 0 };
+    s = tick(s);
+    expect(s.weeksRevenueAboveIpoBar).toBe(0);
+  });
+});
+
 describe('reduce', () => {
   it('routes TICK through tick()', () => {
     const s0 = newGame(9);
@@ -344,5 +610,82 @@ describe('reduce', () => {
     const started = tickN(newGame(5), 3);
     const reset = reduce(started, { type: 'NEW_GAME', seed: 5 });
     expect(reset).toEqual(newGame(5));
+  });
+});
+
+describe('moraleCrisisMultiplier', () => {
+  it('penalizes only below the documented crisis threshold', () => {
+    expect(moraleCrisisMultiplier(MORALE_CRISIS_THRESHOLD - 1)).toBe(MORALE_CRISIS_PRODUCTIVITY_MULTIPLIER);
+    expect(moraleCrisisMultiplier(MORALE_CRISIS_THRESHOLD)).toBe(1);
+    expect(moraleCrisisMultiplier(100)).toBe(1);
+  });
+});
+
+describe('morale attrition and productivity penalties (forced low morale)', () => {
+  const craterMorale = (state: GameState): GameState => {
+    let s = reduce(state, { type: 'SET_PENDING_HIRES', role: 'devs', delta: -2 });
+    s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: -1 });
+    return reduce(s, { type: 'SET_PENDING_HIRES', role: 'support', delta: -1 });
+  };
+
+  it('crashes morale below both documented thresholds', () => {
+    const s1 = tick(craterMorale(newGame(11)));
+    expect(s1.morale).toBeLessThan(MORALE_ATTRITION_THRESHOLD);
+    expect(s1.morale).toBeLessThan(MORALE_CRISIS_THRESHOLD);
+  });
+
+  it('never fires attrition while morale stays at or above the threshold', () => {
+    let s: GameState = newGame(3); // starts at STARTING_MORALE (70), never touched
+    const startingTotal = s.headcount.devs + s.headcount.sales + s.headcount.support;
+    for (let i = 0; i < 30; i++) {
+      s = tick(s);
+      expect(s.morale).toBeGreaterThanOrEqual(MORALE_ATTRITION_THRESHOLD);
+    }
+    const endingTotal = s.headcount.devs + s.headcount.sales + s.headcount.support;
+    expect(endingTotal).toBe(startingTotal);
+  });
+
+  it('eventually fires attrition (headcount loss + a news entry) across a spread of seeds once morale craters', () => {
+    let sawAttrition = false;
+    for (let seed = 1; seed <= 30 && !sawAttrition; seed++) {
+      // Apply the deliberate layoff first — only *subsequent* headcount drops are attrition.
+      let s = tick(craterMorale(newGame(seed)));
+      for (let i = 0; i < 15; i++) {
+        const before = s.headcount.devs + s.headcount.sales + s.headcount.support;
+        s = tick(s);
+        const after = s.headcount.devs + s.headcount.sales + s.headcount.support;
+        if (after < before) {
+          sawAttrition = true;
+          expect(s.newsLog.some((e) => e.title === 'A burned-out hire quit')).toBe(true);
+          break;
+        }
+      }
+    }
+    expect(sawAttrition).toBe(true);
+  });
+});
+
+describe('morale lever', () => {
+  it('SET_MORALE_LEVER toggles the flag', () => {
+    const s0 = newGame(4);
+    const on = reduce(s0, { type: 'SET_MORALE_LEVER', active: true });
+    expect(on.moraleLeverActive).toBe(true);
+    const off = reduce(on, { type: 'SET_MORALE_LEVER', active: false });
+    expect(off.moraleLeverActive).toBe(false);
+  });
+
+  it('costs cash and boosts morale on tick while active', () => {
+    const s0 = newGame(4);
+    const withLever = reduce(s0, { type: 'SET_MORALE_LEVER', active: true });
+    const s1 = tick(withLever);
+    const s1Baseline = tick(s0);
+
+    expect(s1.morale).toBeGreaterThan(s1Baseline.morale);
+
+    // Isolate the lever's cost from the morale->productivity feedback loop (which also
+    // nudges revenue and therefore cash) by comparing weeklyBurnFor directly.
+    const burnWithLever = weeklyBurnFor(s0.headcount, { moraleLeverCost: MORALE_LEVER_WEEKLY_COST });
+    const burnWithoutLever = weeklyBurnFor(s0.headcount);
+    expect(burnWithLever - burnWithoutLever).toBe(MORALE_LEVER_WEEKLY_COST);
   });
 });

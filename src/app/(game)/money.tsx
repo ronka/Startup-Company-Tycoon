@@ -2,17 +2,31 @@ import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 
+import { FirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ProgressBar } from '@/components/game/progress-bar';
 import { StatTile } from '@/components/game/stat-tile';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { BRIDGE_RUNWAY_THRESHOLD_WEEKS, cLevelPerkMultiplier, nextRound, roundTermsFor } from '@/game/balance';
+import {
+  BRIDGE_RUNWAY_THRESHOLD_WEEKS,
+  IPO_REVENUE_BAR,
+  IPO_SUSTAIN_WEEKS,
+  ROUND_COOLDOWN_WEEKS,
+  canRaiseRound,
+  cLevelPerkMultiplierFor,
+  founderStakeFor,
+  nextRound,
+  roundTermsFor,
+  runwayWeeks,
+} from '@/game/balance';
+import { isIpoEligible } from '@/game/score';
 import { RoundType, Stage } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
+import { STAT_EXPLAINERS } from '@/lib/stat-explainers';
 import { useGame } from '@/state/game-store';
 
 const STAGE_LABEL: Record<Stage, string> = {
@@ -32,20 +46,44 @@ export default function MoneyScreen() {
   const { state, previousState, dispatch } = useGame();
   const theme = useTheme();
   const [confirming, setConfirming] = useState(false);
+  const [ipoConfirming, setIpoConfirming] = useState(false);
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  const { burn, valuation, runway } = deriveWeeklyStats(state);
+  const { burn, revenue, valuation, runway, stake } = deriveWeeklyStats(state);
   const previous = previousState ? deriveWeeklyStats(previousState) : null;
-  const effectiveHype = state.hype * cLevelPerkMultiplier(state.cLevels, 'cmo');
+  const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
+  const cfoDilutionMultiplier = cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-roundTerms');
 
   const round = nextRound(state.roundsRaised);
-  const terms = round ? roundTermsFor(round, valuation, state.hype, runway) : null;
+  const terms = round
+    ? roundTermsFor(round, valuation, state.hype, runway, state.era, cfoDilutionMultiplier)
+    : null;
+  const stakeAfterRaise = terms
+    ? founderStakeFor(state.founderEquity * (1 - terms.dilution), valuation)
+    : stake;
+
+  const raiseLocked = round !== null && !canRaiseRound(state.week, state.lastRoundRaisedWeek);
+  const cooldownWeeksLeft =
+    state.lastRoundRaisedWeek !== null
+      ? Math.max(0, ROUND_COOLDOWN_WEEKS - (state.week - state.lastRoundRaisedWeek))
+      : 0;
+  // Whether this raise still leaves runway under the bridge threshold — the
+  // next round would likely also be a bridge, so the dialog says so up front.
+  const runwayAfterRaise = terms ? runwayWeeks(state.cash + terms.amount, burn - revenue) : 0;
+  const nextRoundLikelyBridgeToo = Boolean(terms?.isBridge) && runwayAfterRaise < BRIDGE_RUNWAY_THRESHOLD_WEEKS;
+
+  const ipoEligible = isIpoEligible(state.stage, state.ipoWindowOpen, state.weeksRevenueAboveIpoBar);
 
   const raise = () => {
     dispatch({ type: 'RAISE_ROUND' });
     setConfirming(false);
+  };
+
+  const goPublic = () => {
+    dispatch({ type: 'GO_PUBLIC' });
+    setIpoConfirming(false);
   };
 
   return (
@@ -54,6 +92,8 @@ export default function MoneyScreen() {
         <ThemedText type="subtitle">Money</ThemedText>
         <ThemedText themeColor="textSecondary">{STAGE_LABEL[state.stage]} stage</ThemedText>
 
+        <FirstRunHint id="money" text="Raise before runway drops under 8 weeks or terms get worse." />
+
         <View style={styles.grid}>
           <StatTile
             label="Weekly burn"
@@ -61,6 +101,7 @@ export default function MoneyScreen() {
             previousValue={previous?.burn}
             format={formatMoney}
             goodDirection="down"
+            explainer={STAT_EXPLAINERS.weeklyBurn}
           />
           <StatTile
             label="Runway"
@@ -68,6 +109,7 @@ export default function MoneyScreen() {
             previousValue={previous?.runway}
             format={formatWeeks}
             goodDirection="up"
+            explainer={STAT_EXPLAINERS.runway}
           />
           <StatTile
             label="Valuation"
@@ -75,6 +117,7 @@ export default function MoneyScreen() {
             previousValue={previous?.valuation}
             format={formatMoney}
             goodDirection="up"
+            explainer={STAT_EXPLAINERS.valuation}
           />
         </View>
 
@@ -86,15 +129,21 @@ export default function MoneyScreen() {
             <ThemedText type="smallBold">{Math.round(state.founderEquity * 100)}%</ThemedText>
           </View>
           <ProgressBar percent={state.founderEquity * 100} color="#3c87f7" />
+          <ThemedText type="small" themeColor="textSecondary">
+            Your stake: {Math.round(state.founderEquity * 100)}% × {formatMoney(valuation)} = {formatMoney(stake)}
+          </ThemedText>
         </View>
 
-        {round && terms ? (
+        {round && terms && !raiseLocked ? (
           <ThemedView type="backgroundElement" style={styles.raiseCard}>
             <ThemedText type="smallBold">Raise {ROUND_LABEL[round]}</ThemedText>
             {terms.isBridge ? (
               <ThemedText type="small" style={styles.bridgeWarning}>
                 Runway is under {formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)} — this is a bridge
                 round: less cash, more dilution.
+                {nextRoundLikelyBridgeToo
+                  ? ` This raise still leaves you under ${formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)} — your next round will likely also be a bridge.`
+                  : ''}
               </ThemedText>
             ) : null}
             <ThemedText type="small" themeColor="textSecondary">
@@ -105,6 +154,14 @@ export default function MoneyScreen() {
               onPress={() => setConfirming(true)}
             />
           </ThemedView>
+        ) : round && raiseLocked ? (
+          <ThemedView type="backgroundElement" style={styles.raiseCard}>
+            <ThemedText type="smallBold">{ROUND_LABEL[round]} cooling down</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              The last round just closed — the market wants to see a few weeks of progress first.
+              Next round available in {formatWeeks(cooldownWeeksLeft)}.
+            </ThemedText>
+          </ThemedView>
         ) : (
           <ThemedView type="backgroundElement" style={styles.raiseCard}>
             <ThemedText type="smallBold">Fully funded</ThemedText>
@@ -114,15 +171,33 @@ export default function MoneyScreen() {
           </ThemedView>
         )}
 
-        <ThemedView type="backgroundElement" style={styles.ipoCard}>
-          <ThemedText type="smallBold" themeColor="textSecondary">
+        <ThemedView type="backgroundElement" style={[styles.ipoCard, ipoEligible && styles.ipoCardReady]}>
+          <ThemedText type="smallBold" themeColor={ipoEligible ? 'text' : 'textSecondary'}>
             IPO
           </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
-            Unlocks at Growth stage once revenue clears the bar and the IPO window is open. Coming
-            soon.
-          </ThemedText>
-          <PrimaryButton variant="secondary" label="IPO" disabled onPress={() => {}} />
+          {state.stage !== 'growth' ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
+              Unlocks at Growth stage once revenue clears the bar and the IPO window is open.
+            </ThemedText>
+          ) : (
+            <>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
+                Revenue {formatMoney(revenue)} / {formatMoney(IPO_REVENUE_BAR)} needed
+              </ThemedText>
+              <ProgressBar percent={(revenue / IPO_REVENUE_BAR) * 100} color="#22c55e" />
+              <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
+                Sustained {Math.min(state.weeksRevenueAboveIpoBar, IPO_SUSTAIN_WEEKS)} /{' '}
+                {IPO_SUSTAIN_WEEKS} weeks
+                {!state.ipoWindowOpen ? ' — IPO window is shut' : ''}
+              </ThemedText>
+            </>
+          )}
+          <PrimaryButton
+            variant="secondary"
+            label="IPO"
+            disabled={!ipoEligible}
+            onPress={() => setIpoConfirming(true)}
+          />
         </ThemedView>
       </ScrollView>
 
@@ -137,6 +212,11 @@ export default function MoneyScreen() {
                 {Math.round(state.founderEquity * (1 - terms.dilution) * 100)}%.
               </ThemedText>
             ) : null}
+            {terms ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
+                Your stake goes from {formatMoney(stake)} to ~{formatMoney(stakeAfterRaise)}.
+              </ThemedText>
+            ) : null}
             <View style={styles.modalActions}>
               <PrimaryButton
                 variant="secondary"
@@ -145,6 +225,27 @@ export default function MoneyScreen() {
                 style={styles.modalButton}
               />
               <PrimaryButton label="Raise" onPress={raise} style={styles.modalButton} />
+            </View>
+          </ThemedView>
+        </View>
+      </Modal>
+
+      <Modal visible={ipoConfirming} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <ThemedView type="backgroundElement" style={styles.modalCard}>
+            <ThemedText type="smallBold">Go public?</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
+              Ends the run at today&apos;s valuation of {formatMoney(valuation)}. Your {Math.round(state.founderEquity * 100)}%
+              stake cashes out at {formatMoney(stake)}.
+            </ThemedText>
+            <View style={styles.modalActions}>
+              <PrimaryButton
+                variant="secondary"
+                label="Cancel"
+                onPress={() => setIpoConfirming(false)}
+                style={styles.modalButton}
+              />
+              <PrimaryButton label="Go Public" onPress={goPublic} style={styles.modalButton} />
             </View>
           </ThemedView>
         </View>
@@ -190,6 +291,9 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     alignItems: 'flex-start',
     opacity: 0.6,
+  },
+  ipoCardReady: {
+    opacity: 1,
   },
   ipoBody: {
     lineHeight: 20,

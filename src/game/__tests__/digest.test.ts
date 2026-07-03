@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildDigestEntries, type WeeklySnapshot } from '../digest';
+import { buildDigestEntries, eraTransitionEntry, isNotableWeek, type WeeklySnapshot } from '../digest';
 import { Rival } from '../types';
 
-const rival = (name: string, marketShare: number): Rival => ({ name, productQuality: 0, marketShare });
+const rival = (name: string, marketShare: number, productQuality = 0): Rival => ({
+  name,
+  productQuality,
+  marketShare,
+});
 
 const baseSnapshot = (overrides: Partial<WeeklySnapshot> = {}): WeeklySnapshot => ({
   revenue: 1000,
   burn: 1000,
   runway: 10,
   morale: 50,
+  marketShare: 0.6,
   rivals: [rival('Nimbus', 0.2), rival('Meridian', 0.2)],
+  productQuality: 1,
+  hype: 1,
   ...overrides,
 });
 
@@ -87,29 +94,73 @@ describe('buildDigestEntries', () => {
     expect(entries).toEqual([]);
   });
 
-  it('flags a rival move of >= 1% share and ignores smaller moves', () => {
-    const before = baseSnapshot({ rivals: [rival('Nimbus', 0.2), rival('Meridian', 0.2)] });
+  it('flags your net share move of >= 1% with one aggregate entry, attributed to the biggest mover', () => {
+    const before = baseSnapshot({ marketShare: 0.6, rivals: [rival('Nimbus', 0.2), rival('Meridian', 0.2)] });
 
     const bigGain = buildDigestEntries(
       before,
-      baseSnapshot({ rivals: [rival('Nimbus', 0.19), rival('Meridian', 0.2)] }),
+      baseSnapshot({ marketShare: 0.61, rivals: [rival('Nimbus', 0.19), rival('Meridian', 0.2)] }),
       3,
     );
-    expect(bigGain).toContainEqual(expect.objectContaining({ title: 'Took share from Nimbus' }));
+    expect(bigGain).toHaveLength(1);
+    expect(bigGain).toContainEqual(
+      expect.objectContaining({
+        title: 'Gained 1.0% share this week',
+        flavor: "Your product quality outpaced Nimbus's → +1.0% share.",
+      }),
+    );
 
     const bigLoss = buildDigestEntries(
       before,
-      baseSnapshot({ rivals: [rival('Nimbus', 0.22), rival('Meridian', 0.2)] }),
+      baseSnapshot({ marketShare: 0.58, rivals: [rival('Nimbus', 0.22, 2), rival('Meridian', 0.2)] }),
       3,
     );
-    expect(bigLoss).toContainEqual(expect.objectContaining({ title: 'Nimbus gained ground' }));
+    expect(bigLoss).toHaveLength(1);
+    expect(bigLoss).toContainEqual(
+      expect.objectContaining({
+        title: 'Lost 2.0% share this week',
+        flavor: "Nimbus's product quality outpaced yours → -2.0% share.",
+      }),
+    );
 
     const tinyMove = buildDigestEntries(
       before,
-      baseSnapshot({ rivals: [rival('Nimbus', 0.205), rival('Meridian', 0.2)] }),
+      baseSnapshot({ marketShare: 0.605, rivals: [rival('Nimbus', 0.198), rival('Meridian', 0.197)] }),
       3,
     );
     expect(tinyMove).toEqual([]);
+  });
+
+  it('never emits more than one share-movement entry per tick, even with several rivals moving', () => {
+    const before = baseSnapshot({ marketShare: 0.6, rivals: [rival('Nimbus', 0.2), rival('Meridian', 0.2)] });
+    const after = baseSnapshot({ marketShare: 0.65, rivals: [rival('Nimbus', 0.17), rival('Meridian', 0.18)] });
+    const entries = buildDigestEntries(before, after, 3);
+    expect(entries.filter((e) => e.title.includes('share this week'))).toHaveLength(1);
+  });
+
+  it('flags hype spiking past a band, and cooling back below it, in cause-and-effect form', () => {
+    const spiked = buildDigestEntries(baseSnapshot({ hype: 1.1 }), baseSnapshot({ hype: 1.3 }), 7);
+    expect(spiked).toContainEqual(
+      expect.objectContaining({
+        title: 'Hype spiked past 1.2x',
+        flavor: expect.stringContaining('→'),
+      }),
+    );
+
+    const cooled = buildDigestEntries(baseSnapshot({ hype: 1.3 }), baseSnapshot({ hype: 1.1 }), 7);
+    expect(cooled).toContainEqual(
+      expect.objectContaining({
+        title: 'Hype cooled below 1.2x',
+        flavor: expect.stringContaining('→'),
+      }),
+    );
+  });
+
+  it('reports only the highest hype band crossed in one jump, not every band', () => {
+    const entries = buildDigestEntries(baseSnapshot({ hype: 1.0 }), baseSnapshot({ hype: 2.5 }), 7);
+    expect(entries.filter((e) => e.title.startsWith('Hype'))).toEqual([
+      expect.objectContaining({ title: 'Hype spiked past 2x' }),
+    ]);
   });
 
   it('can emit multiple entries in the same tick when several thresholds cross at once', () => {
@@ -118,5 +169,32 @@ describe('buildDigestEntries', () => {
     const entries = buildDigestEntries(before, after, 9);
     expect(entries.length).toBeGreaterThanOrEqual(3);
     expect(entries.every((e) => e.week === 9 && e.kind === 'digest')).toBe(true);
+  });
+});
+
+describe('eraTransitionEntry', () => {
+  it('announces Boom and Reckoning with kind "era"', () => {
+    expect(eraTransitionEntry('boom', 30)).toMatchObject({ week: 30, kind: 'era', title: expect.any(String) });
+    expect(eraTransitionEntry('reckoning', 60)).toMatchObject({
+      week: 60,
+      kind: 'era',
+      title: expect.any(String),
+    });
+  });
+
+  it('never fires for scrappy, the starting era', () => {
+    expect(eraTransitionEntry('scrappy', 0)).toBeNull();
+  });
+});
+
+describe('isNotableWeek', () => {
+  it('is not notable with zero entries', () => {
+    expect(isNotableWeek([])).toBe(false);
+  });
+
+  it('is notable with any entry at all — event, digest, era, or plain', () => {
+    expect(isNotableWeek([{ week: 1, title: 'x', flavor: 'y' }])).toBe(true);
+    expect(isNotableWeek([{ week: 1, title: 'x', flavor: 'y', kind: 'digest' }])).toBe(true);
+    expect(isNotableWeek([{ week: 1, title: 'x', flavor: 'y', kind: 'era' }])).toBe(true);
   });
 });

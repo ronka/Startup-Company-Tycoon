@@ -29,6 +29,11 @@ export function CLevelCard({
           <ThemedText type="small" themeColor="textSecondary">
             {hired.perk.label} · {formatMoney(hired.salary)}/wk
           </ThemedText>
+          {hired.quirk ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.quirk}>
+              Quirk: {hired.quirk.label}
+            </ThemedText>
+          ) : null}
           <PrimaryButton variant="secondary" label="Fire" onPress={onFire} />
         </View>
       ) : (
@@ -55,5 +60,8 @@ const styles = StyleSheet.create({
   filled: {
     gap: Spacing.two,
     alignItems: 'flex-start',
+  },
+  quirk: {
+    fontStyle: 'italic',
   },
 });

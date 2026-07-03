@@ -64,6 +64,7 @@ export const SCRAPPY_DECK: EventCard[] = [
             { stat: 'marketShare', amount: 0.02 },
             { stat: 'morale', amount: -8 },
           ],
+          setsFlag: 'crunched-for-first-customer',
         },
       },
       {
@@ -106,6 +107,7 @@ export const SCRAPPY_DECK: EventCard[] = [
             { stat: 'productQuality', amount: 15 },
             { stat: 'morale', amount: -5 },
           ],
+          setsFlag: 'cofounder-product-led',
         },
       },
       {
@@ -124,15 +126,100 @@ export const SCRAPPY_DECK: EventCard[] = [
     era: 'scrappy',
     kind: 'decision',
     title: 'An Early Feeler',
-    flavor: 'A much bigger company asks about "potential synergies." Probably nothing.',
+    flavor:
+      'A much bigger company floats a number "just to see if you\'d bite." It\'s real, and it\'s a lowball.',
     choices: [
       {
-        label: 'Take the meeting',
-        effects: { deltas: [{ stat: 'hype', amount: 0.05 }] },
+        label: 'Decline, stay heads-down',
+        effects: {
+          deltas: [
+            { stat: 'hype', amount: 0.05 },
+            { stat: 'morale', amount: -2 },
+          ],
+          setsFlag: 'declined-early-acquisition',
+        },
       },
       {
-        label: 'Politely decline, stay heads-down',
-        effects: { deltas: [{ stat: 'morale', amount: 2 }] },
+        label: 'Accept — take the exit',
+        effects: { acquisitionOffer: { valuationMultiplier: 1.2 } },
+      },
+    ],
+  },
+  {
+    id: 'scrappy-hater-review',
+    era: 'scrappy',
+    kind: 'news',
+    title: 'The First Hater',
+    flavor: 'A one-star review calls you "overhyped and underbuilt." It stings more than it should.',
+    effects: { deltas: [{ stat: 'hype', amount: -0.04 }] },
+  },
+  {
+    id: 'scrappy-support-ticket-avalanche',
+    era: 'scrappy',
+    kind: 'news',
+    title: 'Support Ticket Avalanche',
+    flavor: 'A batch of new signups all hit the same rough edge at once. Support is drowning.',
+    effects: { deltas: [{ stat: 'morale', amount: -5 }] },
+  },
+  {
+    id: 'scrappy-recruiting-raid',
+    era: 'scrappy',
+    kind: 'news',
+    title: 'Recruiting Raid',
+    flavor: 'A better-funded competitor takes one of your engineers to lunch. Everyone knows why.',
+    effects: { deltas: [{ stat: 'morale', amount: -4 }] },
+  },
+  {
+    id: 'scrappy-pricing-pressure',
+    era: 'scrappy',
+    kind: 'decision',
+    title: 'Pricing Pressure',
+    flavor: 'A prospect says they will only sign at a steep discount. It is a real deal, if you want it that way.',
+    choices: [
+      {
+        label: 'Cut the price to win the deal',
+        effects: {
+          deltas: [
+            { stat: 'marketShare', amount: 0.02 },
+            { stat: 'cash', amount: -10_000 },
+          ],
+        },
+      },
+      {
+        label: 'Hold firm on price',
+        effects: {
+          deltas: [
+            { stat: 'cash', amount: 5_000 },
+            { stat: 'marketShare', amount: -0.015 },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: 'scrappy-crunch-or-coast',
+    era: 'scrappy',
+    kind: 'decision',
+    title: 'Crunch or Coast',
+    flavor: 'The launch date is tight. You can hit it by pushing hard, or slip it to protect the team.',
+    choices: [
+      {
+        label: 'Crunch through the deadline',
+        effects: {
+          deltas: [
+            { stat: 'productQuality', amount: 20 },
+            { stat: 'morale', amount: -10 },
+          ],
+        },
+      },
+      {
+        label: 'Slip the date, protect the team',
+        effects: {
+          deltas: [
+            { stat: 'morale', amount: 8 },
+            { stat: 'hype', amount: -0.05 },
+          ],
+        },
       },
     ],
   },

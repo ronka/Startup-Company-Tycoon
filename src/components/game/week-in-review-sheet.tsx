@@ -84,16 +84,33 @@ export function WeekInReviewSheet({
                 />
               ))}
 
-            {entries.length > 0 ? (
+            {entries.some((entry) => entry.kind === 'era')
+              ? entries
+                  .filter((entry) => entry.kind === 'era')
+                  .map((entry, index) => (
+                    <View key={`era-${index}`} style={styles.eraBeat}>
+                      <ThemedText type="smallBold" style={styles.eraBeatTitle}>
+                        {entry.title}
+                      </ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary" style={styles.eraBeatTitle}>
+                        {entry.flavor}
+                      </ThemedText>
+                    </View>
+                  ))
+              : null}
+
+            {entries.filter((entry) => entry.kind !== 'era').length > 0 ? (
               <View style={styles.entries}>
-                {entries.map((entry, index) => (
-                  <View key={`${entry.title}-${index}`} style={styles.entryCard}>
-                    <ThemedText type="smallBold">{entry.title}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {entry.flavor}
-                    </ThemedText>
-                  </View>
-                ))}
+                {entries
+                  .filter((entry) => entry.kind !== 'era')
+                  .map((entry, index) => (
+                    <View key={`${entry.title}-${index}`} style={styles.entryCard}>
+                      <ThemedText type="smallBold">{entry.title}</ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {entry.flavor}
+                      </ThemedText>
+                    </View>
+                  ))}
               </View>
             ) : null}
           </ScrollView>
@@ -151,5 +168,17 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
     gap: Spacing.half,
     backgroundColor: 'rgba(128,128,128,0.12)',
+  },
+  eraBeat: {
+    borderRadius: Spacing.two,
+    borderWidth: 2,
+    borderColor: '#a855f7',
+    padding: Spacing.three,
+    gap: Spacing.half,
+    alignItems: 'center',
+    marginTop: Spacing.two,
+  },
+  eraBeatTitle: {
+    textAlign: 'center',
   },
 });
