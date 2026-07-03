@@ -25,6 +25,7 @@ import {
   cLevelPayroll,
   cLevelPerkMultiplier,
   clamp,
+  hypeAfterTick,
   maxHireableHeadcount,
   moraleAfterTick,
   nextRound,
@@ -38,9 +39,11 @@ import {
   timedMultiplierFor,
   valuationFor,
   weeklyBurnFor,
+  weeklyStatsFor,
 } from './balance';
+import { buildDigestEntries } from './digest';
 import { createRng } from './rng';
-import { generateRivals, rivalQualityAfterTick } from './rivals';
+import { generateRivals, rivalGrowthMultiplier, rivalQualityAfterTick } from './rivals';
 import { checkGameOver } from './score';
 import { C_LEVEL_ROLES, CLevels, GameAction, GameState, Rival, RngState } from './types';
 
@@ -67,6 +70,7 @@ export function newGame(seed: number = Date.now()): GameState {
     rng,
     week: 0,
     cash: STARTING_CASH,
+    weeksInTheRed: 0,
     headcount: { ...STARTING_HEADCOUNT },
     pendingHeadcount: { ...STARTING_HEADCOUNT },
     morale: STARTING_MORALE,
@@ -101,6 +105,7 @@ export function tick(state: GameState): GameState {
   if (state.gameOver) return state; // frozen once the run ends
   if (state.pendingEvent) return state; // frozen until the decision is answered
 
+  const before = weeklyStatsFor(state);
   const headcount = state.pendingHeadcount;
   const morale = moraleAfterTick(state.morale, state.headcount, headcount);
 
@@ -126,19 +131,32 @@ export function tick(state: GameState): GameState {
     .map((effect) => ({ ...effect, weeksLeft: effect.weeksLeft - 1 }))
     .filter((effect) => effect.weeksLeft > 0);
 
+  const cash = state.cash - burn + revenue;
+  const weeksInTheRed = cash < 0 ? state.weeksInTheRed + 1 : 0;
+  const week = state.week + 1;
+
+  const digestEntries = buildDigestEntries(
+    { revenue: before.revenue, burn: before.burn, runway: before.runway, morale: state.morale, rivals: state.rivals },
+    { revenue, burn, runway: runwayWeeks(cash, burn - revenue), morale, rivals: market.rivals },
+    week,
+  );
+
   let advanced: GameState = {
     ...state,
-    week: state.week + 1,
-    cash: state.cash - burn + revenue,
+    week,
+    cash,
+    weeksInTheRed,
     headcount,
     pendingHeadcount: headcount,
     morale,
     productQuality: quality,
+    hype: hypeAfterTick(state.hype),
     marketShare: market.marketShare,
     rivals: market.rivals,
     rng: market.rng,
     valuationHistory: [...state.valuationHistory, valuation].slice(-VALUATION_HISTORY_CAP),
     activeTimedEffects,
+    newsLog: [...digestEntries, ...state.newsLog],
   };
 
   advanced = drawEventIfDue(advanced);
@@ -158,6 +176,7 @@ function advanceMarket(
   support: number,
 ): { marketShare: number; rivals: Rival[]; rng: RngState } {
   const protection = supportProtectionFactor(support);
+  const growthMultiplier = rivalGrowthMultiplier(state.roundsRaised);
   let rng = state.rng;
   let yourShareDelta = 0;
 
@@ -166,7 +185,7 @@ function advanceMarket(
     const dampenedShift = shift < 0 ? shift * protection : shift;
     yourShareDelta += dampenedShift;
 
-    const [newQuality, nextRng] = rivalQualityAfterTick(rival.productQuality, rng);
+    const [newQuality, nextRng] = rivalQualityAfterTick(rival.productQuality, rng, growthMultiplier);
     rng = nextRng;
 
     return {

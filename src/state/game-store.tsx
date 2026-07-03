@@ -21,10 +21,19 @@ export const STORAGE_KEY = 'startup-tycoon/save/v1';
 
 type StoreAction = GameAction | { type: 'HYDRATE'; state: GameState | null };
 
+/** Upgrades an older save to the current shape. Each version adds one migration step. */
+function migrate(state: GameState): GameState {
+  let next = state;
+  if (next.version < 2) {
+    next = { ...next, version: 2, weeksInTheRed: 0 };
+  }
+  return next;
+}
+
 function storeReducer(state: GameState | null, action: StoreAction): GameState | null {
   switch (action.type) {
     case 'HYDRATE':
-      return action.state;
+      return action.state ? migrate(action.state) : null;
     case 'NEW_GAME':
       return newGame(action.seed);
     default:
@@ -35,6 +44,14 @@ function storeReducer(state: GameState | null, action: StoreAction): GameState |
 interface GameContextValue {
   /** Current run, or null when no game exists (fresh install / clean slate). */
   state: GameState | null;
+  /**
+   * State as it was immediately before the most recent TICK, for "vs last
+   * week" deltas and animations. Null until a tick has happened this
+   * session; unaffected by non-tick actions (hiring, answering events, ...)
+   * so the UI's delta baseline only shifts on an actual week advancing.
+   * UI-only — never touches the pure engine's GameState shape.
+   */
+  previousState: GameState | null;
   /** True until the initial AsyncStorage load resolves. */
   loading: boolean;
   dispatch: (action: GameAction) => void;
@@ -47,6 +64,7 @@ const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(storeReducer, null);
+  const [previousState, setPreviousState] = useState<GameState | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load the autosave once on mount.
@@ -81,12 +99,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
     );
   }, [state, loading]);
 
+  const dispatchWithSnapshot = (action: GameAction) => {
+    // Mirrors tick()'s own frozen conditions so the delta baseline only
+    // shifts when a tick will actually advance the week.
+    if (action.type === 'TICK' && state && !state.gameOver && !state.pendingEvent) {
+      setPreviousState(state);
+    }
+    dispatch(action);
+  };
+
   const value: GameContextValue = {
     state,
+    previousState,
     loading,
-    dispatch,
-    startNewGame: (seed?: number) => dispatch({ type: 'NEW_GAME', seed }),
-    clearSave: () => dispatch({ type: 'HYDRATE', state: null }),
+    dispatch: dispatchWithSnapshot,
+    startNewGame: (seed?: number) => {
+      setPreviousState(null);
+      dispatch({ type: 'NEW_GAME', seed });
+    },
+    clearSave: () => {
+      setPreviousState(null);
+      dispatch({ type: 'HYDRATE', state: null });
+    },
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

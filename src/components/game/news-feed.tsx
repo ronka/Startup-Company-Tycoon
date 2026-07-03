@@ -19,10 +19,17 @@ export function NewsFeed({ entries }: { entries: NewsEntry[] }) {
       {entries.map((entry, index) => (
         <ThemedView
           key={`${entry.week}-${entry.title}-${index}`}
-          type="backgroundElement"
-          style={styles.item}>
+          type={entry.kind === 'digest' ? 'backgroundSelected' : 'backgroundElement'}
+          style={[styles.item, entry.kind === 'digest' && styles.digestItem]}>
           <View style={styles.itemHeader}>
-            <ThemedText type="smallBold">{entry.title}</ThemedText>
+            <View style={styles.itemTitleRow}>
+              {entry.kind === 'digest' ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  📊
+                </ThemedText>
+              ) : null}
+              <ThemedText type="smallBold">{entry.title}</ThemedText>
+            </View>
             <ThemedText type="small" themeColor="textSecondary">
               Week {entry.week}
             </ThemedText>
@@ -53,6 +60,14 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  itemTitleRow: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+  },
+  digestItem: {
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.25)',
   },
   choice: {
     color: '#3c87f7',

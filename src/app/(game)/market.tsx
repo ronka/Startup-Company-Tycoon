@@ -1,6 +1,5 @@
 import { Redirect } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ProgressBar } from '@/components/game/progress-bar';
 import { ThemedText } from '@/components/themed-text';
@@ -15,7 +14,6 @@ const RIVAL_COLORS = ['#f59e0b', '#ef4444'];
 
 export default function MarketScreen() {
   const { state } = useGame();
-  const insets = useSafeAreaInsets();
   const theme = useTheme();
 
   if (!state) return <Redirect href="/" />;
@@ -29,10 +27,8 @@ export default function MarketScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.four }]}>
+      <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">Market</ThemedText>
-        <ThemedText themeColor="textSecondary">Week {state.week}</ThemedText>
 
         <View style={styles.shareSection}>
           <ShareRow label="You" percent={state.marketShare * 100} color="#3c87f7" />
@@ -101,6 +97,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
     paddingBottom: Spacing.six,
     gap: Spacing.four,
   },

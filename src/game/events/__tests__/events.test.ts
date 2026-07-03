@@ -38,7 +38,11 @@ describe('draw cadence in play', () => {
     for (let i = 0; i < 60 && newsWeeks.length < 6; i++) {
       const before = s.newsLog.length;
       s = tickAutoAnswer(s);
-      if (s.newsLog.length > before) newsWeeks.push(s.newsLog[0].week);
+      // Weekly-digest entries (kind: 'digest') also append to newsLog on
+      // ticks with no card draw; isolate the card entry to test cadence.
+      const added = s.newsLog.slice(0, s.newsLog.length - before);
+      const cardEntry = added.find((entry) => entry.kind !== 'digest');
+      if (cardEntry) newsWeeks.push(cardEntry.week);
     }
     expect(newsWeeks.length).toBeGreaterThanOrEqual(3);
     for (let i = 1; i < newsWeeks.length; i++) {

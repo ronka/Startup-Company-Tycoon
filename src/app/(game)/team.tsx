@@ -1,7 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CandidatePicker, type CandidatePickerHandle } from '@/components/game/candidate-picker';
 import { CLevelCard } from '@/components/game/clevel-card';
@@ -31,7 +30,6 @@ const C_LEVEL_TITLE: Record<CLevelRole, string> = {
 
 export default function TeamScreen() {
   const { state, dispatch } = useGame();
-  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [confirmRole, setConfirmRole] = useState<Role | null>(null);
   const ctoPickerRef = useRef<CandidatePickerHandle>(null);
@@ -80,8 +78,7 @@ export default function TeamScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.four }]}>
+      <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">Team</ThemedText>
 
         <View style={styles.moraleBlock}>
@@ -188,6 +185,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
     paddingBottom: Spacing.six,
     gap: Spacing.four,
   },

@@ -1,65 +1,80 @@
 import { Redirect } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DecisionModal } from '@/components/game/decision-modal';
+import { InsolvencyBanner } from '@/components/game/insolvency-banner';
 import { NewsFeed } from '@/components/game/news-feed';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { Sparkline } from '@/components/game/sparkline';
 import { StatTile } from '@/components/game/stat-tile';
 import { ThemedText } from '@/components/themed-text';
+import { WeekInReviewSheet, type RivalShareMove } from '@/components/game/week-in-review-sheet';
 import { Spacing } from '@/constants/theme';
-import {
-  cLevelPayroll,
-  cLevelPerkMultiplier,
-  revenueFor,
-  runwayWeeks,
-  salesFactorFor,
-  valuationFor,
-  weeklyBurnFor,
-} from '@/game/balance';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney, formatWeeks } from '@/lib/format';
+import { deriveWeeklyStats } from '@/lib/derived-stats';
+import { formatMoney } from '@/lib/format';
 import { useGame } from '@/state/game-store';
 
 export default function HqScreen() {
-  const { state, dispatch } = useGame();
+  const { state, previousState, dispatch } = useGame();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  const burn = weeklyBurnFor(state.headcount, {
-    execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplier(state.cLevels, 'cfo'),
-  });
-  const effectiveHype = state.hype * cLevelPerkMultiplier(state.cLevels, 'cmo');
-  const revenue = revenueFor(
-    state.productQuality,
-    state.marketShare,
-    effectiveHype,
-    salesFactorFor(state.headcount.sales),
-  );
-  const valuation = valuationFor(revenue, effectiveHype);
-  const runway = runwayWeeks(state.cash, burn - revenue);
+  const { burn, revenue, valuation, insolvent } = deriveWeeklyStats(state);
+  const previous = previousState ? deriveWeeklyStats(previousState) : null;
+
+  // Show once per tick, after any decision card that tick drew has been
+  // answered (pendingEvent clears). previousState only exists once at least
+  // one tick has happened this session, so this never fires on app open.
+  const showReview = previousState !== null && !state.pendingEvent && state.week !== reviewedWeek;
+  const cashDelta = previousState ? state.cash - previousState.cash : 0;
+  const moraleDelta = previousState ? state.morale - previousState.morale : 0;
+  const yourShareDelta = previousState ? state.marketShare - previousState.marketShare : 0;
+  const rivalShares: RivalShareMove[] = previousState
+    ? state.rivals.map((rival, index) => ({
+        name: rival.name,
+        delta: rival.marketShare - (previousState.rivals[index]?.marketShare ?? rival.marketShare),
+      }))
+    : [];
+  const weekEntries = state.newsLog.filter((entry) => entry.week === state.week);
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.four }]}>
+      <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">HQ</ThemedText>
-        <ThemedText themeColor="textSecondary">Week {state.week}</ThemedText>
+
+        {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 
         <Sparkline data={state.valuationHistory} />
 
         <View style={styles.grid}>
-          <StatTile label="Cash" value={formatMoney(state.cash)} />
-          <StatTile label="Weekly burn" value={formatMoney(burn)} />
-          <StatTile label="Runway" value={formatWeeks(runway)} />
-          <StatTile label="Revenue" value={formatMoney(revenue)} />
-          <StatTile label="Valuation" value={formatMoney(valuation)} />
-          <StatTile label="Week" value={`${state.week}`} />
+          <StatTile
+            label="Weekly burn"
+            value={burn}
+            previousValue={previous?.burn}
+            format={formatMoney}
+            goodDirection="down"
+          />
+          <StatTile
+            label="Revenue"
+            value={revenue}
+            previousValue={previous?.revenue}
+            format={formatMoney}
+            goodDirection="up"
+          />
+          <StatTile
+            label="Valuation"
+            value={valuation}
+            previousValue={previous?.valuation}
+            format={formatMoney}
+            goodDirection="up"
+          />
         </View>
 
         <View style={styles.newsSection}>
@@ -78,6 +93,19 @@ export default function HqScreen() {
         card={state.pendingEvent}
         onChoose={(choiceIndex) => dispatch({ type: 'ANSWER_EVENT', choiceIndex })}
       />
+
+      <WeekInReviewSheet
+        visible={showReview}
+        week={state.week}
+        cashDelta={cashDelta}
+        revenue={revenue}
+        burn={burn}
+        moraleDelta={moraleDelta}
+        yourShareDelta={yourShareDelta}
+        rivalShares={rivalShares}
+        entries={weekEntries}
+        onDismiss={() => setReviewedWeek(state.week)}
+      />
     </View>
   );
 }
@@ -88,6 +116,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
     paddingBottom: Spacing.four,
     gap: Spacing.three,
   },

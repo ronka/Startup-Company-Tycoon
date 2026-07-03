@@ -27,6 +27,13 @@ export const RIVAL_BASE_QUALITY_GROWTH = 20;
 export const RIVAL_JITTER_CHANCE = 0.15;
 export const RIVAL_JITTER_MIN = -50;
 export const RIVAL_JITTER_MAX = 100;
+/** Extra growth multiplier rivals gain per round the player has raised — funding draws competition. */
+export const RIVAL_GROWTH_PER_ROUND_RAISED = 0.3;
+
+/** Rivals accelerate as the player raises rounds and the market heats up. */
+export function rivalGrowthMultiplier(roundsRaised: number): number {
+  return 1 + roundsRaised * RIVAL_GROWTH_PER_ROUND_RAISED;
+}
 
 /** Two named rivals with distinct names, drawn deterministically from the run's RNG. */
 export function generateRivals(rng: RngState): { rivals: Rival[]; rng: RngState } {
@@ -49,12 +56,23 @@ export function generateRivals(rng: RngState): { rivals: Rival[]; rng: RngState 
   return { rivals, rng: r };
 }
 
-/** One week of scripted rival quality growth: flat baseline plus an occasional jitter. */
-export function rivalQualityAfterTick(quality: number, rng: RngState): [number, RngState] {
+/**
+ * One week of scripted rival quality growth: flat baseline plus an occasional
+ * jitter, scaled up by `growthMultiplier` (stage-driven — see
+ * `rivalGrowthMultiplier`) so competitors sharpen up as the market heats up.
+ */
+export function rivalQualityAfterTick(
+  quality: number,
+  rng: RngState,
+  growthMultiplier: number = 1,
+): [number, RngState] {
   const [roll, afterRoll] = nextFloat(rng);
   if (roll < RIVAL_JITTER_CHANCE) {
     const [jitter, afterJitter] = nextRange(afterRoll, RIVAL_JITTER_MIN, RIVAL_JITTER_MAX);
-    return [Math.max(0, quality + RIVAL_BASE_QUALITY_GROWTH + jitter), afterJitter];
+    return [
+      Math.max(0, quality + (RIVAL_BASE_QUALITY_GROWTH + jitter) * growthMultiplier),
+      afterJitter,
+    ];
   }
-  return [Math.max(0, quality + RIVAL_BASE_QUALITY_GROWTH), afterRoll];
+  return [Math.max(0, quality + RIVAL_BASE_QUALITY_GROWTH * growthMultiplier), afterRoll];
 }

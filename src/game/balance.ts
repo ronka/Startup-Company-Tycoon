@@ -6,8 +6,22 @@
 import { EventStat, TimedEffect } from './events/types';
 import { C_LEVEL_ROLES, CLevelRole, CLevels, Headcount, ROUND_ORDER, Role, RoundType, Stage } from './types';
 
+/** The state slice `weeklyStatsFor` needs — matches a subset of `GameState`. */
+export interface WeeklyStatsInput {
+  headcount: Headcount;
+  cLevels: CLevels;
+  hype: number;
+  productQuality: number;
+  marketShare: number;
+  cash: number;
+}
+
 /** Bump when the shape of a saved GameState changes incompatibly. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+// ── Insolvency ───────────────────────────────────────────────────────────
+/** Consecutive weeks with cash < 0 before the run ends in bankruptcy, regardless of rounds left. */
+export const BANKRUPTCY_FUSE_WEEKS = 3;
 
 // ── Starting conditions ────────────────────────────────────────────────
 export const STARTING_CASH = 250_000;
@@ -62,14 +76,16 @@ export function runwayWeeks(cash: number, netWeeklyBurn: number): number {
 // ── Product quality ─────────────────────────────────────────────────────
 /** Raw weekly output per developer, before the growth/decay curve is applied. */
 export const DEV_EFFORT_PER_DEV = 300;
+/** Sublinear exponent on headcount: extra devs still help, but with diminishing returns. */
+export const DEV_EFFORT_EXPONENT = 0.85;
 /** Fraction of a week's dev effort that converts into quality growth. */
 export const QUALITY_GROWTH_RATE = 0.4;
 /** Fraction of current quality lost each week to tech-debt drag. */
-export const QUALITY_DECAY_RATE = 0.04;
+export const QUALITY_DECAY_RATE = 0.08;
 
-/** Raw weekly development output for a given number of devs. */
+/** Raw weekly development output for a given number of devs (diminishing returns per extra hire). */
 export function devEffort(devs: number): number {
-  return devs * DEV_EFFORT_PER_DEV;
+  return Math.pow(devs, DEV_EFFORT_EXPONENT) * DEV_EFFORT_PER_DEV;
 }
 
 /**
@@ -92,6 +108,8 @@ export function qualityAfterTick(
 // ── Revenue & valuation ─────────────────────────────────────────────────
 /** Revenue multiplier added per sales hire. */
 export const SALES_FACTOR_PER_HEAD = 0.2;
+/** Dollars of weekly revenue per point of quality×share, before hype/sales scaling. */
+export const REVENUE_PER_QUALITY_SHARE = 3;
 /** Valuation multiple applied to revenue (industry comps, pre-tuning). */
 export const INDUSTRY_MULTIPLE = 8;
 /** How many weeks of valuation history the HQ sparkline keeps. */
@@ -109,12 +127,42 @@ export function revenueFor(
   hype: number,
   salesFactor: number,
 ): number {
-  return quality * marketShare * hype * salesFactor;
+  return quality * marketShare * hype * salesFactor * REVENUE_PER_QUALITY_SHARE;
 }
 
 /** Company valuation: revenue capitalized at an industry multiple, boosted by hype. */
 export function valuationFor(revenue: number, hype: number): number {
   return revenue * INDUSTRY_MULTIPLE * hype;
+}
+
+export interface WeeklyStats {
+  burn: number;
+  revenue: number;
+  valuation: number;
+  runway: number;
+}
+
+/**
+ * Rolls up the week's headline numbers (burn, revenue, valuation, runway)
+ * from a state slice. Shared by the UI (current week) and the engine's
+ * weekly-digest comparison (pre-tick "before" snapshot vs the just-computed
+ * "after" one) so both read the same formula composition.
+ */
+export function weeklyStatsFor(state: WeeklyStatsInput): WeeklyStats {
+  const burn = weeklyBurnFor(state.headcount, {
+    execPayroll: cLevelPayroll(state.cLevels),
+    fixedBurnMultiplier: cLevelPerkMultiplier(state.cLevels, 'cfo'),
+  });
+  const effectiveHype = state.hype * cLevelPerkMultiplier(state.cLevels, 'cmo');
+  const revenue = revenueFor(
+    state.productQuality,
+    state.marketShare,
+    effectiveHype,
+    salesFactorFor(state.headcount.sales),
+  );
+  const valuation = valuationFor(revenue, effectiveHype);
+  const runway = runwayWeeks(state.cash, burn - revenue);
+  return { burn, revenue, valuation, runway };
 }
 
 // ── Team management: hiring & morale ────────────────────────────────────
@@ -269,9 +317,18 @@ export function timedMultiplierFor(stat: EventStat, effects: TimedEffect[]): num
   return effects.filter((e) => e.stat === stat).reduce((product, e) => product * e.multiplier, 1);
 }
 
+// ── Hype ─────────────────────────────────────────────────────────────────
+/** Fraction of the gap to neutral (1.0) that hype closes each week, absent new events. */
+export const HYPE_DECAY_RATE = 0.05;
+
+/** One week of hype decay: drifts back toward the neutral baseline of 1.0. */
+export function hypeAfterTick(hype: number): number {
+  return hype + (1.0 - hype) * HYPE_DECAY_RATE;
+}
+
 // ── Market share ─────────────────────────────────────────────────────────
 /** Share moved per point of quality gap, per week. */
-export const SHARE_SHIFT_RATE = 0.00002;
+export const SHARE_SHIFT_RATE = 0.0001;
 /** No single rival can shift more than this much share in one week. */
 export const MAX_SHARE_SHIFT_PER_TICK = 0.01;
 /** Fraction of a share *loss* to a rival negated per support hire. */

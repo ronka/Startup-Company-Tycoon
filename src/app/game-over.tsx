@@ -14,6 +14,13 @@ const HEADLINE: Record<GameOverReason, string> = {
   ipo: 'IPO',
 };
 
+const SUBTITLE: Record<GameOverReason, (weeks: number) => string> = {
+  bankruptcy: (weeks) =>
+    `Cash stayed negative too long — out of runway after ${weeks} weeks.`,
+  acquired: (weeks) => `Acquired after ${weeks} weeks.`,
+  ipo: (weeks) => `Rang the bell after ${weeks} weeks.`,
+};
+
 export default function GameOverScreen() {
   const { state, startNewGame } = useGame();
   const router = useRouter();
@@ -34,7 +41,7 @@ export default function GameOverScreen() {
           {HEADLINE[state.gameOver]}
         </ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-          You survived {state.week} weeks before the money ran out.
+          {SUBTITLE[state.gameOver](state.week)}
         </ThemedText>
       </View>
       <PrimaryButton label="New Game" onPress={startFresh} />

@@ -1,7 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ProgressBar } from '@/components/game/progress-bar';
@@ -9,20 +8,10 @@ import { StatTile } from '@/components/game/stat-tile';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import {
-  BRIDGE_RUNWAY_THRESHOLD_WEEKS,
-  cLevelPayroll,
-  cLevelPerkMultiplier,
-  nextRound,
-  revenueFor,
-  roundTermsFor,
-  runwayWeeks,
-  salesFactorFor,
-  valuationFor,
-  weeklyBurnFor,
-} from '@/game/balance';
+import { BRIDGE_RUNWAY_THRESHOLD_WEEKS, cLevelPerkMultiplier, nextRound, roundTermsFor } from '@/game/balance';
 import { RoundType, Stage } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
+import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
 import { useGame } from '@/state/game-store';
 
@@ -40,27 +29,16 @@ const ROUND_LABEL: Record<RoundType, string> = {
 };
 
 export default function MoneyScreen() {
-  const { state, dispatch } = useGame();
-  const insets = useSafeAreaInsets();
+  const { state, previousState, dispatch } = useGame();
   const theme = useTheme();
   const [confirming, setConfirming] = useState(false);
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  const burn = weeklyBurnFor(state.headcount, {
-    execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplier(state.cLevels, 'cfo'),
-  });
+  const { burn, valuation, runway } = deriveWeeklyStats(state);
+  const previous = previousState ? deriveWeeklyStats(previousState) : null;
   const effectiveHype = state.hype * cLevelPerkMultiplier(state.cLevels, 'cmo');
-  const revenue = revenueFor(
-    state.productQuality,
-    state.marketShare,
-    effectiveHype,
-    salesFactorFor(state.headcount.sales),
-  );
-  const valuation = valuationFor(revenue, effectiveHype);
-  const runway = runwayWeeks(state.cash, burn - revenue);
 
   const round = nextRound(state.roundsRaised);
   const terms = round ? roundTermsFor(round, valuation, state.hype, runway) : null;
@@ -72,16 +50,32 @@ export default function MoneyScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.four }]}>
+      <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">Money</ThemedText>
         <ThemedText themeColor="textSecondary">{STAGE_LABEL[state.stage]} stage</ThemedText>
 
         <View style={styles.grid}>
-          <StatTile label="Cash" value={formatMoney(state.cash)} />
-          <StatTile label="Weekly burn" value={formatMoney(burn)} />
-          <StatTile label="Runway" value={formatWeeks(runway)} />
-          <StatTile label="Valuation" value={formatMoney(valuation)} />
+          <StatTile
+            label="Weekly burn"
+            value={burn}
+            previousValue={previous?.burn}
+            format={formatMoney}
+            goodDirection="down"
+          />
+          <StatTile
+            label="Runway"
+            value={runway}
+            previousValue={previous?.runway}
+            format={formatWeeks}
+            goodDirection="up"
+          />
+          <StatTile
+            label="Valuation"
+            value={valuation}
+            previousValue={previous?.valuation}
+            format={formatMoney}
+            goodDirection="up"
+          />
         </View>
 
         <View style={styles.equityBlock}>
@@ -165,6 +159,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
     paddingBottom: Spacing.six,
     gap: Spacing.four,
   },

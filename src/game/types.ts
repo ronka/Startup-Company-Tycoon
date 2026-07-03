@@ -78,6 +78,8 @@ export interface GameState {
 
   // Money
   cash: number;
+  /** Consecutive weeks ending with cash < 0; resets to 0 the moment cash recovers. */
+  weeksInTheRed: number;
 
   // Team
   headcount: Headcount;
