@@ -1,0 +1,36 @@
+diff --git a/dist/commonjs/babel/react-native-web.js b/dist/commonjs/babel/react-native-web.js
+index 9414040a371770d15d39e4e76675e22d6ba82dbf..3670dd3902b33f496b9f18cbfca0cad2faa8948c 100644
+--- a/dist/commonjs/babel/react-native-web.js
++++ b/dist/commonjs/babel/react-native-web.js
+@@ -10,6 +10,13 @@ var _path = require("path");
+ var _allowedModules = require("./allowedModules.js");
+ function parseReactNativeWebSource(source, filename) {
+   if (source.startsWith(".")) {
++    // Patch: do not rewrite react-native-web's own internal component imports.
++    // Wrapping them pulls react-native-css component wrappers (which require
++    // "react-native") back into react-native-web's own initialization, creating
++    // a circular import that crashes the web runtime (e.g. FlatList).
++    if (typeof filename === "string" && filename.includes("react-native-web")) {
++      return;
++    }
+     source = (0, _path.resolve)(filename, source);
+     const internalPath = source.split("react-native-web/dist")[1];
+     if (!internalPath) {
+diff --git a/dist/module/babel/react-native-web.js b/dist/module/babel/react-native-web.js
+index ced94aae82cdf5206c277a2c40fd922ac5918403..8ba586aa832b084e6bcab44ae113619f93d43d3a 100644
+--- a/dist/module/babel/react-native-web.js
++++ b/dist/module/babel/react-native-web.js
+@@ -4,6 +4,13 @@ import { resolve } from "path";
+ import { allowedModules } from "./allowedModules.js";
+ function parseReactNativeWebSource(source, filename) {
+   if (source.startsWith(".")) {
++    // Patch: do not rewrite react-native-web's own internal component imports.
++    // Wrapping them pulls react-native-css component wrappers (which require
++    // "react-native") back into react-native-web's own initialization, creating
++    // a circular import that crashes the web runtime (e.g. FlatList).
++    if (typeof filename === "string" && filename.includes("react-native-web")) {
++      return;
++    }
+     source = resolve(filename, source);
+     const internalPath = source.split("react-native-web/dist")[1];
+     if (!internalPath) {

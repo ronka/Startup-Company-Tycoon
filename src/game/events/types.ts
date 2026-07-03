@@ -1,0 +1,55 @@
+/**
+ * Timeline event data. Pure data + a couple of pure helpers — same purity
+ * rules as the rest of `src/game/`. Adding a card means adding one object
+ * literal to a deck file (e.g. `scrappy.ts`); nothing here or in `engine.ts`
+ * needs to change.
+ */
+
+export type Era = 'scrappy' | 'boom' | 'reckoning';
+
+/** The GameState fields an event is allowed to move. */
+export type EventStat = 'cash' | 'morale' | 'hype' | 'productQuality' | 'marketShare';
+
+/** An immediate, additive change to one stat. */
+export interface StatDelta {
+  stat: EventStat;
+  amount: number;
+}
+
+/** A multiplier on a stat that decays back to normal after `weeksLeft` ticks. */
+export interface TimedEffect {
+  stat: EventStat;
+  multiplier: number;
+  weeksLeft: number;
+}
+
+export interface EventEffects {
+  deltas?: StatDelta[];
+  timedEffect?: TimedEffect;
+}
+
+export interface EventChoice {
+  label: string;
+  effects: EventEffects;
+}
+
+export interface EventCard {
+  id: string;
+  era: Era;
+  kind: 'news' | 'decision';
+  title: string;
+  flavor: string;
+  /** 'news' cards only — applied automatically the week they're drawn. */
+  effects?: EventEffects;
+  /** 'decision' cards only — 2–3 choices, each with its own effects. */
+  choices?: EventChoice[];
+}
+
+/** A resolved event, newest first in `GameState.newsLog`. */
+export interface NewsEntry {
+  week: number;
+  title: string;
+  flavor: string;
+  /** Present only when a decision card was answered. */
+  choiceLabel?: string;
+}
