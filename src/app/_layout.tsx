@@ -26,6 +26,7 @@ export default function RootLayout() {
             <NotificationManager />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" />
               <Stack.Screen name="(game)" />
               <Stack.Screen name="game-over" options={{ presentation: 'modal' }} />
             </Stack>

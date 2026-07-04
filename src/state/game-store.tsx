@@ -28,9 +28,15 @@ import {
   type WeekBudget,
 } from '@/state/week-budget';
 
-export const STORAGE_KEY = 'startup-tycoon/save/v1';
+export const STORAGE_KEY = 'startup-tycoon/save/v2';
 export const WEEK_BUDGET_STORAGE_KEY = 'startup-tycoon/week-budget/v1';
 export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
+export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
+
+/** The player's own profile — set once, survives every `NEW_GAME` (unlike `GameState`, which is fully replaced). */
+export interface PlayerProfile {
+  ceoName: string;
+}
 
 type StoreAction =
   | GameAction
@@ -45,7 +51,7 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
     case 'SET_STATE':
       return action.state;
     case 'NEW_GAME':
-      return newGame(action.seed);
+      return newGame(action.companyName, action.seed);
     default:
       return state === null ? state : reduce(state, action);
   }
@@ -71,9 +77,17 @@ interface GameContextValue {
    * decision is already pending or the run has ended — same gating as TICK.
    */
   fastForward: (weeks: number) => void;
-  startNewGame: (seed?: number) => void;
+  startNewGame: (companyName: string, seed?: number) => void;
   /** Wipe the autosave and clear in-memory state. */
   clearSave: () => void;
+  /**
+   * The player's own profile (CEO name): null until the initial load resolves,
+   * and also doubles as "never set" — this player's very first run ever.
+   * Outlives `NEW_GAME`; not cleared by `clearSave()`.
+   */
+  profile: PlayerProfile | null;
+  /** Sets the CEO name once and persists it; never asked again after this. */
+  setCeoName: (name: string) => void;
   /**
    * The daily week budget (PRD F12): null until the initial load resolves.
    * `TICK`/`fastForward` are rejected once `weeksRemaining` hits 0, unless
@@ -101,6 +115,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // treats as this player's very first session, distinct from "already
   // credited today".
   const [streak, setStreak] = useState<StreakState | null>(null);
+  // Null until the load resolves; also doubles as "no profile was ever saved".
+  const [profile, setProfileState] = useState<PlayerProfile | null>(null);
 
   // Load the autosave (and the daily week budget + streak, refreshed against
   // "now") once on mount.
@@ -129,6 +145,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (!cancelled && raw) setStreak(JSON.parse(raw) as StreakState);
       } catch (err) {
         console.warn('[game-store] failed to load streak', err);
+      }
+      try {
+        const raw = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+        if (!cancelled && raw) setProfileState(JSON.parse(raw) as PlayerProfile);
+      } catch (err) {
+        console.warn('[game-store] failed to load profile', err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -165,6 +187,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save streak', err),
     );
   }, [streak, loading]);
+
+  // Persist the profile whenever it changes. Guarded against null so a save
+  // never clobbers an already-stored profile before the load resolves.
+  useEffect(() => {
+    if (loading || profile === null) return;
+    AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile)).catch((err) =>
+      console.warn('[game-store] failed to save profile', err),
+    );
+  }, [profile, loading]);
 
   // Morning Standup injection (Task 15): the first time this local day sees
   // a live, uninterrupted run (a game exists, isn't over, and has no other
@@ -215,9 +246,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     loading,
     dispatch: dispatchWithSnapshot,
     fastForward,
-    startNewGame: (seed?: number) => {
+    startNewGame: (companyName: string, seed?: number) => {
       setPreviousState(null);
-      dispatch({ type: 'NEW_GAME', seed });
+      dispatch({ type: 'NEW_GAME', companyName, seed });
     },
     clearSave: () => {
       setPreviousState(null);
@@ -227,6 +258,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     devFreePlay,
     setDevFreePlay,
     streak,
+    profile,
+    setCeoName: (name: string) => setProfileState({ ceoName: name }),
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

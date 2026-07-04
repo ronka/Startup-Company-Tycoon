@@ -26,7 +26,7 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { devFreePlay, setDevFreePlay, startNewGame } = useGame();
+  const { devFreePlay, setDevFreePlay } = useGame();
 
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
 
@@ -65,15 +65,14 @@ export default function SettingsScreen() {
           text: 'Start new game',
           style: 'destructive',
           onPress: () => {
-            startNewGame();
-            router.replace('/hq');
+            router.push('/onboarding');
           },
         },
         { text: 'Cancel', style: 'cancel' },
       ],
       { cancelable: true },
     );
-  }, [devFreePlay, setDevFreePlay, resetHints, startNewGame, router]);
+  }, [devFreePlay, setDevFreePlay, resetHints, router]);
 
   const handleVersionPress = useCallback(() => {
     tapCountRef.current += 1;

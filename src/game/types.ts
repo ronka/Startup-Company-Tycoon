@@ -141,6 +141,8 @@ export type Stage = (typeof STAGE_ORDER)[number];
 export interface GameState {
   /** The seed the run was created with (for display / reproduction). */
   createdWithSeed: number;
+  /** The company name chosen at onboarding; drives the HQ header. */
+  companyName: string;
   rng: RngState;
 
   // Clock
@@ -228,7 +230,7 @@ export interface GameState {
 
 export type GameAction =
   | { type: 'TICK' }
-  | { type: 'NEW_GAME'; seed?: number }
+  | { type: 'NEW_GAME'; seed?: number; companyName: string }
   | { type: 'SET_PENDING_HIRES'; role: Role; delta: number }
   | { type: 'SET_MORALE_LEVER'; active: boolean }
   | { type: 'HIRE_CLEVEL'; role: CLevelRole; candidateId: string }

@@ -45,7 +45,7 @@ describe('rivalQualityAfterTick', () => {
 
 describe('market share conservation', () => {
   it('you + both rivals never exceed 100% over many ticks', () => {
-    let s: GameState = { ...newGame(3), cash: 50_000_000 };
+    let s: GameState = { ...newGame('Acme', 3), cash: 50_000_000 };
     for (let i = 0; i < 40; i++) {
       s = tick(s);
       const total = s.marketShare + s.rivals[0].marketShare + s.rivals[1].marketShare;
@@ -59,7 +59,7 @@ describe('market share conservation', () => {
 
 describe('quality gap drives share', () => {
   it('a dominant product retains/gains more share than an outclassed one over 20 ticks', () => {
-    const base: GameState = { ...newGame(1), cash: 50_000_000 };
+    const base: GameState = { ...newGame('Acme', 1), cash: 50_000_000 };
 
     // Dominant product: sky-high starting quality, rivals frozen weak.
     let dominant: GameState = {
@@ -87,13 +87,13 @@ describe('quality gap drives share', () => {
     // to fully cover the customer base so churn doesn't crash share below the
     // monopoly threshold before the guardrail gets a chance to fire.
     let s: GameState = {
-      ...newGame(9),
+      ...newGame('Acme', 9),
       cash: 50_000_000,
       productQuality: 500_000,
       customers: 9_000,
       marketCustomers: MARKET_CUSTOMERS,
-      headcount: { ...newGame(9).headcount, support: 50 },
-      pendingHeadcount: { ...newGame(9).pendingHeadcount, support: 50 },
+      headcount: { ...newGame('Acme', 9).headcount, support: 50 },
+      pendingHeadcount: { ...newGame('Acme', 9).pendingHeadcount, support: 50 },
       rivals: [
         { name: 'Vertex Labs', productQuality: 1, marketShare: 0.06, focus: 'core' },
         { name: 'Nimbus', productQuality: 1, marketShare: 0.04, focus: 'hardware' },
@@ -234,7 +234,7 @@ describe('rival trend coupling (Task 4: rivals as strategic actors)', () => {
 
   it("an aligned rival's quality visibly surges during its wave and its growth slows on crash, vs. an unaligned sibling", () => {
     let state: GameState = {
-      ...newGame(1),
+      ...newGame('Acme', 1),
       cash: 50_000_000,
       trend: PEAK_AI,
       rivals: [
@@ -257,7 +257,7 @@ describe('rival trend coupling (Task 4: rivals as strategic actors)', () => {
     // Player stays on its default 'core' focus throughout — this isolates the
     // trend's effect on the rival from anything the player does.
     const state: GameState = {
-      ...newGame(1),
+      ...newGame('Acme', 1),
       cash: 50_000_000,
       trend: CRASH_AI,
       rivals: [
@@ -280,7 +280,7 @@ describe('rival trend coupling (Task 4: rivals as strategic actors)', () => {
 describe('support headcount retains customers (replaces the old share-shift dampening)', () => {
   it('more support reduces churn, retaining more customers after a tick', () => {
     const base: GameState = {
-      ...newGame(2),
+      ...newGame('Acme', 2),
       cash: 50_000_000,
       customers: 1_000,
       productQuality: 1,

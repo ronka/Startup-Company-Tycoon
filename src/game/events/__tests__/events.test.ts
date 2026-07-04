@@ -25,7 +25,7 @@ function tickAutoAnswer(state: GameState): GameState {
 
 describe('drawCadenceWeeks', () => {
   it('always returns a value in [2, 4]', () => {
-    let s: GameState = newGame(1);
+    let s: GameState = newGame('Acme', 1);
     for (let i = 0; i < 100; i++) {
       const [weeks, rng] = drawCadenceWeeks(s.rng);
       expect(weeks).toBeGreaterThanOrEqual(2);
@@ -37,7 +37,7 @@ describe('drawCadenceWeeks', () => {
 
 describe('draw cadence in play', () => {
   it('news entries land 2-4 weeks apart', () => {
-    let s: GameState = newGame(7);
+    let s: GameState = newGame('Acme', 7);
     const newsWeeks: number[] = [];
     for (let i = 0; i < 60 && newsWeeks.length < 6; i++) {
       const before = s.newsLog.length;
@@ -60,7 +60,7 @@ describe('draw cadence in play', () => {
 
 describe('decision cards block TICK', () => {
   it('TICK is a no-op while pendingEvent is set, and resumes after ANSWER_EVENT', () => {
-    let s: GameState = newGame(3);
+    let s: GameState = newGame('Acme', 3);
     let weeks = 0;
     while (!s.pendingEvent && weeks < 30) {
       s = tick(s);
@@ -83,7 +83,7 @@ describe('decision cards block TICK', () => {
 
 describe('applyEventEffects', () => {
   it('applies exactly the declared deltas', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const s1 = applyEventEffects(s0, {
       deltas: [
         { stat: 'cash', amount: 1000 },
@@ -101,7 +101,7 @@ describe('applyEventEffects', () => {
   });
 
   it('pushes a timedEffect onto activeTimedEffects', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const s1 = applyEventEffects(s0, {
       timedEffect: { stat: 'hype', multiplier: 1.5, weeksLeft: 3 },
     });
@@ -112,7 +112,7 @@ describe('applyEventEffects', () => {
 describe('timed effects expire on schedule', () => {
   it('applies for exactly weeksLeft ticks, then is gone', () => {
     let s: GameState = {
-      ...newGame(1),
+      ...newGame('Acme', 1),
       activeTimedEffects: [{ stat: 'hype', multiplier: 2, weeksLeft: 2 }],
       drawnEventIds: ALL_EVENT_IDS, // isolate from further draws
     };
@@ -126,7 +126,7 @@ describe('timed effects expire on schedule', () => {
 
 describe('deck never repeats a card', () => {
   it('drawCard excludes already-drawn ids', () => {
-    const s0 = newGame(2);
+    const s0 = newGame('Acme', 2);
     const drawn: string[] = [];
     let rng = s0.rng;
     for (let i = 0; i < SCRAPPY_DECK.length; i++) {
@@ -143,7 +143,7 @@ describe('deck never repeats a card', () => {
   });
 
   it('a full playthrough never logs the same card id twice', () => {
-    let s: GameState = newGame(11);
+    let s: GameState = newGame('Acme', 11);
     for (let i = 0; i < 200; i++) s = tickAutoAnswer(s);
     const ids = s.drawnEventIds;
     expect(new Set(ids).size).toBe(ids.length);
@@ -152,8 +152,8 @@ describe('deck never repeats a card', () => {
 
 describe('determinism with events on', () => {
   it('same seed ⇒ identical state after 60 ticks, auto-answering decisions', () => {
-    let a: GameState = newGame(21);
-    let b: GameState = newGame(21);
+    let a: GameState = newGame('Acme', 21);
+    let b: GameState = newGame('Acme', 21);
     for (let i = 0; i < 60; i++) {
       a = tickAutoAnswer(a);
       b = tickAutoAnswer(b);
@@ -177,7 +177,7 @@ describe('acquisition offers', () => {
 
   it('accepting ends the run as "acquired" with the correct score', () => {
     let s: GameState = {
-      ...newGame(30),
+      ...newGame('Acme', 30),
       pendingEvent: feeler,
       founderEquity: 0.5,
       productQuality: 1_000_000,
@@ -191,7 +191,7 @@ describe('acquisition offers', () => {
   });
 
   it('declining applies the card-stated side effects and keeps the run going', () => {
-    let s: GameState = { ...newGame(31), pendingEvent: feeler };
+    let s: GameState = { ...newGame('Acme', 31), pendingEvent: feeler };
     const before = s;
     s = reduce(s, { type: 'ANSWER_EVENT', choiceIndex: declineIndex });
     expect(s.gameOver).toBeNull();
@@ -201,7 +201,7 @@ describe('acquisition offers', () => {
   });
 
   it('a bare sim (auto-answers first choice) never stalls on an acquisition card', () => {
-    let s: GameState = { ...newGame(32), pendingEvent: feeler };
+    let s: GameState = { ...newGame('Acme', 32), pendingEvent: feeler };
     s = reduce(s, { type: 'ANSWER_EVENT', choiceIndex: 0 });
     // pendingEvent always clears, whichever way choice 0 resolves (here,
     // decline-and-continue) — tick() is free to advance again immediately.
@@ -213,7 +213,7 @@ describe('acquisition offers', () => {
 
 describe('era-gated decks (Task 6)', () => {
   it('the Boom deck never draws while the run is in Scrappy', () => {
-    let s: GameState = newGame(60);
+    let s: GameState = newGame('Acme', 60);
     for (let i = 0; i < 40 && s.era === 'scrappy'; i++) {
       s = tickAutoAnswer(s);
       const drawnBoomCards = s.newsLog.filter((entry) =>
@@ -238,12 +238,12 @@ describe('story flags (Task 6)', () => {
   const followUp = BOOM_DECK.find((c) => c.id === 'boom-cofounder-drama-part-two')!;
 
   it('the follow-up card is locked out with no flags set', () => {
-    const draw = drawCard([followUp], [], [], newGame(1).rng);
+    const draw = drawCard([followUp], [], [], newGame('Acme', 1).rng);
     expect(draw.card).toBeNull();
   });
 
   it('choosing the flag-setting choice unlocks the follow-up card', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const s1 = reduce({ ...s0, pendingEvent: drama }, { type: 'ANSWER_EVENT', choiceIndex: productLedIndex });
     expect(s1.storyFlags).toContain('cofounder-product-led');
 
@@ -252,7 +252,7 @@ describe('story flags (Task 6)', () => {
   });
 
   it('choosing the other choice leaves the follow-up locked (choice-dependent)', () => {
-    const s0 = newGame(2);
+    const s0 = newGame('Acme', 2);
     const s1 = reduce({ ...s0, pendingEvent: drama }, { type: 'ANSWER_EVENT', choiceIndex: growthLedIndex });
     expect(s1.storyFlags).not.toContain('cofounder-product-led');
 
@@ -263,7 +263,7 @@ describe('story flags (Task 6)', () => {
 
 describe('repeatable filler pool (Task 6)', () => {
   it('draws a filler once the unique deck is exhausted, without adding it to drawnEventIds', () => {
-    const draw = drawFillerCard(FILLER_DECK, [], newGame(1).rng);
+    const draw = drawFillerCard(FILLER_DECK, [], newGame('Acme', 1).rng);
     expect(draw.card).not.toBeNull();
     expect(draw.card!.repeatable).toBe(true);
   });
@@ -273,7 +273,7 @@ describe('repeatable filler pool (Task 6)', () => {
     // unique deck — isolates filler fallback from era-gating (Task 6 tests
     // era-gating separately).
     let s: GameState = {
-      ...newGame(11),
+      ...newGame('Acme', 11),
       cash: 50_000_000,
       boomStartWeek: 1000,
       reckoningStartWeek: 2000,
@@ -315,7 +315,7 @@ describe('deck content (Task 7)', () => {
   });
 
   it('no dead-air stretch longer than ~6 weeks across a 100-week playthrough', () => {
-    let s: GameState = { ...newGame(70), cash: 50_000_000 };
+    let s: GameState = { ...newGame('Acme', 70), cash: 50_000_000 };
     const eventfulWeeks = new Set<number>();
     for (let i = 0; i < 100; i++) {
       const before = s.newsLog.length;
@@ -336,7 +336,7 @@ describe('deck content (Task 7)', () => {
         (c) => c.effects.setsFlag === 'crunched-for-first-customer',
       );
 
-      const s0 = newGame(1);
+      const s0 = newGame('Acme', 1);
       expect(drawCard([followUp], [], s0.storyFlags, s0.rng).card).toBeNull();
 
       const s1 = reduce({ ...s0, pendingEvent: setter }, { type: 'ANSWER_EVENT', choiceIndex: crunchIndex });
@@ -350,7 +350,7 @@ describe('deck content (Task 7)', () => {
         (c) => c.effects.setsFlag === 'declined-early-acquisition',
       );
 
-      const s0 = newGame(1);
+      const s0 = newGame('Acme', 1);
       expect(drawCard([followUp], [], s0.storyFlags, s0.rng).card).toBeNull();
 
       const s1 = reduce({ ...s0, pendingEvent: setter }, { type: 'ANSWER_EVENT', choiceIndex: declineIndex });
@@ -358,7 +358,7 @@ describe('deck content (Task 7)', () => {
     });
 
     it('a real playthrough only ever draws a follow-up after its flag-setting card, never before', () => {
-      let s: GameState = { ...newGame(5), cash: 50_000_000 };
+      let s: GameState = { ...newGame('Acme', 5), cash: 50_000_000 };
       const followUpIds = ['boom-cofounder-drama-part-two', 'boom-demanding-customer-returns', 'reckoning-regret-the-decline'];
       const requiredFlagFor: Record<string, string> = {
         'boom-cofounder-drama-part-two': 'cofounder-product-led',
@@ -389,7 +389,7 @@ describe('adding a card requires zero engine changes', () => {
       flavor: 'This card exists only in this test file.',
       effects: { deltas: [{ stat: 'hype', amount: 0.42 }] },
     };
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const draw = drawCard([testCard], [], [], s0.rng);
     expect(draw.card).toEqual(testCard);
     const applied = applyEventEffects(s0, draw.card!.effects!);

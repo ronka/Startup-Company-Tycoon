@@ -49,7 +49,9 @@ export default function HqScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ThemedText type="subtitle">HQ</ThemedText>
+        <ThemedText type="subtitle" numberOfLines={1}>
+          {state.companyName} HQ
+        </ThemedText>
 
         <FirstRunHint id="hq" text="Watch revenue vs. burn." />
 

@@ -23,7 +23,7 @@ const SUBTITLE: Record<GameOverReason, (weeks: number) => string> = {
 };
 
 export default function GameOverScreen() {
-  const { state, startNewGame } = useGame();
+  const { state } = useGame();
   const router = useRouter();
   const theme = useTheme();
 
@@ -31,8 +31,7 @@ export default function GameOverScreen() {
   if (!state || !state.gameOver) return <Redirect href="/" />;
 
   const startFresh = () => {
-    startNewGame();
-    router.replace('/hq');
+    router.push('/onboarding');
   };
 
   return (

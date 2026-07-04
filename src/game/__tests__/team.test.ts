@@ -17,14 +17,14 @@ const ALL_EVENT_IDS = SCRAPPY_DECK.map((c) => c.id);
 
 describe('SET_PENDING_HIRES', () => {
   it('queues a hire without changing headcount until the next tick', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const s1 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 5 });
     expect(s1.headcount.devs).toBe(s0.headcount.devs);
     expect(s1.pendingHeadcount.devs).toBe(s0.headcount.devs + 5);
   });
 
   it('hire increases payroll starting next tick', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const hired = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 5 });
     const s1 = tick(hired);
     expect(s1.headcount.devs).toBe(s0.headcount.devs + 5);
@@ -32,13 +32,13 @@ describe('SET_PENDING_HIRES', () => {
   });
 
   it('cannot drop a role below 0', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const s1 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'support', delta: -999 });
     expect(s1.pendingHeadcount.support).toBe(0);
   });
 
   it('cannot queue more than the cash-sanity cap', () => {
-    const s0: GameState = { ...newGame(1), cash: 10_000 };
+    const s0: GameState = { ...newGame('Acme', 1), cash: 10_000 };
     const s1 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 999 });
     expect(s1.pendingHeadcount.devs).toBe(maxHireableHeadcount('devs', s0.cash));
   });
@@ -46,7 +46,7 @@ describe('SET_PENDING_HIRES', () => {
 
 describe('morale from layoffs', () => {
   it('firing 50% of devs drops morale by the balance-file ballpark', () => {
-    const s0 = newGame(2);
+    const s0 = newGame('Acme', 2);
     const cutDevs = Math.ceil(s0.headcount.devs / 2);
     const fired = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: -cutDevs });
     const s1 = tick(fired);
@@ -63,7 +63,7 @@ describe('morale from layoffs', () => {
   });
 
   it('hiring alone never hurts morale', () => {
-    const s0 = newGame(3);
+    const s0 = newGame('Acme', 3);
     const hired = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 3 });
     const s1 = tick(hired);
     expect(s1.morale).toBeGreaterThanOrEqual(s0.morale - 0.001);
@@ -73,7 +73,7 @@ describe('morale from layoffs', () => {
 describe('morale drift', () => {
   it('drifts back toward baseline over time absent layoffs', () => {
     let s: GameState = {
-      ...newGame(4),
+      ...newGame('Acme', 4),
       morale: 20,
       cash: 50_000_000,
       drawnEventIds: ALL_EVENT_IDS,

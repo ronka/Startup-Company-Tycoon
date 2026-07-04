@@ -22,7 +22,7 @@ import { GameState } from '../types';
 
 describe('SET_FOCUS', () => {
   it('switches focus, stamps the week, and emits a news entry', () => {
-    let s: GameState = { ...newGame(1), week: 5 };
+    let s: GameState = { ...newGame('Acme', 1), week: 5 };
     s = reduce(s, { type: 'SET_FOCUS', focus: 'hardware' });
     expect(s.focus).toBe('hardware');
     expect(s.focusChangedWeek).toBe(5);
@@ -30,7 +30,7 @@ describe('SET_FOCUS', () => {
   });
 
   it('is a no-op that does not reset the transition drag when re-setting the same focus', () => {
-    let s: GameState = { ...newGame(1), week: 5 };
+    let s: GameState = { ...newGame('Acme', 1), week: 5 };
     s = reduce(s, { type: 'SET_FOCUS', focus: 'hardware' });
     const afterFirstSwitch = s;
     s = { ...s, week: 8 };
@@ -40,7 +40,7 @@ describe('SET_FOCUS', () => {
   });
 
   it('starts on core with no transition drag at game start', () => {
-    const s = newGame(1);
+    const s = newGame('Acme', 1);
     expect(s.focus).toBe('core');
     expect(s.focusChangedWeek).toBe(0);
   });
@@ -57,11 +57,11 @@ describe('focus transition drag', () => {
   });
 
   it('measurably slows quality growth while transitioning, back to normal once settled', () => {
-    let mid: GameState = { ...newGame(2), week: 0, focus: 'core', focusChangedWeek: 0 };
+    let mid: GameState = { ...newGame('Acme', 2), week: 0, focus: 'core', focusChangedWeek: 0 };
     mid = reduce(mid, { type: 'SET_FOCUS', focus: 'hardware' }); // focusChangedWeek stamped at week 0
     const duringTransition = tick(mid); // week 1: still within FOCUS_TRANSITION_WEEKS of week 0
 
-    let settled: GameState = { ...newGame(2), focus: 'hardware', focusChangedWeek: -1000 };
+    let settled: GameState = { ...newGame('Acme', 2), focus: 'hardware', focusChangedWeek: -1000 };
     const afterSettled = tick(settled);
 
     // Same starting quality (0) and dev headcount, only the drag differs.
@@ -69,11 +69,11 @@ describe('focus transition drag', () => {
   });
 
   it('measurably dents conversion (fewer customers gained) while transitioning', () => {
-    let mid: GameState = { ...newGame(3), cash: 5_000_000, week: 0, customers: 1000 };
+    let mid: GameState = { ...newGame('Acme', 3), cash: 5_000_000, week: 0, customers: 1000 };
     mid = reduce(mid, { type: 'SET_FOCUS', focus: 'hardware' });
     const duringTransition = tick(mid);
 
-    const settled: GameState = { ...newGame(3), cash: 5_000_000, customers: 1000, focus: 'hardware', focusChangedWeek: -1000 };
+    const settled: GameState = { ...newGame('Acme', 3), cash: 5_000_000, customers: 1000, focus: 'hardware', focusChangedWeek: -1000 };
     const afterSettled = tick(settled);
 
     expect(afterSettled.customers).toBeGreaterThan(duringTransition.customers);
@@ -82,8 +82,8 @@ describe('focus transition drag', () => {
   it('rapid flip-flopping is strictly worse than committing: constant drag beats never settling', () => {
     // Flip-flopper: switches focus every single week, so it's permanently
     // inside the transition window and never gets the settled multiplier.
-    let flopper: GameState = { ...newGame(4), cash: 5_000_000 };
-    let committed: GameState = { ...newGame(4), cash: 5_000_000 };
+    let flopper: GameState = { ...newGame('Acme', 4), cash: 5_000_000 };
+    let committed: GameState = { ...newGame('Acme', 4), cash: 5_000_000 };
     committed = reduce(committed, { type: 'SET_FOCUS', focus: 'hardware' });
 
     const focuses: Array<'hardware' | 'ai'> = ['hardware', 'ai'];
@@ -109,7 +109,7 @@ describe('focus profile multipliers land in the right formulas', () => {
   });
 
   it('ARPC multiplier: hardware revenue per customer is 1.6x, via weeklyStatsFor', () => {
-    const base = { headcount: STARTING_HEADCOUNT, cLevels: newGame(1).cLevels, hype: 1, customers: 1000, cash: 0, era: 'scrappy' as const, moraleLeverActive: false };
+    const base = { headcount: STARTING_HEADCOUNT, cLevels: newGame('Acme', 1).cLevels, hype: 1, customers: 1000, cash: 0, era: 'scrappy' as const, moraleLeverActive: false };
     const core = weeklyStatsFor({ ...base, focus: 'core' });
     const hardware = weeklyStatsFor({ ...base, focus: 'hardware' });
     expect(hardware.revenue).toBeCloseTo(core.revenue * FOCUS_PROFILES.hardware.arpcMultiplier);
@@ -154,8 +154,8 @@ describe('focus profile multipliers land in the right formulas', () => {
 
 describe('Sim-equivalent: core vs hype quality/churn, hardware vs core revenue/burn per customer', () => {
   it('a core-focused run ends with higher quality and a lower effective churn rate than an equivalent hype-focused run', () => {
-    let core: GameState = { ...newGame(5), cash: 50_000_000, focus: 'core', focusChangedWeek: -1000 };
-    let hype: GameState = { ...newGame(5), cash: 50_000_000, focus: 'hype', focusChangedWeek: -1000 };
+    let core: GameState = { ...newGame('Acme', 5), cash: 50_000_000, focus: 'core', focusChangedWeek: -1000 };
+    let hype: GameState = { ...newGame('Acme', 5), cash: 50_000_000, focus: 'hype', focusChangedWeek: -1000 };
     for (let i = 0; i < 15; i++) {
       core = tick(core);
       hype = tick(hype);
@@ -171,7 +171,7 @@ describe('Sim-equivalent: core vs hype quality/churn, hardware vs core revenue/b
   });
 
   it('hardware ends with higher revenue per customer and higher burn than core, at the same customer count', () => {
-    const shared = { customers: 2000, headcount: STARTING_HEADCOUNT, cLevels: newGame(6).cLevels, hype: 1, cash: 0, era: 'scrappy' as const, moraleLeverActive: false };
+    const shared = { customers: 2000, headcount: STARTING_HEADCOUNT, cLevels: newGame('Acme', 6).cLevels, hype: 1, cash: 0, era: 'scrappy' as const, moraleLeverActive: false };
     const core = weeklyStatsFor({ ...shared, focus: 'core' });
     const hardware = weeklyStatsFor({ ...shared, focus: 'hardware' });
     expect(hardware.revenue / 2000).toBeGreaterThan(core.revenue / 2000);

@@ -20,7 +20,7 @@ const QUIET_TREND: Trend = { id: 'ai', phase: 'quiet', weeksInPhase: 0, phaseDur
 const CRASH_TREND: Trend = { id: 'ai', phase: 'crash', weeksInPhase: 1, phaseDuration: 3 };
 
 function reportInput(overrides: Partial<WeeklyReportInput> = {}): WeeklyReportInput {
-  const base = newGame(1);
+  const base = newGame('Acme', 1);
   return {
     headcount: base.headcount,
     cLevels: base.cLevels as CLevels,
@@ -204,7 +204,7 @@ describe('tickMany stops when the bottleneck changes', () => {
     // check — no card draw (deck starved out), no trend phase change (fixed
     // quiet phase with room to spare), no rival beat (both rivals miles from
     // their desperation/monopoly thresholds), no morale/hype/runway crossing.
-    const base = newGame(3);
+    const base = newGame('Acme', 3);
     const s0: GameState = {
       ...base,
       cash: 50_000_000,

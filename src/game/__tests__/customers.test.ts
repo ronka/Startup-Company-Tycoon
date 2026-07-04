@@ -204,7 +204,7 @@ describe('shareShiftFor (tanh soft cap, replacing the old flat ±1% clamp)', () 
 
 describe('derived market share (wired into tick)', () => {
   it('marketShare always equals customers / marketCustomers after a tick', () => {
-    let s: GameState = { ...newGame(1), cash: 50_000_000 };
+    let s: GameState = { ...newGame('Acme', 1), cash: 50_000_000 };
     for (let i = 0; i < 10; i++) {
       s = tick(s);
       expect(s.marketShare).toBeCloseTo(s.customers / s.marketCustomers);

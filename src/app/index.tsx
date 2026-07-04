@@ -8,15 +8,14 @@ import { useTheme } from '@/hooks/use-theme';
 import { useGame } from '@/state/game-store';
 
 export default function StartMenu() {
-  const { state, loading, startNewGame } = useGame();
+  const { state, loading } = useGame();
   const router = useRouter();
   const theme = useTheme();
 
   const inProgress = state != null && state.gameOver == null;
 
   const newGame = () => {
-    startNewGame();
-    router.replace('/hq');
+    router.push('/onboarding');
   };
 
   return (

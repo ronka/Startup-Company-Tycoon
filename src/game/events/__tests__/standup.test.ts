@@ -55,7 +55,7 @@ describe('standupCardForStreak', () => {
 
 describe('refreshCandidates effect (golden-tier reward)', () => {
   it('rerolls every open C-level seat, leaving hired seats untouched', () => {
-    const s0 = newGame(1);
+    const s0 = newGame('Acme', 1);
     const hired = s0.cLevels.cto.candidates[0];
     const withHire: GameState = {
       ...s0,
@@ -71,7 +71,7 @@ describe('refreshCandidates effect (golden-tier reward)', () => {
   });
 
   it('is a no-op on cash/morale/hype and consumes rng deterministically', () => {
-    const s0 = newGame(2);
+    const s0 = newGame('Acme', 2);
     const a = applyEventEffects(s0, { refreshCandidates: true });
     const b = applyEventEffects(s0, { refreshCandidates: true });
     expect(a.cash).toBe(s0.cash);
@@ -81,7 +81,7 @@ describe('refreshCandidates effect (golden-tier reward)', () => {
 
 describe('clean raise terms flag (rare-tier reward)', () => {
   it('is set by setsFlag and consumed by the next RAISE_ROUND, discounting dilution', () => {
-    const s0 = newGame(3);
+    const s0 = newGame('Acme', 3);
     const withFlag = applyEventEffects(s0, { setsFlag: CLEAN_RAISE_TERMS_FLAG });
     expect(withFlag.storyFlags).toContain(CLEAN_RAISE_TERMS_FLAG);
 

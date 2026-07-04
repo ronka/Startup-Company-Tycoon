@@ -99,7 +99,7 @@ function makeCandidate(overrides: Partial<CLevelCandidate>): CLevelCandidate {
 
 describe('HIRE_CLEVEL', () => {
   it('a cto-productivity perk raises devEffort via its axis multiplier', () => {
-    const s0 = newGame(7);
+    const s0 = newGame('Acme', 7);
     const candidate = makeCandidate({
       perk: { id: 'p', label: '+20% dev productivity', axis: 'cto-productivity', multiplier: 1.2 },
     });
@@ -115,7 +115,7 @@ describe('HIRE_CLEVEL', () => {
   });
 
   it('a cto-techDebt perk slows quality decay without touching growth', () => {
-    const s0 = newGame(7);
+    const s0 = newGame('Acme', 7);
     const candidate = makeCandidate({
       perk: { id: 'p', label: '−25% tech-debt drag', axis: 'cto-techDebt', multiplier: 0.75 },
     });
@@ -133,7 +133,7 @@ describe('HIRE_CLEVEL', () => {
   });
 
   it('a cto-shortcut perk boosts growth and worsens decay together', () => {
-    const s0 = newGame(7);
+    const s0 = newGame('Acme', 7);
     const candidate = makeCandidate({
       perk: {
         id: 'p',
@@ -153,7 +153,7 @@ describe('HIRE_CLEVEL', () => {
   });
 
   it('a hired CFO burnCut perk cuts fixed burn; a roundTerms CFO does not', () => {
-    const s0 = newGame(8);
+    const s0 = newGame('Acme', 8);
     const burnCutCandidate = makeCandidate({
       salary: 6_000,
       perk: { id: 'p', label: '−20% fixed burn', axis: 'cfo-burnCut', multiplier: 0.8 },
@@ -175,7 +175,7 @@ describe('HIRE_CLEVEL', () => {
       salary: 6_000,
       perk: { id: 'p2', label: '−20% dilution on next round', axis: 'cfo-roundTerms', multiplier: 0.8 },
     });
-    const s0b = newGame(8);
+    const s0b = newGame('Acme', 8);
     s0b.cLevels.cfo.candidates = [roundTermsCandidate];
     const hiredRoundTerms = reduce(s0b, {
       type: 'HIRE_CLEVEL',
@@ -186,7 +186,7 @@ describe('HIRE_CLEVEL', () => {
   });
 
   it('ignores an unknown candidateId', () => {
-    const s0 = newGame(9);
+    const s0 = newGame('Acme', 9);
     const s1 = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cmo', candidateId: 'does-not-exist' });
     expect(s1).toEqual(s0);
   });
@@ -194,7 +194,7 @@ describe('HIRE_CLEVEL', () => {
 
 describe('FIRE_CLEVEL', () => {
   it('applies the departure morale hit and clears the seat', () => {
-    const s0 = newGame(11);
+    const s0 = newGame('Acme', 11);
     const candidate = s0.cLevels.cmo.candidates[0];
     const hired = reduce(s0, { type: 'HIRE_CLEVEL', role: 'cmo', candidateId: candidate.id });
     const fired = reduce(hired, { type: 'FIRE_CLEVEL', role: 'cmo' });
@@ -206,7 +206,7 @@ describe('FIRE_CLEVEL', () => {
   });
 
   it('is a no-op on an empty seat', () => {
-    const s0 = newGame(12);
+    const s0 = newGame('Acme', 12);
     const s1 = reduce(s0, { type: 'FIRE_CLEVEL', role: 'cfo' });
     expect(s1).toEqual(s0);
   });
@@ -214,7 +214,7 @@ describe('FIRE_CLEVEL', () => {
 
 describe('C-level offers persist across ticks', () => {
   it('does not reroll standing candidates just from ticking', () => {
-    let s: GameState = newGame(13);
+    let s: GameState = newGame('Acme', 13);
     const before = s.cLevels.cto.candidates;
     for (let i = 0; i < 5; i++) s = tick(s);
     expect(s.cLevels.cto.candidates).toEqual(before);

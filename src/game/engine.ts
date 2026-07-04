@@ -133,8 +133,11 @@ const ERA_DECKS: Record<Era, EventCard[]> = {
   reckoning: RECKONING_DECK,
 };
 
+/** Fallback company name for callers that don't collect one (sim script, tests). */
+export const DEFAULT_COMPANY_NAME = 'Newco';
+
 /** Create a fresh run. Defaults to a time-based seed for real play. */
-export function newGame(seed: number = Date.now()): GameState {
+export function newGame(companyName: string, seed: number = Date.now()): GameState {
   let rng = createRng(seed);
   const cLevels = {} as CLevels;
   for (const role of C_LEVEL_ROLES) {
@@ -159,6 +162,7 @@ export function newGame(seed: number = Date.now()): GameState {
 
   return {
     createdWithSeed: seed,
+    companyName,
     rng,
     week: 0,
     cash: STARTING_CASH,
@@ -576,7 +580,7 @@ function drawEventIfDue(state: GameState): GameState {
 export function reduce(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'NEW_GAME':
-      return newGame(action.seed);
+      return newGame(action.companyName, action.seed);
     case 'TICK':
       return tick(state);
     case 'SET_PENDING_HIRES': {

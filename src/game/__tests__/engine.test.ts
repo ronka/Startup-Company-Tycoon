@@ -62,7 +62,7 @@ const ALL_ERA_EVENT_IDS = [...SCRAPPY_DECK, ...BOOM_DECK, ...RECKONING_DECK].map
 
 describe('newGame', () => {
   it('produces the documented starting shape', () => {
-    const s = newGame(1);
+    const s = newGame('Acme', 1);
     expect(s.week).toBe(0);
     expect(s.cash).toBe(STARTING_CASH);
     expect(s.headcount).toEqual(STARTING_HEADCOUNT);
@@ -70,6 +70,7 @@ describe('newGame', () => {
     // rng.counter is nonzero: generating the initial CTO/CMO/CFO offers consumes draws.
     expect(s.rng.counter).toBeGreaterThan(0);
     expect(s.createdWithSeed).toBe(1);
+    expect(s.companyName).toBe('Acme');
     expect(s.hype).toBe(STARTING_HYPE);
     expect(s.marketShare).toBe(STARTING_MARKET_SHARE);
     expect(s.valuationHistory).toEqual([]);
@@ -142,7 +143,7 @@ describe('valuationHistory', () => {
     // Generous cash so the run survives well past the cap window; deck
     // exhausted so a decision card can't freeze the loop partway through.
     let s: GameState = {
-      ...newGame(1),
+      ...newGame('Acme', 1),
       cash: 50_000_000,
       drawnEventIds: ALL_ERA_EVENT_IDS,
     };
@@ -170,7 +171,7 @@ describe('balance math', () => {
 
 describe('tick', () => {
   it('deducts burn net of that week\'s revenue and advances the clock', () => {
-    const s0 = newGame(7);
+    const s0 = newGame('Acme', 7);
     const burn = weeklyBurnFor(s0.headcount);
     // Revenue is billed against the customer base held at the *start* of the
     // week — the pipeline's gains/churn this tick affect next week's bill, not this one.
@@ -186,13 +187,13 @@ describe('tick', () => {
 
 describe('tickMany (fast-forward)', () => {
   it('is deterministic: same seed and weeks produce the same end state', () => {
-    const a = tickMany(newGame(11), 5);
-    const b = tickMany(newGame(11), 5);
+    const a = tickMany(newGame('Acme', 11), 5);
+    const b = tickMany(newGame('Acme', 11), 5);
     expect(a).toEqual(b);
   });
 
   it('matches manual step-by-step ticking, stopping the instant a week is notable, the bottleneck changes, or maxWeeks runs out', () => {
-    const s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1000 };
+    const s0: GameState = { ...newGame('Acme', 11), cash: 50_000_000, weeksUntilNextEvent: 1000 };
     const bottleneckOf = (s: GameState) =>
       bottleneckFor({
         quality: s.productQuality,
@@ -219,14 +220,14 @@ describe('tickMany (fast-forward)', () => {
     // under the current RNG stream (Task 3's trend phase machine and Task 4's
     // per-rival focus assignment both added draws ahead of this one in
     // `newGame`/`tick`, shifting which seeds draw what).
-    const s0: GameState = { ...newGame(2), cash: 50_000_000, weeksUntilNextEvent: 1 };
+    const s0: GameState = { ...newGame('Acme', 2), cash: 50_000_000, weeksUntilNextEvent: 1 };
     const result = tickMany(s0, 10);
     expect(result.pendingEvent).not.toBeNull();
     expect(result.week).toBeLessThan(10);
   });
 
   it('stops on game over instead of ticking a frozen state', () => {
-    const s0: GameState = { ...newGame(11), cash: -1, weeksInTheRed: 2, weeksUntilNextEvent: 1000 };
+    const s0: GameState = { ...newGame('Acme', 11), cash: -1, weeksInTheRed: 2, weeksUntilNextEvent: 1000 };
     const result = tickMany(s0, 10);
     expect(result.gameOver).toBe('bankruptcy');
   });
@@ -234,7 +235,7 @@ describe('tickMany (fast-forward)', () => {
   it('never advances past a notable week even mid-run', () => {
     // Force a morale-band crossing on the very first tick by cratering morale
     // before advancing — the digest entry should halt the fast-forward at week 1.
-    let s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1000, morale: 71 };
+    let s0: GameState = { ...newGame('Acme', 11), cash: 50_000_000, weeksUntilNextEvent: 1000, morale: 71 };
     s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: -3 });
     s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'sales', delta: -1 });
     s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'support', delta: -1 });
@@ -251,7 +252,7 @@ describe('weekly digest (wired into tick)', () => {
   };
 
   it('appends kind:"digest" entries when a big layoff craters morale through every band', () => {
-    const s0 = craterMorale(newGame(11));
+    const s0 = craterMorale(newGame('Acme', 11));
     const s1 = tick(s0);
     const digestEntries = s1.newsLog.filter((e) => e.kind === 'digest' && e.week === s1.week);
     expect(digestEntries.map((e) => e.title)).toEqual(
@@ -264,7 +265,7 @@ describe('weekly digest (wired into tick)', () => {
   });
 
   it('does not re-fire a morale-band entry while morale stays under the band', () => {
-    const s1 = tick(craterMorale(newGame(11)));
+    const s1 = tick(craterMorale(newGame('Acme', 11)));
     expect(s1.morale).toBeLessThan(30);
 
     const s2 = tick(s1); // no further cuts queued; morale drifts up but stays under 30
@@ -274,7 +275,7 @@ describe('weekly digest (wired into tick)', () => {
   });
 
   it('is deterministic for a given seed', () => {
-    const runDigest = () => tick(craterMorale(newGame(11))).newsLog.filter((e) => e.kind === 'digest');
+    const runDigest = () => tick(craterMorale(newGame('Acme', 11))).newsLog.filter((e) => e.kind === 'digest');
     expect(runDigest()).toEqual(runDigest());
   });
 
@@ -282,7 +283,7 @@ describe('weekly digest (wired into tick)', () => {
     // digest entries are opportunistic extras — the week-in-review sheet's
     // baseline content (cash delta, revenue vs burn) always comes from the
     // resulting state directly, never from newsLog.
-    const s1 = tick(newGame(3));
+    const s1 = tick(newGame('Acme', 3));
     expect(typeof s1.cash).toBe('number');
     expect(typeof s1.week).toBe('number');
   });
@@ -298,7 +299,7 @@ describe('hiring feedback loop', () => {
     // average) — a robust crossing regardless of exactly how fast quality
     // compounds beyond that.
     const base: GameState = {
-      ...newGame(11),
+      ...newGame('Acme', 11),
       cash: 5_000_000,
       drawnEventIds: SCRAPPY_DECK.map((c) => c.id),
     };
@@ -330,8 +331,8 @@ describe('rival growth scales with stage', () => {
 
 describe('determinism', () => {
   it('same seed ⇒ identical state after 50 ticks', () => {
-    const a = tickN(newGame(42), 50);
-    const b = tickN(newGame(42), 50);
+    const a = tickN(newGame('Acme', 42), 50);
+    const b = tickN(newGame('Acme', 42), 50);
     expect(a).toEqual(b);
   });
 });
@@ -352,8 +353,8 @@ describe('eras', () => {
   };
 
   it('rolls boomStartWeek/reckoningStartWeek once, deterministically per seed, within their tunable ranges', () => {
-    const a = newGame(50);
-    const b = newGame(50);
+    const a = newGame('Acme', 50);
+    const b = newGame('Acme', 50);
     expect(a.boomStartWeek).toBe(b.boomStartWeek);
     expect(a.reckoningStartWeek).toBe(b.reckoningStartWeek);
     expect(a.boomStartWeek).toBeGreaterThanOrEqual(BOOM_START_WEEK_MIN);
@@ -363,14 +364,14 @@ describe('eras', () => {
   });
 
   it('a different seed can roll a different transition week', () => {
-    const weeks = new Set([newGame(1).boomStartWeek, newGame(2).boomStartWeek, newGame(3).boomStartWeek]);
+    const weeks = new Set([newGame('Acme', 1).boomStartWeek, newGame('Acme', 2).boomStartWeek, newGame('Acme', 3).boomStartWeek]);
     expect(weeks.size).toBeGreaterThan(1);
   });
 
   it('starts scrappy and advances through boom into reckoning at exactly the seeded weeks, with a news entry each time', () => {
     // Ample cash isolates era-schedule mechanics from the bankruptcy fuse
     // over what can be a 70-week playthrough.
-    let s: GameState = { ...newGame(51), cash: 10_000_000 };
+    let s: GameState = { ...newGame('Acme', 51), cash: 10_000_000 };
     expect(s.era).toBe('scrappy');
     const { boomStartWeek, reckoningStartWeek } = s;
 
@@ -460,7 +461,7 @@ describe('era balance dials', () => {
   });
 
   it('tick() flips ipoWindowOpen open exactly on the Boom transition and shut again on Reckoning', () => {
-    let s: GameState = { ...newGame(51), cash: 10_000_000 };
+    let s: GameState = { ...newGame('Acme', 51), cash: 10_000_000 };
     expect(s.ipoWindowOpen).toBe(false);
     const { boomStartWeek, reckoningStartWeek } = s;
 
@@ -490,7 +491,7 @@ describe('bankruptcy', () => {
     // decision cards to freeze the loop — isolates pure burn mechanics. The
     // fuse must still fire even though a round is technically raisable.
     let s: GameState = {
-      ...newGame(3),
+      ...newGame('Acme', 3),
       drawnEventIds: ALL_ERA_EVENT_IDS,
     };
     let weeks = 0;
@@ -508,7 +509,7 @@ describe('bankruptcy', () => {
   });
 
   it('does not end the run before the fuse burns down, even deep in the red', () => {
-    let s: GameState = { ...newGame(4), cash: -1_000_000 };
+    let s: GameState = { ...newGame('Acme', 4), cash: -1_000_000 };
     s = tick(s);
     expect(s.gameOver).toBeNull();
     expect(s.weeksInTheRed).toBe(1);
@@ -521,7 +522,7 @@ describe('weeksInTheRed', () => {
   const noEvents = { drawnEventIds: SCRAPPY_DECK.map((c) => c.id) };
 
   it('increments each tick cash stays negative, and resets the moment cash recovers', () => {
-    let s: GameState = { ...newGame(5), ...noEvents, cash: -1_000_000 };
+    let s: GameState = { ...newGame('Acme', 5), ...noEvents, cash: -1_000_000 };
     expect(s.weeksInTheRed).toBe(0);
 
     s = tick(s);
@@ -536,7 +537,7 @@ describe('weeksInTheRed', () => {
   });
 
   it('triggers bankruptcy exactly on the 3rd consecutive red week, not before', () => {
-    let s: GameState = { ...newGame(6), ...noEvents, cash: -1_000_000 };
+    let s: GameState = { ...newGame('Acme', 6), ...noEvents, cash: -1_000_000 };
     s = tick(s);
     expect(s.gameOver).toBeNull();
     s = tick(s);
@@ -554,39 +555,39 @@ describe('GO_PUBLIC / IPO eligibility', () => {
   };
 
   it('ends the run with gameOver "ipo" and a nonzero score when eligible', () => {
-    let s: GameState = { ...newGame(20), ...eligible, founderEquity: 0.4, productQuality: 1_000_000, customers: 100_000 };
+    let s: GameState = { ...newGame('Acme', 20), ...eligible, founderEquity: 0.4, productQuality: 1_000_000, customers: 100_000 };
     s = reduce(s, { type: 'GO_PUBLIC' });
     expect(s.gameOver).toBe('ipo');
     expect(s.finalScore).toBeGreaterThan(0);
   });
 
   it('is rejected before growth stage even with revenue sustained', () => {
-    let s: GameState = { ...newGame(21), ...eligible, stage: 'seriesA' };
+    let s: GameState = { ...newGame('Acme', 21), ...eligible, stage: 'seriesA' };
     s = reduce(s, { type: 'GO_PUBLIC' });
     expect(s.gameOver).toBeNull();
     expect(s.finalScore).toBeNull();
   });
 
   it('is rejected when the sustain bar has not been held long enough', () => {
-    let s: GameState = { ...newGame(22), ...eligible, weeksRevenueAboveIpoBar: IPO_SUSTAIN_WEEKS - 1 };
+    let s: GameState = { ...newGame('Acme', 22), ...eligible, weeksRevenueAboveIpoBar: IPO_SUSTAIN_WEEKS - 1 };
     s = reduce(s, { type: 'GO_PUBLIC' });
     expect(s.gameOver).toBeNull();
   });
 
   it('is rejected while the IPO window is shut', () => {
-    let s: GameState = { ...newGame(23), ...eligible, ipoWindowOpen: false };
+    let s: GameState = { ...newGame('Acme', 23), ...eligible, ipoWindowOpen: false };
     s = reduce(s, { type: 'GO_PUBLIC' });
     expect(s.gameOver).toBeNull();
   });
 
   it('is rejected while a decision card is pending', () => {
-    let s: GameState = { ...newGame(24), ...eligible, pendingEvent: SCRAPPY_DECK.find((c) => c.kind === 'decision')! };
+    let s: GameState = { ...newGame('Acme', 24), ...eligible, pendingEvent: SCRAPPY_DECK.find((c) => c.kind === 'decision')! };
     s = reduce(s, { type: 'GO_PUBLIC' });
     expect(s.gameOver).toBeNull();
   });
 
   it('tracks weeksRevenueAboveIpoBar across ticks: resets the moment revenue dips below the bar', () => {
-    let s: GameState = { ...newGame(25), customers: 10_000 };
+    let s: GameState = { ...newGame('Acme', 25), customers: 10_000 };
     s = tick(s);
     expect(s.weeksRevenueAboveIpoBar).toBeGreaterThan(0);
 
@@ -598,14 +599,14 @@ describe('GO_PUBLIC / IPO eligibility', () => {
 
 describe('reduce', () => {
   it('routes TICK through tick()', () => {
-    const s0 = newGame(9);
+    const s0 = newGame('Acme', 9);
     expect(reduce(s0, { type: 'TICK' })).toEqual(tick(s0));
   });
 
   it('NEW_GAME produces a fresh deterministic run', () => {
-    const started = tickN(newGame(5), 3);
-    const reset = reduce(started, { type: 'NEW_GAME', seed: 5 });
-    expect(reset).toEqual(newGame(5));
+    const started = tickN(newGame('Acme', 5), 3);
+    const reset = reduce(started, { type: 'NEW_GAME', seed: 5, companyName: 'Acme' });
+    expect(reset).toEqual(newGame('Acme', 5));
   });
 });
 
@@ -625,13 +626,13 @@ describe('morale attrition and productivity penalties (forced low morale)', () =
   };
 
   it('crashes morale below both documented thresholds', () => {
-    const s1 = tick(craterMorale(newGame(11)));
+    const s1 = tick(craterMorale(newGame('Acme', 11)));
     expect(s1.morale).toBeLessThan(MORALE_ATTRITION_THRESHOLD);
     expect(s1.morale).toBeLessThan(MORALE_CRISIS_THRESHOLD);
   });
 
   it('never fires attrition while morale stays at or above the threshold', () => {
-    let s: GameState = newGame(3); // starts at STARTING_MORALE (70), never touched
+    let s: GameState = newGame('Acme', 3); // starts at STARTING_MORALE (70), never touched
     const startingTotal = s.headcount.devs + s.headcount.sales + s.headcount.support;
     for (let i = 0; i < 30; i++) {
       s = tick(s);
@@ -645,7 +646,7 @@ describe('morale attrition and productivity penalties (forced low morale)', () =
     let sawAttrition = false;
     for (let seed = 1; seed <= 30 && !sawAttrition; seed++) {
       // Apply the deliberate layoff first — only *subsequent* headcount drops are attrition.
-      let s = tick(craterMorale(newGame(seed)));
+      let s = tick(craterMorale(newGame('Acme', seed)));
       for (let i = 0; i < 15; i++) {
         const before = s.headcount.devs + s.headcount.sales + s.headcount.support;
         s = tick(s);
@@ -663,7 +664,7 @@ describe('morale attrition and productivity penalties (forced low morale)', () =
 
 describe('morale lever', () => {
   it('SET_MORALE_LEVER toggles the flag', () => {
-    const s0 = newGame(4);
+    const s0 = newGame('Acme', 4);
     const on = reduce(s0, { type: 'SET_MORALE_LEVER', active: true });
     expect(on.moraleLeverActive).toBe(true);
     const off = reduce(on, { type: 'SET_MORALE_LEVER', active: false });
@@ -671,7 +672,7 @@ describe('morale lever', () => {
   });
 
   it('costs cash and boosts morale on tick while active', () => {
-    const s0 = newGame(4);
+    const s0 = newGame('Acme', 4);
     const withLever = reduce(s0, { type: 'SET_MORALE_LEVER', active: true });
     const s1 = tick(withLever);
     const s1Baseline = tick(s0);

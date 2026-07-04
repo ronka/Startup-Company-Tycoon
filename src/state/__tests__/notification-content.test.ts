@@ -10,13 +10,13 @@ describe('notificationContentFor', () => {
   });
 
   it('is null once the run has ended', () => {
-    const s: GameState = { ...newGame(1), gameOver: 'bankruptcy', finalScore: 0 };
+    const s: GameState = { ...newGame('Acme', 1), gameOver: 'bankruptcy', finalScore: 0 };
     expect(notificationContentFor(s)).toBeNull();
   });
 
   it('prioritizes a pending decision over everything else', () => {
     const s: GameState = {
-      ...newGame(1),
+      ...newGame('Acme', 1),
       week: 34,
       cash: 10, // would otherwise trigger the low-runway branch
       pendingEvent: {
@@ -36,7 +36,7 @@ describe('notificationContentFor', () => {
   it('flags a low-runway scare when no decision is pending', () => {
     // Plenty of cash but sky-high burn (many devs, high salary role) => tiny runway.
     const s: GameState = {
-      ...newGame(1),
+      ...newGame('Acme', 1),
       cash: 1_000,
       headcount: { devs: 50, sales: 50, support: 50 },
       pendingHeadcount: { devs: 50, sales: 50, support: 50 },
@@ -47,14 +47,14 @@ describe('notificationContentFor', () => {
   });
 
   it('falls back to a plain nudge when nothing is urgent', () => {
-    const s: GameState = { ...newGame(1), cash: 50_000_000 };
+    const s: GameState = { ...newGame('Acme', 1), cash: 50_000_000 };
     const content = notificationContentFor(s);
     expect(content?.title).toBe('Startup Tycoon');
     expect(content?.body).toContain(`Week ${s.week}`);
   });
 
   it('is deterministic for the same state', () => {
-    const s = newGame(7);
+    const s = newGame('Acme', 7);
     expect(notificationContentFor(s)).toEqual(notificationContentFor(s));
   });
 

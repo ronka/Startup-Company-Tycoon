@@ -3,17 +3,17 @@
  * cap) under a chosen strategy bot and prints a state table plus a summary —
  * proof the game runs, and balances, with zero UI.
  *
- *   pnpm sim                    # passive bot, default seed
- *   pnpm sim balanced           # balanced bot, default seed
- *   pnpm sim aggressive 777     # aggressive bot, explicit seed
- *   pnpm sim grower 100         # IPO-rush bot: raises every round on cooldown, sales-heavy — Task 9 IPO-reachability bot
- *   pnpm sim complacent 100     # grows early, then coasts — dies in Reckoning (see Task 5)
- *   pnpm sim salesheavy 100     # 30 sales / 3 devs — boom-then-bleed acceptance bot (Task 1)
- *   pnpm sim devheavy 100       # 30 devs / 1 sales — quality with no lead-gen to sell it — Task 9 matrix bot
- *   pnpm sim coregrinder 100    # all-in on core focus + devs — Task 2 quality/churn acceptance bot
- *   pnpm sim hardware 100       # switches to hardware focus week 0 — Task 2 ARPC/burn acceptance bot
- *   pnpm sim hypechaser 100     # switches to hype focus week 0 — Task 3 trend-wave acceptance bot
- *   pnpm sim 12345               # passive bot, explicit seed (legacy form)
+ *   npm run sim                    # passive bot, default seed
+ *   npm run sim balanced           # balanced bot, default seed
+ *   npm run sim aggressive 777     # aggressive bot, explicit seed
+ *   npm run sim grower 100         # IPO-rush bot: raises every round on cooldown, sales-heavy — Task 9 IPO-reachability bot
+ *   npm run sim complacent 100     # grows early, then coasts — dies in Reckoning (see Task 5)
+ *   npm run sim salesheavy 100     # 30 sales / 3 devs — boom-then-bleed acceptance bot (Task 1)
+ *   npm run sim devheavy 100       # 30 devs / 1 sales — quality with no lead-gen to sell it — Task 9 matrix bot
+ *   npm run sim coregrinder 100    # all-in on core focus + devs — Task 2 quality/churn acceptance bot
+ *   npm run sim hardware 100       # switches to hardware focus week 0 — Task 2 ARPC/burn acceptance bot
+ *   npm run sim hypechaser 100     # switches to hype focus week 0 — Task 3 trend-wave acceptance bot
+ *   npm run sim 12345               # passive bot, explicit seed (legacy form)
  *
  * Task 9 acceptance matrix: balanced / salesheavy / devheavy / coregrinder /
  * hypechaser / hardware, each run across several seeds. `balanced`,
@@ -25,7 +25,7 @@
  */
 
 import { CUSTOMERS_PER_SUPPORT, hasRoundsAvailable, runwayWeeks, weeklyStatsFor } from '../src/game/balance';
-import { newGame, reduce, tick } from '../src/game/engine';
+import { DEFAULT_COMPANY_NAME, newGame, reduce, tick } from '../src/game/engine';
 import { formatMoney } from '../src/lib/format';
 import { isIpoEligible } from '../src/game/score';
 import type { GameState } from '../src/game/types';
@@ -329,7 +329,7 @@ function row(state: GameState): string {
   ].join(' | ');
 }
 
-let state = newGame(seed);
+let state = newGame(DEFAULT_COMPANY_NAME, seed);
 let peakRevenue = 0;
 
 console.log(`Startup Tycoon — headless sim (strategy: ${strategy}, seed ${seed})`);

@@ -12,7 +12,7 @@ import { newGame } from '../engine';
 import { CLevelCandidate, CLevels, Role } from '../types';
 
 function baseInput(overrides: Partial<WeeklyStatsInput> = {}): WeeklyStatsInput {
-  const base = newGame(1);
+  const base = newGame('Acme', 1);
   return {
     headcount: base.headcount,
     cLevels: base.cLevels as CLevels,
@@ -27,7 +27,7 @@ function baseInput(overrides: Partial<WeeklyStatsInput> = {}): WeeklyStatsInput 
 }
 
 function cfoWithBurnCut(multiplier: number): CLevels {
-  const base = newGame(1).cLevels as CLevels;
+  const base = newGame('Acme', 1).cLevels as CLevels;
   const candidate: CLevelCandidate = {
     id: 'cfo-1',
     name: 'Pat',

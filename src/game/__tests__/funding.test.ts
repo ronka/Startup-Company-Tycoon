@@ -90,7 +90,7 @@ const skipCooldown = (s: GameState): GameState => ({ ...s, week: s.week + ROUND_
 
 describe('RAISE_ROUND', () => {
   it('advances stage exactly once per round and stops after seriesB', () => {
-    let s: GameState = { ...newGame(1), cash: 1_000_000 };
+    let s: GameState = { ...newGame('Acme', 1), cash: 1_000_000 };
     expect(s.stage).toBe('garage');
 
     s = reduce(s, { type: 'RAISE_ROUND' }); // seed
@@ -111,7 +111,7 @@ describe('RAISE_ROUND', () => {
   });
 
   it('founder equity compounds correctly across seed + A + B', () => {
-    let s: GameState = { ...newGame(2), cash: 1_000_000, productQuality: 1_000_000 };
+    let s: GameState = { ...newGame('Acme', 2), cash: 1_000_000, productQuality: 1_000_000 };
     let equity = 1;
 
     for (let i = 0; i < 3; i++) {
@@ -127,13 +127,13 @@ describe('RAISE_ROUND', () => {
   });
 
   it('adds the raised amount to cash', () => {
-    const s0: GameState = { ...newGame(5), cash: 10_000 };
+    const s0: GameState = { ...newGame('Acme', 5), cash: 10_000 };
     const s1 = reduce(s0, { type: 'RAISE_ROUND' });
     expect(s1.cash).toBeGreaterThan(s0.cash);
   });
 
   it('rejects a same-week back-to-back raise', () => {
-    const s0: GameState = { ...newGame(6), cash: 1_000_000 };
+    const s0: GameState = { ...newGame('Acme', 6), cash: 1_000_000 };
     const s1 = reduce(s0, { type: 'RAISE_ROUND' });
     expect(s1.roundsRaised).toBe(1);
 
@@ -142,7 +142,7 @@ describe('RAISE_ROUND', () => {
   });
 
   it('rejects a raise before the cooldown elapses, allows it once elapsed', () => {
-    const s0: GameState = { ...newGame(7), cash: 1_000_000 };
+    const s0: GameState = { ...newGame('Acme', 7), cash: 1_000_000 };
     const s1 = reduce(s0, { type: 'RAISE_ROUND' });
 
     const tooSoon = reduce({ ...s1, week: s1.week + ROUND_COOLDOWN_WEEKS - 1 }, { type: 'RAISE_ROUND' });
@@ -170,7 +170,7 @@ describe('sim evidence: raising early beats always bridging', () => {
    * bridge premium (Task 8's `BRIDGE_DILUTION_MULTIPLIER`) on every round.
    */
   function runFundingBot(seed: number, alwaysBridge: boolean): GameState {
-    let s = newGame(seed);
+    let s = newGame('Acme', seed);
     for (let i = 0; i < 300 && hasRoundsAvailable(s.roundsRaised) && !s.gameOver; i++) {
       const eligible = hasRoundsAvailable(s.roundsRaised) && canRaiseRound(s.week, s.lastRoundRaisedWeek);
       if (eligible) {

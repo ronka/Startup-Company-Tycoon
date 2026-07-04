@@ -6,7 +6,7 @@ import { storeReducer } from '../game-store';
 
 describe('storeReducer — SET_FOCUS dispatch path', () => {
   it('switches focus, stamps the week, and appends a news entry', () => {
-    const state = { ...newGame(1), week: 5 };
+    const state = { ...newGame('Acme', 1), week: 5 };
 
     const next = storeReducer(state, { type: 'SET_FOCUS', focus: 'ai' });
 
@@ -18,7 +18,7 @@ describe('storeReducer — SET_FOCUS dispatch path', () => {
   });
 
   it('is a no-op when re-selecting the current focus', () => {
-    const state = newGame(1);
+    const state = newGame('Acme', 1);
 
     const next = storeReducer(state, { type: 'SET_FOCUS', focus: state.focus });
 
@@ -29,5 +29,15 @@ describe('storeReducer — SET_FOCUS dispatch path', () => {
     const next = storeReducer(null, { type: 'SET_FOCUS', focus: 'ai' });
 
     expect(next).toBeNull();
+  });
+});
+
+describe('storeReducer — NEW_GAME dispatch path', () => {
+  it('produces a fresh run carrying the given company name', () => {
+    const next = storeReducer(null, { type: 'NEW_GAME', companyName: 'Widgets Inc', seed: 42 });
+
+    expect(next).not.toBeNull();
+    expect(next?.companyName).toBe('Widgets Inc');
+    expect(next?.week).toBe(0);
   });
 });
