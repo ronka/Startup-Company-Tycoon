@@ -72,38 +72,40 @@ export function GameChrome() {
         />
       ) : null}
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
-        <PrimaryButton
-          label="Next Week →"
-          onPress={() => dispatch({ type: 'TICK' })}
-          disabled={!canAdvance}
-          style={styles.nextButton}
-        />
-        <PrimaryButton
-          variant="secondary"
-          label={`⏩ ${FAST_FORWARD_WEEKS}`}
-          onPress={() => fastForward(FAST_FORWARD_WEEKS)}
-          disabled={!canAdvance}
-          style={styles.ffButton}
-        />
-      </View>
+      <View style={[styles.chrome, { paddingBottom: insets.bottom + Spacing.two }]}>
+        <View style={styles.footer}>
+          <PrimaryButton
+            label="Next Week →"
+            onPress={() => dispatch({ type: 'TICK' })}
+            disabled={!canAdvance}
+            style={styles.nextButton}
+          />
+          <PrimaryButton
+            variant="secondary"
+            label={`⏩ ${FAST_FORWARD_WEEKS}`}
+            onPress={() => fastForward(FAST_FORWARD_WEEKS)}
+            disabled={!canAdvance}
+            style={styles.ffButton}
+          />
+        </View>
 
-      <View style={styles.budgetRow}>
-        {budgetExhausted ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
-            That&apos;s the week planned out — the team gets to work. Come back tomorrow.
-          </ThemedText>
-        ) : weekBudget ? (
-          <WeekBudgetDots weeksRemaining={weekBudget.weeksRemaining} />
-        ) : null}
-
-        {__DEV__ ? (
-          <Pressable onPress={() => setDevFreePlay(!devFreePlay)} accessibilityRole="button">
-            <ThemedText type="small" themeColor={devFreePlay ? 'success' : 'textSecondary'}>
-              {devFreePlay ? 'Free play: ON' : 'Free play: off'}
+        <View style={styles.budgetRow}>
+          {budgetExhausted ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
+              That&apos;s the week planned out — the team gets to work. Come back tomorrow.
             </ThemedText>
-          </Pressable>
-        ) : null}
+          ) : weekBudget ? (
+            <WeekBudgetDots weeksRemaining={weekBudget.weeksRemaining} />
+          ) : null}
+
+          {__DEV__ ? (
+            <Pressable onPress={() => setDevFreePlay(!devFreePlay)} accessibilityRole="button">
+              <ThemedText type="small" themeColor={devFreePlay ? 'success' : 'textSecondary'}>
+                {devFreePlay ? 'Free play: ON' : 'Free play: off'}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <DecisionModal
@@ -151,17 +153,21 @@ function WeekBudgetDots({ weeksRemaining }: { weeksRemaining: number }) {
 }
 
 const styles = StyleSheet.create({
+  chrome: {
+    paddingTop: Spacing.two,
+  },
   footer: {
     flexDirection: 'row',
-    gap: Spacing.three,
+    gap: Spacing.two,
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
   },
   nextButton: {
     flex: 1,
+    paddingVertical: Spacing.two,
   },
   ffButton: {
     minWidth: 72,
+    paddingVertical: Spacing.two,
   },
   budgetRow: {
     flexDirection: 'row',
