@@ -22,6 +22,7 @@ import {
   nextRound,
   roundTermsFor,
   runwayWeeks,
+  weeklyExpensesFor,
   weeklyReportFor,
 } from '@/game/balance';
 import { isIpoEligible } from '@/game/score';
@@ -50,6 +51,7 @@ export default function MoneyScreen() {
   const theme = useTheme();
   const [confirming, setConfirming] = useState(false);
   const [ipoConfirming, setIpoConfirming] = useState(false);
+  const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
@@ -57,6 +59,7 @@ export default function MoneyScreen() {
   const { burn, revenue, valuation, runway, stake } = deriveWeeklyStats(state);
   const previous = previousState ? deriveWeeklyStats(previousState) : null;
   const report = weeklyReportFor(state);
+  const expenses = weeklyExpensesFor(state);
   const focusArpcMultiplier = FOCUS_PROFILES[state.focus].arpcMultiplier;
   const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
   const cfoDilutionMultiplier = cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-roundTerms');
@@ -106,7 +109,8 @@ export default function MoneyScreen() {
             previousValue={previous?.burn}
             format={formatMoney}
             goodDirection="down"
-            explainer={STAT_EXPLAINERS.weeklyBurn}
+            hint="Tap for breakdown"
+            onPress={() => setBurnBreakdownOpen(true)}
           />
           <StatTile
             label="Runway"
@@ -281,6 +285,53 @@ export default function MoneyScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      <Modal visible={burnBreakdownOpen} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <ThemedView type="backgroundElement" style={styles.modalCard}>
+            <ThemedText type="smallBold">Where the money goes</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Week {state.week}
+            </ThemedText>
+            {expenses.lines.map((line) => (
+              <View key={line.label}>
+                <View style={styles.expenseRow}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {line.label}
+                  </ThemedText>
+                  <View style={styles.expenseAmountGroup}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {Math.round((line.amount / expenses.total) * 100)}%
+                    </ThemedText>
+                    <ThemedText type="small">{formatMoney(line.amount)}</ThemedText>
+                  </View>
+                </View>
+                {line.detail ? (
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.payrollDetail}>
+                    {line.detail.map((d) => `${d.label} · ${formatMoney(d.amount)}`).join('   ')}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ))}
+            <View
+              style={[styles.expenseRow, styles.expenseTotalRow, { borderTopColor: theme.backgroundSelected }]}>
+              <ThemedText type="smallBold">Total burn</ThemedText>
+              <ThemedText type="smallBold">{formatMoney(expenses.total)}</ThemedText>
+            </View>
+            <View style={styles.expenseRow}>
+              <ThemedText type="smallBold">Net</ThemedText>
+              <ThemedText type="smallBold" themeColor={revenue - burn >= 0 ? 'success' : 'danger'}>
+                {formatMoney(revenue - burn)}
+              </ThemedText>
+            </View>
+            <PrimaryButton
+              variant="secondary"
+              label="Close"
+              onPress={() => setBurnBreakdownOpen(false)}
+            />
+          </ThemedView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -362,5 +413,21 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
+  },
+  expenseRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  expenseTotalRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.two,
+    marginTop: Spacing.half,
+  },
+  expenseAmountGroup: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  payrollDetail: {
+    marginTop: -Spacing.half,
   },
 });

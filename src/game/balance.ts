@@ -296,18 +296,57 @@ export interface WeeklyStats {
  * "after" one) so both read the same formula composition.
  */
 export function weeklyStatsFor(state: WeeklyStatsInput): WeeklyStats {
-  const burn = weeklyBurnFor(state.headcount, {
-    execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier:
-      cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut') * focusFixedBurnMultiplier(state.focus),
-    moraleLeverCost: state.moraleLeverActive ? MORALE_LEVER_WEEKLY_COST : 0,
-    variableCost: focusCogsFor(state.focus, state.customers),
-  });
+  const burn = weeklyExpensesFor(state).total;
   const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
   const revenue = revenueFor(state.customers, FOCUS_PROFILES[state.focus].arpcMultiplier);
   const valuation = valuationFor(revenue, effectiveHype, state.era);
   const runway = runwayWeeks(state.cash, burn - revenue);
   return { burn, revenue, valuation, runway };
+}
+
+export interface ExpenseLine {
+  label: string;
+  amount: number;
+  /** Optional sub-lines that decompose this line (e.g. team salaries per role). */
+  detail?: ExpenseLine[];
+}
+
+export interface ExpenseBreakdown {
+  lines: ExpenseLine[];
+  /** Sum of `lines`; the single source of truth for `weeklyStatsFor(state).burn`. */
+  total: number;
+}
+
+/**
+ * The canonical decomposition of weekly burn into labeled components (team
+ * salaries, exec salaries, overhead, morale perks, hardware COGS), omitting
+ * whichever are zero this week. `weeklyStatsFor` derives its `burn` from
+ * `total`, so this is the one place that defines what burn is made of. The
+ * team-salaries line carries a per-role `detail` split.
+ */
+export function weeklyExpensesFor(state: WeeklyStatsInput): ExpenseBreakdown {
+  const overhead =
+    FIXED_WEEKLY_BURN *
+    cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut') *
+    focusFixedBurnMultiplier(state.focus);
+
+  const payrollByRole: ExpenseLine[] = (Object.keys(WEEKLY_SALARY) as Role[])
+    .map((role) => ({ label: `${state.headcount[role]} ${role}`, amount: state.headcount[role] * WEEKLY_SALARY[role] }))
+    .filter((line) => line.amount > 0);
+
+  const lines: ExpenseLine[] = [
+    {
+      label: 'Team salaries',
+      amount: payrollByRole.reduce((sum, line) => sum + line.amount, 0),
+      detail: payrollByRole,
+    },
+    { label: 'Exec salaries', amount: cLevelPayroll(state.cLevels) },
+    { label: 'Overhead', amount: overhead },
+    { label: 'Morale perks', amount: state.moraleLeverActive ? MORALE_LEVER_WEEKLY_COST : 0 },
+    { label: 'Hardware COGS', amount: focusCogsFor(state.focus, state.customers) },
+  ].filter((line) => line.amount > 0);
+
+  return { lines, total: lines.reduce((sum, line) => sum + line.amount, 0) };
 }
 
 // ── Company Focus ────────────────────────────────────────────────────────
