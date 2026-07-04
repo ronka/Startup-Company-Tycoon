@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { useNavigation } from 'expo-router';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedNumber } from '@/components/game/animated-number';
@@ -16,15 +17,30 @@ import { useGame } from '@/state/game-store';
 export function Hud() {
   const { state } = useGame();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   if (!state) return null;
 
   const { runway, insolvent } = deriveWeeklyStats(state);
 
+  // The Hud renders inside the drawer's `(tabs)` screen, so `navigation` here
+  // is the drawer navigator — `openDrawer` slides in the settings menu.
+  const openMenu = () => (navigation as unknown as { openDrawer?: () => void }).openDrawer?.();
+
   return (
     <ThemedView
       type={insolvent ? 'dangerBackground' : 'backgroundElement'}
       style={[styles.hud, { paddingTop: insets.top + Spacing.two }]}>
+      <Pressable
+        onPress={openMenu}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Open menu"
+        style={styles.menuButton}>
+        <ThemedText themeColor={insolvent ? 'danger' : 'textSecondary'} style={styles.menuGlyph}>
+          ☰
+        </ThemedText>
+      </Pressable>
       <View style={styles.stat}>
         <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
           Cash
@@ -64,9 +80,17 @@ export function Hud() {
 const styles = StyleSheet.create({
   hud: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-around',
     paddingBottom: Spacing.two,
     paddingHorizontal: Spacing.four,
+  },
+  menuButton: {
+    justifyContent: 'center',
+  },
+  menuGlyph: {
+    fontSize: 22,
+    lineHeight: 26,
   },
   stat: {
     alignItems: 'center',

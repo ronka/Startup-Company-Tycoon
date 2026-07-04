@@ -22,6 +22,7 @@
     "expo-status-bar": "~57.0.0",
     "expo-symbols": "~57.0.0",
     "expo-system-ui": "~57.0.0",
+    "expo-updates": "~57.0.6",
     "expo-web-browser": "~57.0.0",
     "nativewind": "5.0.0-preview.4",
     "react": "19.2.3",
@@ -56,7 +57,10 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest run",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "update": "node scripts/increment-update-version.js 'src/app/(game)/settings.tsx' && npx eas update",
+    "build:production:ios": "node scripts/bump-app-version.js && npx eas build --platform ios --profile production",
+    "build:production:android": "node scripts/bump-app-version.js && npx eas build --platform android --profile production"
   },
   "private": true
 }

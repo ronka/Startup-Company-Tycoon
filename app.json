@@ -7,6 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": "startuptycoon",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 10000
+    },
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -38,6 +45,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "beac599a-ac7b-4f0d-8a15-f616f063ce21"
+      }
+    },
+    "owner": "ronkaa"
   }
 }
