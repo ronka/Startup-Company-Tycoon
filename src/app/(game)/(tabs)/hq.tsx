@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
 import { InsolvencyBanner } from '@/components/game/insolvency-banner';
@@ -25,6 +26,7 @@ export default function HqScreen() {
   const { state, previousState, dispatch } = useGame();
   const theme = useTheme();
   const [pendingFocus, setPendingFocus] = useState<FocusId | null>(null);
+  const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
   const focusPickerRef = useRef<FocusPickerHandle>(null);
 
   if (!state) return <Redirect href="/" />;
@@ -62,7 +64,8 @@ export default function HqScreen() {
             previousValue={previous?.burn}
             format={formatMoney}
             goodDirection="down"
-            explainer={STAT_EXPLAINERS.weeklyBurn}
+            hint="Tap for breakdown"
+            onPress={() => setBurnBreakdownOpen(true)}
           />
           <StatTile
             label="Revenue"
@@ -137,6 +140,12 @@ export default function HqScreen() {
           </ThemedView>
         </View>
       </Modal>
+
+      <BurnBreakdownModal
+        state={state}
+        visible={burnBreakdownOpen}
+        onClose={() => setBurnBreakdownOpen(false)}
+      />
 
       <FocusPicker
         ref={focusPickerRef}
