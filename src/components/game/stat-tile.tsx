@@ -15,6 +15,7 @@ export function StatTile({
   hint,
   alert = false,
   explainer,
+  onPress,
 }: {
   label: string;
   /** Raw numeric value; formatted for display via `format`. */
@@ -29,6 +30,8 @@ export function StatTile({
   alert?: boolean;
   /** One-sentence "what feeds it, what it feeds" explainer, revealed on tap. */
   explainer?: string;
+  /** When provided, tapping the tile calls this instead of toggling the explainer. */
+  onPress?: () => void;
 }) {
   const [explainerOpen, setExplainerOpen] = useState(false);
   // Compare formatted strings, not raw floats: a runway of 14.63 vs 14.61
@@ -44,9 +47,9 @@ export function StatTile({
 
   return (
     <Pressable
-      onPress={() => explainer && setExplainerOpen((open) => !open)}
-      accessibilityRole={explainer ? 'button' : undefined}
-      accessibilityLabel={explainer ? `${label}: tap for details` : undefined}
+      onPress={onPress ?? (() => explainer && setExplainerOpen((open) => !open))}
+      accessibilityRole={onPress || explainer ? 'button' : undefined}
+      accessibilityLabel={onPress || explainer ? `${label}: tap for details` : undefined}
       style={styles.pressable}>
       <ThemedView type={alert ? 'dangerBackground' : 'backgroundElement'} style={styles.tile}>
         <ThemedText type="small" themeColor={alert ? 'danger' : 'textSecondary'}>
