@@ -9,11 +9,14 @@ import {
   CLevelPerkAxis,
   CLevelRole,
   CLevels,
+  FocusId,
   Headcount,
+  Rival,
   ROUND_ORDER,
   Role,
   RoundType,
   Stage,
+  Trend,
 } from './types';
 
 /** The state slice `weeklyStatsFor` needs — matches a subset of `GameState`. */
@@ -21,15 +24,12 @@ export interface WeeklyStatsInput {
   headcount: Headcount;
   cLevels: CLevels;
   hype: number;
-  productQuality: number;
-  marketShare: number;
+  customers: number;
   cash: number;
   era: Era;
   moraleLeverActive: boolean;
+  focus: FocusId;
 }
-
-/** Bump when the shape of a saved GameState changes incompatibly. */
-export const SAVE_VERSION = 5;
 
 // ── Insolvency ───────────────────────────────────────────────────────────
 /** Consecutive weeks with cash < 0 before the run ends in bankruptcy, regardless of rounds left. */
@@ -41,7 +41,10 @@ export const STARTING_HEADCOUNT: Headcount = { devs: 3, sales: 1, support: 1 };
 export const STARTING_MORALE = 70;
 export const STARTING_PRODUCT_QUALITY = 0;
 export const STARTING_HYPE = 1.0;
-export const STARTING_MARKET_SHARE = 0.15;
+export const STARTING_CUSTOMERS = 0;
+export const STARTING_MARKET_CUSTOMERS = 10_000;
+/** Derived, not independently tuned: marketShare is `customers / marketCustomers` from Task 1 on. */
+export const STARTING_MARKET_SHARE = STARTING_CUSTOMERS / STARTING_MARKET_CUSTOMERS;
 export const STARTING_FOUNDER_EQUITY = 1.0;
 export const STARTING_STAGE: Stage = 'garage';
 
@@ -66,14 +69,22 @@ export function payrollFor(headcount: Headcount): number {
 
 /**
  * Total weekly cash outflow: payroll + fixed overhead (optionally discounted
- * by a CFO's perk) + any hired C-level salaries.
+ * by a CFO's perk, or inflated by the hardware focus) + any hired C-level
+ * salaries + a per-customer variable cost (hardware's COGS).
  */
 export function weeklyBurnFor(
   headcount: Headcount,
-  options: { execPayroll?: number; fixedBurnMultiplier?: number; moraleLeverCost?: number } = {},
+  options: {
+    execPayroll?: number;
+    fixedBurnMultiplier?: number;
+    moraleLeverCost?: number;
+    variableCost?: number;
+  } = {},
 ): number {
-  const { execPayroll = 0, fixedBurnMultiplier = 1, moraleLeverCost = 0 } = options;
-  return payrollFor(headcount) + FIXED_WEEKLY_BURN * fixedBurnMultiplier + execPayroll + moraleLeverCost;
+  const { execPayroll = 0, fixedBurnMultiplier = 1, moraleLeverCost = 0, variableCost = 0 } = options;
+  return (
+    payrollFor(headcount) + FIXED_WEEKLY_BURN * fixedBurnMultiplier + execPayroll + moraleLeverCost + variableCost
+  );
 }
 
 /**
@@ -120,29 +131,150 @@ export function qualityAfterTick(
   return Math.max(0, quality + growth - decay);
 }
 
-// ── Revenue & valuation ─────────────────────────────────────────────────
-/** Revenue multiplier added per sales hire. */
-export const SALES_FACTOR_PER_HEAD = 0.2;
-/** Dollars of weekly revenue per point of quality×share, before hype/sales scaling. */
-export const REVENUE_PER_QUALITY_SHARE = 3;
+// ── Customer pipeline ────────────────────────────────────────────────────
+/** Dollars of weekly revenue per customer, before any focus ARPC multiplier (Task 2). */
+export const ARPC = 25;
+/** Raw leads a single sales head generates per week, before the headcount exponent and demand multipliers. */
+export const LEADS_PER_SALES = 12;
+/** Sublinear exponent on sales headcount: extra reps still help, but with diminishing returns. */
+export const SALES_EXPONENT = 0.9;
+/** Fraction of leads that convert to paying customers at quality parity with the rival average. */
+export const BASE_CONVERSION = 0.5;
+/** Ceiling on the computed conversion rate, independent of the quality curve below. */
+export const MAX_CONVERSION_RATE = 0.95;
+/** Weekly churn rate at quality parity with full support coverage. */
+export const BASE_CHURN = 0.02;
+/** How many customers one support head fully covers before the rest start churning harder. */
+export const CUSTOMERS_PER_SUPPORT = 200;
+/** Churn multiplier applied to the uncovered fraction of the customer base. */
+export const UNCOVERED_CHURN_MULTIPLIER = 5.5;
+/** Floor/ceiling the soft quality-ratio curve clamps the conversion multiplier to. */
+export const QUALITY_CONVERSION_FLOOR = 0.4;
+export const QUALITY_CONVERSION_CEILING = 1.9;
+/** Floor/ceiling for the churn side of the same curve (mirrored: falling behind raises churn). */
+export const QUALITY_CHURN_FLOOR = 0.6;
+export const QUALITY_CHURN_CEILING = 2.5;
+/** Fraction of churned customers who defect straight to a rival; the rest just return to the pool. */
+export const CHURN_DEFECTION_RATE = 0.6;
+/** Weekly growth rate of the total addressable customer pool, by era. */
+export const MARKET_GROWTH_RATE: Record<Era, number> = {
+  scrappy: 0.01,
+  boom: 0.02,
+  reckoning: 0,
+};
+
 /** Valuation multiple applied to revenue (industry comps, pre-tuning). */
 export const INDUSTRY_MULTIPLE = 8;
 /** How many weeks of valuation history the HQ sparkline keeps. */
 export const VALUATION_HISTORY_CAP = 104;
 
-/** Revenue multiplier from the sales team (baseline 1.0 with zero sales). */
-export function salesFactorFor(sales: number): number {
-  return 1 + sales * SALES_FACTOR_PER_HEAD;
+/** One week of market-pool growth, era-scaled and compounding. */
+export function marketCustomersAfterTick(marketCustomers: number, era: Era = 'scrappy'): number {
+  return marketCustomers * (1 + MARKET_GROWTH_RATE[era]);
 }
 
-/** Weekly revenue: product quality monetized by market share, hype, and sales. */
-export function revenueFor(
-  quality: number,
-  marketShare: number,
-  hype: number,
-  salesFactor: number,
+/**
+ * Weekly leads generated by the sales team: lots of sales means lots of
+ * leads, and a real revenue spike right now — the old flat `salesFactorFor`
+ * revenue multiplier is gone; sales now drives demand, not a direct
+ * multiplier on quality. Hype (and, later, trend/focus demand multipliers)
+ * scales the same lead count.
+ */
+export function leadsFor(sales: number, demandMultiplier: number = 1): number {
+  return LEADS_PER_SALES * Math.pow(sales, SALES_EXPONENT) * demandMultiplier;
+}
+
+/**
+ * Soft, bounded multiplier from your quality relative to the rival average —
+ * a sqrt curve so a big gap matters a lot without either side hitting zero
+ * or running away unbounded. Feeds conversion; `qualityChurnFactor` is its
+ * churn-side mirror image.
+ */
+export function qualityRatioFactor(yourQuality: number, rivalAvgQuality: number): number {
+  const ratio = Math.max(yourQuality, 1) / Math.max(rivalAvgQuality, 1);
+  return clamp(Math.sqrt(ratio), QUALITY_CONVERSION_FLOOR, QUALITY_CONVERSION_CEILING);
+}
+
+/** Mirror of `qualityRatioFactor` for churn: falling behind the rival average raises churn. */
+export function qualityChurnFactor(yourQuality: number, rivalAvgQuality: number): number {
+  const ratio = Math.max(rivalAvgQuality, 1) / Math.max(yourQuality, 1);
+  return clamp(Math.sqrt(ratio), QUALITY_CHURN_FLOOR, QUALITY_CHURN_CEILING);
+}
+
+/**
+ * Fraction of leads that convert to paying customers this week: quality
+ * below the rival average tanks it, quality above lifts it (soft-capped),
+ * with an optional focus multiplier (Task 2).
+ */
+export function conversionRateFor(
+  yourQuality: number,
+  rivalAvgQuality: number,
+  focusMultiplier: number = 1,
 ): number {
-  return quality * marketShare * hype * salesFactor * REVENUE_PER_QUALITY_SHARE;
+  return clamp(
+    BASE_CONVERSION * qualityRatioFactor(yourQuality, rivalAvgQuality) * focusMultiplier,
+    0,
+    MAX_CONVERSION_RATE,
+  );
+}
+
+/** New customers this week: leads × conversion, capped by whatever's left in the addressable pool. */
+export function customersGainedFor(leads: number, conversionRate: number, availableDemand: number): number {
+  return clamp(leads * conversionRate, 0, Math.max(0, availableDemand));
+}
+
+/**
+ * Each support head fully covers `CUSTOMERS_PER_SUPPORT` customers; the
+ * uncovered fraction churns at `UNCOVERED_CHURN_MULTIPLIER` instead of the
+ * baseline rate. Replaces the old flat `supportProtectionFactor`.
+ */
+export function supportCoverageFactor(support: number, customers: number): number {
+  if (customers <= 0) return 1;
+  const coveredFraction = clamp((support * CUSTOMERS_PER_SUPPORT) / customers, 0, 1);
+  return coveredFraction + (1 - coveredFraction) * UNCOVERED_CHURN_MULTIPLIER;
+}
+
+/**
+ * Weekly churn rate: baseline, worsened by a quality gap below the rival
+ * average, worsened further by thin support coverage, with an optional
+ * focus multiplier (Task 2).
+ */
+export function churnRateFor(
+  yourQuality: number,
+  rivalAvgQuality: number,
+  support: number,
+  customers: number,
+  focusMultiplier: number = 1,
+): number {
+  return (
+    BASE_CHURN *
+    qualityChurnFactor(yourQuality, rivalAvgQuality) *
+    supportCoverageFactor(support, customers) *
+    focusMultiplier
+  );
+}
+
+/** Customers lost to churn this week, before the defection split. */
+export function customersChurnedFor(customers: number, churnRate: number): number {
+  return customers * churnRate;
+}
+
+export interface ChurnSplit {
+  /** Defect straight to a rival — their share rises. */
+  toRivals: number;
+  /** Just lapse back into the addressable pool, up for grabs again. */
+  toPool: number;
+}
+
+/** A share-weighted majority of churned customers defect to rivals; the rest return to the pool. */
+export function churnDefectionSplit(churned: number): ChurnSplit {
+  const toRivals = churned * CHURN_DEFECTION_RATE;
+  return { toRivals, toPool: churned - toRivals };
+}
+
+/** Weekly revenue: your installed customer base times what each pays, before any focus ARPC multiplier (Task 2). */
+export function revenueFor(customers: number, focusArpcMultiplier: number = 1): number {
+  return customers * ARPC * focusArpcMultiplier;
 }
 
 /** Company valuation: revenue capitalized at an industry multiple (compressed in Reckoning), boosted by hype. */
@@ -166,19 +298,162 @@ export interface WeeklyStats {
 export function weeklyStatsFor(state: WeeklyStatsInput): WeeklyStats {
   const burn = weeklyBurnFor(state.headcount, {
     execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
+    fixedBurnMultiplier:
+      cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut') * focusFixedBurnMultiplier(state.focus),
     moraleLeverCost: state.moraleLeverActive ? MORALE_LEVER_WEEKLY_COST : 0,
+    variableCost: focusCogsFor(state.focus, state.customers),
   });
   const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
-  const revenue = revenueFor(
-    state.productQuality,
-    state.marketShare,
-    effectiveHype,
-    salesFactorFor(state.headcount.sales),
-  );
+  const revenue = revenueFor(state.customers, FOCUS_PROFILES[state.focus].arpcMultiplier);
   const valuation = valuationFor(revenue, effectiveHype, state.era);
   const runway = runwayWeeks(state.cash, burn - revenue);
   return { burn, revenue, valuation, runway };
+}
+
+// ── Company Focus ────────────────────────────────────────────────────────
+/** How many weeks the transition drag (`FOCUS_TRANSITION_MULTIPLIER`) applies after switching focus. */
+export const FOCUS_TRANSITION_WEEKS = 4;
+/** Multiplier on dev effort and conversion while a focus switch is still settling in. */
+export const FOCUS_TRANSITION_MULTIPLIER = 0.7;
+/** Flat weekly hype addition while running the hype focus (on top of its `hypeGainMultiplier`). */
+export const HYPE_FOCUS_PUMP_PER_WEEK = 0.05;
+/** Fixed-burn multiplier for the hardware focus (physical ops overhead). */
+export const HARDWARE_FIXED_BURN_MULTIPLIER = 1.4;
+/** Per-customer weekly cost of goods sold for the hardware focus, subtracted alongside burn. */
+export const HARDWARE_COGS_PER_CUSTOMER = 8;
+/** Extra churn multiplier the hype focus takes, but only while quality trails the rival average — riding hype while genuinely behind is a bigger risk than riding it while ahead. */
+export const HYPE_FOCUS_BEHIND_CHURN_MULTIPLIER = 1.3;
+
+export interface FocusProfile {
+  /**
+   * Which trend wave this focus aligns with (Task 3's `trendFactorsFor`);
+   * `null` for `core`/`hype` — `hype` counts as half-aligned with whatever
+   * trend is hot, `core` gets a flight-to-quality bonus on any crash.
+   */
+  trendTag: 'ai' | 'hardware' | null;
+  qualityGrowthMultiplier: number;
+  arpcMultiplier: number;
+  /** Baseline churn multiplier; `hype`'s effective multiplier is conditionally worse — see `focusChurnMultiplierFor`. */
+  churnMultiplier: number;
+  hypeGainMultiplier: number;
+}
+
+/** One row per focus (§1.2) — the whole steady-state shape of each strategic bet. */
+export const FOCUS_PROFILES: Record<FocusId, FocusProfile> = {
+  core: { trendTag: null, qualityGrowthMultiplier: 1.25, arpcMultiplier: 1.0, churnMultiplier: 0.85, hypeGainMultiplier: 0.8 },
+  ai: { trendTag: 'ai', qualityGrowthMultiplier: 0.9, arpcMultiplier: 1.1, churnMultiplier: 1.0, hypeGainMultiplier: 1.3 },
+  hardware: {
+    trendTag: 'hardware',
+    qualityGrowthMultiplier: 0.85,
+    arpcMultiplier: 1.6,
+    churnMultiplier: 0.7,
+    hypeGainMultiplier: 0.9,
+  },
+  hype: { trendTag: null, qualityGrowthMultiplier: 0.6, arpcMultiplier: 1.0, churnMultiplier: 1.0, hypeGainMultiplier: 1.0 },
+};
+
+/** Whether a focus switch's transition drag is still in effect this week. */
+export function isInFocusTransition(week: number, focusChangedWeek: number): boolean {
+  return week - focusChangedWeek < FOCUS_TRANSITION_WEEKS;
+}
+
+/** `FOCUS_TRANSITION_MULTIPLIER` while still transitioning, 1 (no-op) once settled. */
+export function focusTransitionMultiplier(week: number, focusChangedWeek: number): number {
+  return isInFocusTransition(week, focusChangedWeek) ? FOCUS_TRANSITION_MULTIPLIER : 1;
+}
+
+/**
+ * Effective churn multiplier for `focus`: each profile's baseline, with the
+ * hype focus taking its extra penalty only while quality trails the rival
+ * average (chasing hype while genuinely behind the product bar is the
+ * riskier position; chasing it while ahead isn't penalized further).
+ */
+export function focusChurnMultiplierFor(focus: FocusId, yourQuality: number, rivalAvgQuality: number): number {
+  const base = FOCUS_PROFILES[focus].churnMultiplier;
+  if (focus === 'hype' && yourQuality < rivalAvgQuality) return base * HYPE_FOCUS_BEHIND_CHURN_MULTIPLIER;
+  return base;
+}
+
+/** Fixed-burn multiplier for the active focus (only hardware moves it). */
+export function focusFixedBurnMultiplier(focus: FocusId): number {
+  return focus === 'hardware' ? HARDWARE_FIXED_BURN_MULTIPLIER : 1;
+}
+
+/** Weekly variable cost (COGS) for the active focus — only hardware carries one. */
+export function focusCogsFor(focus: FocusId, customers: number): number {
+  return focus === 'hardware' ? customers * HARDWARE_COGS_PER_CUSTOMER : 0;
+}
+
+// ── Tech trend waves ─────────────────────────────────────────────────────
+/** Demand/hype bonus (added to 1) for a focus fully aligned with a rising trend, before era amplitude scaling. */
+export const TREND_RISING_DEMAND_BONUS = 0.3;
+export const TREND_RISING_HYPE_BONUS = 0.25;
+/** Bigger bonus once the trend peaks. */
+export const TREND_PEAK_DEMAND_BONUS = 0.6;
+export const TREND_PEAK_HYPE_BONUS = 0.5;
+/** Crash-side penalties (subtracted from / added to 1) for a fully aligned focus, before era depth scaling. */
+export const TREND_CRASH_DEMAND_DROP = 0.4;
+export const TREND_CRASH_HYPE_DROP = 0.5;
+export const TREND_CRASH_CHURN_SPIKE = 0.8;
+/** Half-strength alignment the `hype` focus gets with whatever trend is currently live, at any phase. */
+export const HYPE_FOCUS_TREND_ALIGNMENT_STRENGTH = 0.5;
+/** Flight-to-quality demand bonus the `core` focus gets while any trend is crashing (it isn't aligned with any trend). */
+export const CORE_FOCUS_CRASH_DEMAND_BONUS = 0.15;
+
+export interface TrendFactors {
+  demand: number;
+  hype: number;
+  churn: number;
+}
+
+const NEUTRAL_TREND_FACTORS: TrendFactors = { demand: 1, hype: 1, churn: 1 };
+
+/**
+ * Demand/hype/churn multipliers the live tech trend wave applies to a given
+ * focus: full-strength alignment when the focus's `trendTag` matches the
+ * live trend's id, half-strength alignment for `hype` against *any* live
+ * trend (it counts as chasing whatever's hot), and a flight-to-quality
+ * demand bonus for `core` specifically while a trend is crashing (core isn't
+ * aligned with any trend, so it never takes a crash hit). Neutral (1/1/1)
+ * for everyone else, and for everyone during `quiet` — no live wave to ride.
+ */
+export function trendFactorsFor(focus: FocusId, trend: Trend, era: Era): TrendFactors {
+  const trendTag = FOCUS_PROFILES[focus].trendTag;
+  const strength = trendTag === trend.id ? 1 : focus === 'hype' ? HYPE_FOCUS_TREND_ALIGNMENT_STRENGTH : 0;
+
+  if (strength === 0) {
+    if (focus === 'core' && trend.phase === 'crash') {
+      return { demand: 1 + CORE_FOCUS_CRASH_DEMAND_BONUS, hype: 1, churn: 1 };
+    }
+    return NEUTRAL_TREND_FACTORS;
+  }
+
+  const amplitude = ERA_TREND_AMPLITUDE_MULTIPLIER[era];
+  switch (trend.phase) {
+    case 'rising':
+      return {
+        demand: 1 + TREND_RISING_DEMAND_BONUS * strength * amplitude,
+        hype: 1 + TREND_RISING_HYPE_BONUS * strength * amplitude,
+        churn: 1,
+      };
+    case 'peak':
+      return {
+        demand: 1 + TREND_PEAK_DEMAND_BONUS * strength * amplitude,
+        hype: 1 + TREND_PEAK_HYPE_BONUS * strength * amplitude,
+        churn: 1,
+      };
+    case 'crash': {
+      const depth = ERA_TREND_CRASH_DEPTH_MULTIPLIER[era];
+      return {
+        demand: Math.max(0, 1 - TREND_CRASH_DEMAND_DROP * strength * depth),
+        hype: Math.max(0, 1 - TREND_CRASH_HYPE_DROP * strength * depth),
+        churn: 1 + TREND_CRASH_CHURN_SPIKE * strength * depth,
+      };
+    }
+    case 'quiet':
+    default:
+      return NEUTRAL_TREND_FACTORS;
+  }
 }
 
 // ── Team management: hiring & morale ────────────────────────────────────
@@ -461,6 +736,27 @@ export const ERA_VALUATION_MULTIPLE_MULTIPLIER: Record<Era, number> = {
   reckoning: 0.5,
 };
 
+/** Chance a peaking trend resolves to a crash rather than fading quietly, by era — Reckoning makes crashes the norm. */
+export const ERA_TREND_CRASH_CHANCE: Record<Era, number> = {
+  scrappy: 0.3,
+  boom: 0.25,
+  reckoning: 0.7,
+};
+
+/** Widens the rising/peak demand & hype bonus for an aligned focus — Boom makes waves bigger. */
+export const ERA_TREND_AMPLITUDE_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 1.4,
+  reckoning: 1,
+};
+
+/** Deepens the crash penalty (demand/hype collapse, churn spike) for an aligned focus — Reckoning crashes hurt worse. */
+export const ERA_TREND_CRASH_DEPTH_MULTIPLIER: Record<Era, number> = {
+  scrappy: 1,
+  boom: 1,
+  reckoning: 1.5,
+};
+
 // ── Timeline events ──────────────────────────────────────────────────────
 /** Combined multiplier from every active timed effect targeting `stat` (1 if none). */
 export function timedMultiplierFor(stat: EventStat, effects: TimedEffect[]): number {
@@ -480,23 +776,176 @@ export function hypeAfterTick(hype: number, era: Era = 'scrappy', cmoDecayMultip
 }
 
 // ── Market share ─────────────────────────────────────────────────────────
-/** Share moved per point of quality gap, per week. */
-export const SHARE_SHIFT_RATE = 0.0001;
-/** No single rival can shift more than this much share in one week. */
-export const MAX_SHARE_SHIFT_PER_TICK = 0.01;
-/** Fraction of a share *loss* to a rival negated per support hire. */
-export const SUPPORT_SHARE_PROTECTION_PER_HEAD = 0.15;
+/** Divisor scaling the quality gap before the tanh soft cap. */
+export const GAP_SCALE = 1_500;
+/** Soft ceiling on how much share can move against one rival in a single week. */
+export const MAX_SHARE_SHIFT = 0.015;
 
 /**
  * Share that moves from the lower-quality side to the higher-quality side
- * against one rival this week. Positive means you gain share from them.
+ * against one rival this week — magnitude-scaled by the quality gap via
+ * `tanh` rather than pegged at a flat cap, so a bigger gap moves share
+ * meaningfully faster while staying bounded. Positive means you gain share
+ * from them. Drives rivals' `marketShare` directly; the player's own share is
+ * derived from `customers / marketCustomers` (see Task 1's customer
+ * pipeline), so support no longer dampens this shift the way the old
+ * `supportProtectionFactor` did — support instead retains customers via
+ * `supportCoverageFactor`.
  */
 export function shareShiftFor(yourQuality: number, rivalQuality: number): number {
   const gap = yourQuality - rivalQuality;
-  return clamp(gap * SHARE_SHIFT_RATE, -MAX_SHARE_SHIFT_PER_TICK, MAX_SHARE_SHIFT_PER_TICK);
+  return Math.tanh(gap / GAP_SCALE) * MAX_SHARE_SHIFT;
 }
 
-/** How much of a share loss support staff negate (1 = none negated, 0 = fully negated). */
-export function supportProtectionFactor(support: number): number {
-  return clamp(1 - support * SUPPORT_SHARE_PROTECTION_PER_HEAD, 0, 1);
+// ── Weekly report & attribution ─────────────────────────────────────────
+export interface CustomerFlowCauses {
+  gained: number;
+  churnedQuality: number;
+  churnedUncovered: number;
+  churnedTrendCrash: number;
+}
+
+/**
+ * Decomposes one week of customer flow into named causes: `gained` from
+ * leads × conversion, and churn split into three buckets, attributed in a
+ * fixed order so they sum to exactly the same total `churnRateFor` /
+ * `customersChurnedFor` would blend into one rate:
+ *
+ * - `churnedQuality` — the baseline churn rate, the quality-gap multiplier,
+ *   and the focus's own static churn profile, bundled together: all three
+ *   describe "where your product and strategy stand" rather than a weekly
+ *   surprise.
+ * - `churnedUncovered` — support coverage's incremental effect on top of
+ *   quality (thin coverage on an otherwise-healthy product).
+ * - `churnedTrendCrash` — the live trend's own incremental effect on top of
+ *   everything else; zero whenever no live trend is hurting (or helping)
+ *   this focus (see `trendFactorsFor`), so it only ever shows up around an
+ *   actual crash (or, in principle, a rising/peak wave — though those keep
+ *   churn neutral by design).
+ */
+export function customerFlowCausesFor(
+  customers: number,
+  gained: number,
+  quality: number,
+  rivalAvgQuality: number,
+  support: number,
+  focus: FocusId,
+  trend: Trend,
+  era: Era,
+): CustomerFlowCauses {
+  const qualityChurn = qualityChurnFactor(quality, rivalAvgQuality);
+  const focusChurn = focusChurnMultiplierFor(focus, quality, rivalAvgQuality);
+  const coverage = supportCoverageFactor(support, customers);
+  const trendChurn = trendFactorsFor(focus, trend, era).churn;
+
+  const throughQuality = customers * BASE_CHURN * qualityChurn * focusChurn;
+  const throughCoverage = throughQuality * coverage;
+  const throughTrend = throughCoverage * trendChurn;
+
+  return {
+    gained,
+    churnedQuality: throughQuality,
+    churnedUncovered: throughCoverage - throughQuality,
+    churnedTrendCrash: throughTrend - throughCoverage,
+  };
+}
+
+export const BOTTLENECKS = ['quality', 'leads', 'support', 'demand'] as const;
+/** The single factor most limiting growth this week — see `bottleneckFor`. */
+export type Bottleneck = (typeof BOTTLENECKS)[number];
+
+/** Below this quality-ratio-factor value, quality is judged the bottleneck (checked first — a losing product undermines everything else). */
+export const QUALITY_BOTTLENECK_RATIO_THRESHOLD = 0.9;
+/** Below this covered-customer fraction, support is judged the bottleneck. */
+export const SUPPORT_BOTTLENECK_COVERAGE_THRESHOLD = 0.9;
+/** Below this fraction of the addressable pool still unclaimed, demand is judged exhausted. */
+export const DEMAND_EXHAUSTED_FRACTION_THRESHOLD = 0.05;
+
+/**
+ * The single factor most limiting growth this week, checked in a fixed
+ * priority order: quality below the market first (nothing else matters if
+ * the product is losing), then thin support coverage, then a saturated
+ * addressable market — and if none of those are actually a problem, the
+ * default verdict is `'leads'`: nothing is broken, so more sales headcount is
+ * the lever left to pull.
+ */
+export function bottleneckFor(input: {
+  quality: number;
+  rivalAvgQuality: number;
+  support: number;
+  customers: number;
+  marketCustomers: number;
+}): Bottleneck {
+  const qualityRatio = qualityRatioFactor(input.quality, input.rivalAvgQuality);
+  if (qualityRatio < QUALITY_BOTTLENECK_RATIO_THRESHOLD) return 'quality';
+
+  const coveredFraction =
+    input.customers > 0 ? clamp((input.support * CUSTOMERS_PER_SUPPORT) / input.customers, 0, 1) : 1;
+  if (coveredFraction < SUPPORT_BOTTLENECK_COVERAGE_THRESHOLD) return 'support';
+
+  const availableDemandFraction =
+    input.marketCustomers > 0 ? clamp((input.marketCustomers - input.customers) / input.marketCustomers, 0, 1) : 0;
+  if (availableDemandFraction < DEMAND_EXHAUSTED_FRACTION_THRESHOLD) return 'demand';
+
+  return 'leads';
+}
+
+/** The state slice `weeklyReportFor` needs — `WeeklyStatsInput` plus what the customer-flow preview and bottleneck verdict read. */
+export interface WeeklyReportInput extends WeeklyStatsInput {
+  productQuality: number;
+  rivals: Rival[];
+  marketCustomers: number;
+  trend: Trend;
+}
+
+export interface WeeklyReport {
+  stats: WeeklyStats;
+  customerFlow: CustomerFlowCauses;
+  bottleneck: Bottleneck;
+  trendFactors: TrendFactors;
+}
+
+/**
+ * The legibility layer: this week's headline stats (`weeklyStatsFor`), a
+ * preview of the customer-pipeline flow decomposed into causes, the live
+ * trend's effect on this focus, and the single bottleneck verdict — all
+ * derived from the state's *current* stock values, the same way
+ * `weeklyStatsFor` previews burn/revenue from current values rather than
+ * projecting this week's dev effort or morale drift forward. (The real,
+ * exact per-tick numbers used for the digest entry come from
+ * `customerFlowCausesFor` inside `advanceMarket` in engine.ts, which feeds
+ * this same function the actual post-effort quality and committed
+ * headcount; this preview is what the UI shows *before* that tick runs.)
+ */
+export function weeklyReportFor(input: WeeklyReportInput): WeeklyReport {
+  const stats = weeklyStatsFor(input);
+  const rivalAvgQuality =
+    input.rivals.length > 0 ? input.rivals.reduce((sum, r) => sum + r.productQuality, 0) / input.rivals.length : 0;
+  const trendFactors = trendFactorsFor(input.focus, input.trend, input.era);
+
+  const leads = leadsFor(input.headcount.sales, input.hype * trendFactors.demand);
+  const conversion = conversionRateFor(input.productQuality, rivalAvgQuality);
+  const availableDemand = Math.max(0, input.marketCustomers - input.customers);
+  const gained = customersGainedFor(leads, conversion, availableDemand);
+
+  const customerFlow = customerFlowCausesFor(
+    input.customers,
+    gained,
+    input.productQuality,
+    rivalAvgQuality,
+    input.headcount.support,
+    input.focus,
+    input.trend,
+    input.era,
+  );
+
+  const bottleneck = bottleneckFor({
+    quality: input.productQuality,
+    rivalAvgQuality,
+    support: input.headcount.support,
+    customers: input.customers,
+    marketCustomers: input.marketCustomers,
+  });
+
+  return { stats, customerFlow, bottleneck, trendFactors };
 }

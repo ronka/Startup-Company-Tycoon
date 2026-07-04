@@ -6,27 +6,42 @@
  *   pnpm sim                    # passive bot, default seed
  *   pnpm sim balanced           # balanced bot, default seed
  *   pnpm sim aggressive 777     # aggressive bot, explicit seed
- *   pnpm sim grower 100         # grower bot, chases an IPO exit
+ *   pnpm sim grower 100         # IPO-rush bot: raises every round on cooldown, sales-heavy — Task 9 IPO-reachability bot
  *   pnpm sim complacent 100     # grows early, then coasts — dies in Reckoning (see Task 5)
+ *   pnpm sim salesheavy 100     # 30 sales / 3 devs — boom-then-bleed acceptance bot (Task 1)
+ *   pnpm sim devheavy 100       # 30 devs / 1 sales — quality with no lead-gen to sell it — Task 9 matrix bot
+ *   pnpm sim coregrinder 100    # all-in on core focus + devs — Task 2 quality/churn acceptance bot
+ *   pnpm sim hardware 100       # switches to hardware focus week 0 — Task 2 ARPC/burn acceptance bot
+ *   pnpm sim hypechaser 100     # switches to hype focus week 0 — Task 3 trend-wave acceptance bot
  *   pnpm sim 12345               # passive bot, explicit seed (legacy form)
+ *
+ * Task 9 acceptance matrix: balanced / salesheavy / devheavy / coregrinder /
+ * hypechaser / hardware, each run across several seeds. `balanced`,
+ * `coregrinder`, `hardware`, and `hypechaser` all cap their ongoing sales
+ * and/or dev hiring (see each bot's own comment) — uncapped versions of these
+ * loops were the actual root cause of "every strategy eventually goes
+ * bankrupt from pure payroll bloat once its market saturates," not an
+ * underlying engine imbalance (see plan notes for the numbers).
  */
 
-import {
-  cLevelPayroll,
-  cLevelPerkMultiplierFor,
-  hasRoundsAvailable,
-  revenueFor,
-  runwayWeeks,
-  salesFactorFor,
-  valuationFor,
-  weeklyBurnFor,
-} from '../src/game/balance';
+import { CUSTOMERS_PER_SUPPORT, hasRoundsAvailable, runwayWeeks, weeklyStatsFor } from '../src/game/balance';
 import { newGame, reduce, tick } from '../src/game/engine';
 import { formatMoney } from '../src/lib/format';
 import { isIpoEligible } from '../src/game/score';
 import type { GameState } from '../src/game/types';
 
-const STRATEGIES = ['passive', 'balanced', 'aggressive', 'grower', 'complacent'] as const;
+const STRATEGIES = [
+  'passive',
+  'balanced',
+  'aggressive',
+  'grower',
+  'complacent',
+  'salesheavy',
+  'devheavy',
+  'coregrinder',
+  'hardware',
+  'hypechaser',
+] as const;
 type Strategy = (typeof STRATEGIES)[number];
 
 function isStrategy(s: string): s is Strategy {
@@ -40,20 +55,11 @@ const seed = Number(arg2 && isStrategy(arg2) ? (arg3 ?? 12345) : (arg2 ?? 12345)
 const MAX_WEEKS = 1000;
 
 function currentBurn(state: GameState): number {
-  return weeklyBurnFor(state.headcount, {
-    execPayroll: cLevelPayroll(state.cLevels),
-    fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
-  });
+  return weeklyStatsFor(state).burn;
 }
 
 function currentRevenue(state: GameState): number {
-  const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
-  return revenueFor(
-    state.productQuality,
-    state.marketShare,
-    effectiveHype,
-    salesFactorFor(state.headcount.sales),
-  );
+  return weeklyStatsFor(state).revenue;
 }
 
 /**
@@ -94,6 +100,128 @@ function applyStrategy(strategy: Strategy, state: GameState): GameState {
     s = reduce(s, { type: 'RAISE_ROUND' });
   }
 
+  if (strategy === 'salesheavy') {
+    // 30 sales / 3 devs (devs never touched — stays at the starting 3): a
+    // huge lead-gen engine with no capacity to back it up on quality or
+    // support. Should spike revenue fast off pure lead volume, then bleed
+    // customers once churn (quality gap + thin support coverage) catches up
+    // — the boom-then-bleed acceptance case for Task 1's customer pipeline.
+    if (s.week === 0) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 29 });
+    }
+    return s;
+  }
+
+  if (strategy === 'devheavy') {
+    // 15 devs / 1 sales (sales never touched — stays at the starting 1):
+    // the exact same dev investment as `coregrinder`'s cap, minus
+    // `coregrinder`'s sales investment — a deliberately sharp, controlled
+    // contrast. `coregrinder` survives indefinitely on that quality; this
+    // bot dies within ~10 weeks on every seed, because quality alone is not
+    // a revenue strategy in the new economy — conversion is quality-gated,
+    // but `gained = leads x conversion`, and leads come from sales, not
+    // devs, so 1 lone sales rep can never generate enough leads to escape
+    // the game's starting burn/revenue deficit, regardless of how much
+    // quality backs it up.
+    if (s.week === 0) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 12 });
+    }
+    return s;
+  }
+
+  if (strategy === 'coregrinder') {
+    // All-in on product, default core focus never touched: heavy dev
+    // investment and support kept topped up. Should end the run with the
+    // highest quality and lowest churn rate of the matrix (Task 2's core
+    // profile: quality growth x1.25, churn x0.85). Devs and sales are each
+    // capped (15 / 25) — uncapped, this bot's own dev-hiring loop ran away
+    // to 25+ devs within ~40 weeks (quality's diminishing-returns curve means
+    // dev #20 costs exactly as much as dev #1 but does a fraction of the
+    // work) and bankrupted the run on pure payroll by week ~35, regardless of
+    // any trend or rival — a bot-tuning bug, not an engine one (see plan
+    // notes).
+    const COREGRINDER_MAX_DEVS = 15;
+    const COREGRINDER_MAX_SALES = 25;
+    const neededCoreSupport = Math.ceil(s.customers / CUSTOMERS_PER_SUPPORT);
+    if (s.pendingHeadcount.support < neededCoreSupport && cashRunwayIfNoRevenue > 4) {
+      s = reduce(s, {
+        type: 'SET_PENDING_HIRES',
+        role: 'support',
+        delta: neededCoreSupport - s.pendingHeadcount.support,
+      });
+    }
+    if (burnRatio < 1.5 && cashRunwayIfNoRevenue > 8) {
+      if (s.pendingHeadcount.devs < COREGRINDER_MAX_DEVS) {
+        s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 1 });
+      }
+      if (s.pendingHeadcount.sales < COREGRINDER_MAX_SALES) {
+        s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 1 });
+      }
+    }
+    return s;
+  }
+
+  if (strategy === 'hardware') {
+    // Switches focus to hardware on week 0 and never looks back: higher ARPC
+    // and lower churn (lock-in), paid for with a fixed-burn multiplier and
+    // per-customer COGS (see FOCUS_PROFILES.hardware) — should show the
+    // highest revenue per customer and highest burn of the matrix. Devs/sales
+    // capped (8 / 30) for the same reason as coregrinder's caps above.
+    const HARDWARE_MAX_DEVS = 8;
+    const HARDWARE_MAX_SALES = 30;
+    if (s.week === 0) {
+      s = reduce(s, { type: 'SET_FOCUS', focus: 'hardware' });
+    }
+    const neededHardwareSupport = Math.ceil(s.customers / CUSTOMERS_PER_SUPPORT);
+    if (s.pendingHeadcount.support < neededHardwareSupport && cashRunwayIfNoRevenue > 4) {
+      s = reduce(s, {
+        type: 'SET_PENDING_HIRES',
+        role: 'support',
+        delta: neededHardwareSupport - s.pendingHeadcount.support,
+      });
+    }
+    if (burnRatio < 1.3 && cashRunwayIfNoRevenue > 8) {
+      if (s.pendingHeadcount.devs < HARDWARE_MAX_DEVS) {
+        s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 1 });
+      }
+      if (s.pendingHeadcount.sales < HARDWARE_MAX_SALES) {
+        s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 1 });
+      }
+    }
+    return s;
+  }
+
+  if (strategy === 'hypechaser') {
+    // Switches to hype focus on week 0 and pours headcount into sales to
+    // catch the demand/hype spike — hype rides whichever trend wave is
+    // currently live at half strength (see `trendFactorsFor`), regardless of
+    // which of AI/hardware/crypto it is. Devs stay untouched (hype's quality
+    // growth multiplier is the matrix's worst, 0.6x), so quality trails the
+    // rival average almost immediately, which also arms the focus's
+    // behind-on-quality churn penalty. Support is kept just topped up. Sales
+    // capped at 40 for the same reason as coregrinder/hardware's caps.
+    // Should win big riding a wave through peak on a no-crash seed, and lose
+    // badly when that wave crashes (demand/hype collapse + churn spike,
+    // compounding with the behind-on-quality penalty) — Task 3's acceptance
+    // case for the trend system.
+    const HYPECHASER_MAX_SALES = 40;
+    if (s.week === 0) {
+      s = reduce(s, { type: 'SET_FOCUS', focus: 'hype' });
+    }
+    const neededHypeSupport = Math.ceil(s.customers / CUSTOMERS_PER_SUPPORT);
+    if (s.pendingHeadcount.support < neededHypeSupport && cashRunwayIfNoRevenue > 4) {
+      s = reduce(s, {
+        type: 'SET_PENDING_HIRES',
+        role: 'support',
+        delta: neededHypeSupport - s.pendingHeadcount.support,
+      });
+    }
+    if (burnRatio < 1.5 && cashRunwayIfNoRevenue > 6 && s.pendingHeadcount.sales < HYPECHASER_MAX_SALES) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 2 });
+    }
+    return s;
+  }
+
   if (strategy === 'aggressive') {
     // Blow most of the seed cash on one all-in founding-team burst instead
     // of hiring incrementally — burn jumps immediately, well ahead of
@@ -108,45 +236,95 @@ function applyStrategy(strategy: Strategy, state: GameState): GameState {
   }
 
   if (strategy === 'grower') {
-    // Raises every round as soon as runway allows it (rather than waiting
-    // for distress) so the run reaches Growth stage early, then keeps
-    // reinvesting in both devs (product quality) and sales (revenue
-    // multiplier) — the combination the IPO revenue bar actually needs.
-    if (runway < 20 && hasRoundsAvailable(s.roundsRaised)) {
+    // IPO-rush bot (Task 9's acceptance demo that "IPO remains reachable in
+    // Boom for a well-played run"): attempts every round the moment its
+    // cooldown clears (RAISE_ROUND self-gates on `canRaiseRound`, so this is
+    // safe to call every week) rather than waiting for distress, reaching
+    // Growth stage by ~week 20 instead of whenever runway happens to get
+    // tight. IPO needs ~6,000 customers (the $150k/wk revenue bar at base
+    // ARPC) reached *while Boom's IPO window is still open* (Boom starts
+    // week 25-35, per `BOOM_START_WEEK_MIN/MAX`) — so sales gets almost all
+    // of the hiring budget from week 0, with just enough devs to hold
+    // quality near parity (avoiding the conversion/churn penalty) and support
+    // kept topped up. Reaches IPO around week 35-45 across seeds.
+    if (hasRoundsAvailable(s.roundsRaised)) {
       s = reduce(s, { type: 'RAISE_ROUND' });
     }
-    const growerBurnRatio = 2.5;
-    const growerCashBufferWeeks = 8;
-    if (burnRatio < growerBurnRatio && cashRunwayIfNoRevenue > growerCashBufferWeeks) {
-      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 2 });
-      if (s.week % 4 === 0) {
-        s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 1 });
-      }
+    const neededGrowerSupport = Math.ceil(s.customers / CUSTOMERS_PER_SUPPORT);
+    if (s.pendingHeadcount.support < neededGrowerSupport) {
+      s = reduce(s, {
+        type: 'SET_PENDING_HIRES',
+        role: 'support',
+        delta: neededGrowerSupport - s.pendingHeadcount.support,
+      });
+    }
+    const GROWER_TARGET_DEVS = 6;
+    if (s.pendingHeadcount.devs < GROWER_TARGET_DEVS && cashRunwayIfNoRevenue > 6) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 1 });
+    }
+    const GROWER_SALES_HIRE_RATE = 3;
+    const GROWER_CASH_SAFETY_WEEKS = 4;
+    if (cashRunwayIfNoRevenue > GROWER_CASH_SAFETY_WEEKS) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: GROWER_SALES_HIRE_RATE });
     }
     return s;
   }
 
   const targetBurnRatio = 1.3;
-  const cashBufferWeeks = 10;
+  const cashBufferWeeks = 6;
+  // Quality clears the conversion/churn ceiling within a handful of weeks at
+  // any reasonable dev count (the quality-ratio curve is clamped — see
+  // `qualityRatioFactor`/`qualityChurnFactor`), so piling on devs forever past
+  // that point is pure burn with zero further payoff. Balanced caps devs low
+  // and puts the rest of its budget toward sales (the actual growth lever)
+  // and support (which keeps churn off the ceiling).
+  const MAX_BALANCED_DEVS = 6;
+  // Sales needs a ceiling too: once the addressable market is mostly
+  // captured, `customersGainedFor` clamps to the shrinking `availableDemand`
+  // regardless of headcount, so every sales hire past that point is pure
+  // payroll waste. Uncapped, this was the actual cause of `balanced`
+  // eventually going bankrupt (week ~300, seed 100) despite 70-85% market
+  // share and $450-500K/wk revenue — 199 sales reps at $2,000/wk each is
+  // ~$400K/wk of burn buying zero incremental customers. 50 comfortably
+  // covers even a fully-grown, uncontested market at this game's scale.
+  const MAX_BALANCED_SALES = 50;
 
+  // Support is topped up unconditionally (whenever affordable) rather than
+  // gated behind the growth checks below — thin coverage is the fastest way
+  // to bleed customers regardless of quality, so protecting it comes first.
+  const neededSupport = Math.ceil(s.customers / CUSTOMERS_PER_SUPPORT);
+  if (s.pendingHeadcount.support < neededSupport && cashRunwayIfNoRevenue > 4) {
+    s = reduce(s, {
+      type: 'SET_PENDING_HIRES',
+      role: 'support',
+      delta: neededSupport - s.pendingHeadcount.support,
+    });
+  }
+
+  // Balanced invests in growth (devs, capped once quality clears the rival
+  // average, and sales — the actual lead-gen lever) only once the burn ratio
+  // and cash buffer say it can afford to.
   if (burnRatio < targetBurnRatio && cashRunwayIfNoRevenue > cashBufferWeeks) {
-    s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 1 });
+    if (s.pendingHeadcount.devs < MAX_BALANCED_DEVS) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'devs', delta: 1 });
+    }
+    if (s.pendingHeadcount.sales < MAX_BALANCED_SALES) {
+      s = reduce(s, { type: 'SET_PENDING_HIRES', role: 'sales', delta: 1 });
+    }
   }
 
   return s;
 }
 
 function row(state: GameState): string {
-  const burn = currentBurn(state);
-  const revenue = currentRevenue(state);
-  const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
-  const valuation = valuationFor(revenue, effectiveHype, state.era);
+  const { burn, revenue, valuation } = weeklyStatsFor(state);
   return [
     String(state.week).padStart(4),
     formatMoney(state.cash).padStart(12),
     formatMoney(burn).padStart(9),
     formatMoney(revenue).padStart(9),
     formatMoney(valuation).padStart(10),
+    Math.round(state.customers).toString().padStart(9),
     state.era.padStart(10),
   ].join(' | ');
 }
@@ -155,8 +333,8 @@ let state = newGame(seed);
 let peakRevenue = 0;
 
 console.log(`Startup Tycoon — headless sim (strategy: ${strategy}, seed ${seed})`);
-console.log('week |         cash |      burn |   revenue |  valuation |       era');
-console.log('-----+--------------+-----------+-----------+------------+-----------');
+console.log('week |         cash |      burn |   revenue |  valuation | customers |       era');
+console.log('-----+--------------+-----------+-----------+------------+-----------+-----------');
 
 while (!state.gameOver && state.week < MAX_WEEKS) {
   console.log(row(state));
@@ -178,7 +356,7 @@ while (!state.gameOver && state.week < MAX_WEEKS) {
 }
 console.log(row(state));
 peakRevenue = Math.max(peakRevenue, currentRevenue(state));
-console.log('-----+--------------+-----------+-----------+------------+-----------');
+console.log('-----+--------------+-----------+-----------+------------+-----------+-----------');
 
 const outcome = state.gameOver ?? 'timeout';
 console.log(

@@ -5,7 +5,10 @@ import { ProgressBar } from '@/components/game/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { Era } from '@/game/events/types';
+import type { FocusId } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCount } from '@/lib/format';
+import { FOCUS_LABEL, TREND_LABEL, TREND_PHASE_LABEL, trendAlignmentFor } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
 
 const HYPE_MIN = 0.5;
@@ -30,8 +33,22 @@ export default function MarketScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">Market</ThemedText>
 
+        <View style={styles.trendSection}>
+          <View style={styles.trendHeader}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Trend
+            </ThemedText>
+            <ThemedText type="smallBold">
+              {TREND_LABEL[state.trend.id]} · {TREND_PHASE_LABEL[state.trend.phase]}
+            </ThemedText>
+          </View>
+          <ThemedText type="small" themeColor="textSecondary">
+            {state.trend.weeksInPhase} wk in phase · {trendAlignmentFor(state.focus, state.trend)}
+          </ThemedText>
+        </View>
+
         <View style={styles.shareSection}>
-          <ShareRow label="You" percent={state.marketShare * 100} color="#3c87f7" />
+          <ShareRow label="You" percent={state.marketShare * 100} color="#3c87f7" customers={state.customers} />
           {state.rivals.map((rival, index) => (
             <ShareRow
               key={rival.name}
@@ -39,6 +56,8 @@ export default function MarketScreen() {
               percent={rival.marketShare * 100}
               color={RIVAL_COLORS[index % RIVAL_COLORS.length]}
               edge={rival.productQuality - state.productQuality}
+              focus={rival.focus}
+              customers={Math.round(rival.marketShare * state.marketCustomers)}
             />
           ))}
           <ShareRow label="Rest of market" percent={restOfMarket * 100} color="#80808080" />
@@ -83,12 +102,18 @@ function ShareRow({
   percent,
   color,
   edge,
+  focus,
+  customers,
 }: {
   label: string;
   percent: number;
   color: string;
   /** Your product quality minus this rival's — positive means you have the edge. */
   edge?: number;
+  /** Rival's strategic bet — renders as a badge next to the label. Omitted for you/rest-of-market. */
+  focus?: FocusId;
+  /** Implied customer count: exact for you, `share × marketCustomers` (UI-only) for rivals. */
+  customers?: number;
 }) {
   const edgeLabel =
     edge === undefined
@@ -99,7 +124,14 @@ function ShareRow({
   return (
     <View style={styles.shareRow}>
       <View style={styles.shareLabelRow}>
-        <ThemedText type="small">{label}</ThemedText>
+        <View style={styles.shareLabelLeft}>
+          <ThemedText type="small">{label}</ThemedText>
+          {focus ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.focusBadge}>
+              {FOCUS_LABEL[focus]}
+            </ThemedText>
+          ) : null}
+        </View>
         <View style={styles.shareLabelRight}>
           {edgeLabel ? (
             <ThemedText type="small" themeColor={edge! >= 0 ? 'success' : 'danger'}>
@@ -112,6 +144,11 @@ function ShareRow({
         </View>
       </View>
       <ProgressBar percent={percent} color={color} />
+      {customers !== undefined ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {formatCount(customers)} customers
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -126,6 +163,13 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.six,
     gap: Spacing.four,
   },
+  trendSection: {
+    gap: Spacing.half,
+  },
+  trendHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   shareSection: {
     gap: Spacing.three,
   },
@@ -136,9 +180,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  shareLabelLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
   shareLabelRight: {
     flexDirection: 'row',
     gap: Spacing.two,
+  },
+  focusBadge: {
+    borderWidth: 1,
+    borderColor: '#80808080',
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 1,
   },
   hypeSection: {
     gap: Spacing.two,

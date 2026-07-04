@@ -82,11 +82,51 @@ export interface CLevelSlot {
 
 export type CLevels = Record<CLevelRole, CLevelSlot>;
 
-/** A named competitor. Grows by script (Task 7), later era events (Task 8) may push it around. */
+/**
+ * A named competitor. Grows by script (Task 7), later era events (Task 8) may
+ * push it around. `focus` is its own strategic bet — distinct from the other
+ * rival's at generation — that couples its weekly growth and share to the
+ * live tech trend wave the same way the player's does (see `trendFactorsFor`
+ * in balance.ts); a desperation pivot can switch it later (see
+ * `applyDesperationPivots` in rivals.ts).
+ */
 export interface Rival {
   name: string;
   productQuality: number;
   marketShare: number;
+  focus: FocusId;
+}
+
+/**
+ * The company's strategic bet: reshapes quality growth, ARPC, churn, and
+ * hype gain (see `FOCUS_PROFILES` in balance.ts), with a costly transition
+ * drag when switching. `ai` and `hardware` align with the matching tech
+ * trend wave (Task 3); `hype` counts as half-aligned with whatever trend is
+ * hot; `core` gets a flight-to-quality bonus when a trend crashes.
+ */
+export const FOCUS_IDS = ['core', 'ai', 'hardware', 'hype'] as const;
+export type FocusId = (typeof FOCUS_IDS)[number];
+
+/**
+ * The market's rotating hot trend. `'crypto'` matches no focus's `trendTag`
+ * — a pure-noise wave only the `hype` focus can ride (at half strength; see
+ * `trendFactorsFor` in balance.ts).
+ */
+export const TREND_IDS = ['ai', 'hardware', 'crypto'] as const;
+export type TrendId = (typeof TREND_IDS)[number];
+
+/** Phase machine driving a trend's rise and fall — see `advanceTrend` in trends.ts. */
+export const TREND_PHASES = ['quiet', 'rising', 'peak', 'crash'] as const;
+export type TrendPhase = (typeof TREND_PHASES)[number];
+
+/** The market's current tech wave: which one, what stage it's at, and how long it's been there. */
+export interface Trend {
+  id: TrendId;
+  phase: TrendPhase;
+  /** Weeks spent in the current phase so far. */
+  weeksInPhase: number;
+  /** Weeks this phase lasts before transitioning — reseeded on every phase change. */
+  phaseDuration: number;
 }
 
 /** The three funding rounds a run can raise, in order. */
@@ -99,8 +139,6 @@ export type Stage = (typeof STAGE_ORDER)[number];
 
 /** The entire serializable game model. */
 export interface GameState {
-  /** Save schema version, for future migrations. */
-  version: number;
   /** The seed the run was created with (for display / reproduction). */
   createdWithSeed: number;
   rng: RngState;
@@ -126,8 +164,18 @@ export interface GameState {
   productQuality: number;
   /** Neutral 1.0 for now; timeline events (Task 6+) push this around. */
   hype: number;
-  /** Your share of the market, 0–1. Shifts each tick based on the quality gap with each rival. */
+  /** Your installed customer base. Grows from leads × conversion, shrinks from churn. Revenue = customers × ARPC. */
+  customers: number;
+  /** Total addressable customer pool. Grows weekly (era-scaled); rivals' implied customer counts are share × this, UI-only. */
+  marketCustomers: number;
+  /** Your share of the market, 0–1. Derived each tick as `customers / marketCustomers`, not shifted directly. */
   marketShare: number;
+  /** The active strategic bet; starts `'core'`. */
+  focus: FocusId;
+  /** Week `focus` was last switched — gates the `FOCUS_TRANSITION_WEEKS` drag. 0 at game start (no drag on the initial 'core' focus). */
+  focusChangedWeek: number;
+  /** The market's current tech wave — rotates id and cycles phases each tick (see `advanceTrend` in trends.ts). */
+  trend: Trend;
   /** Rolling valuation-per-week series, capped for the HQ sparkline. */
   valuationHistory: number[];
   /** Exactly 2 named competitors, each with their own quality and market share. */
@@ -187,4 +235,5 @@ export type GameAction =
   | { type: 'FIRE_CLEVEL'; role: CLevelRole }
   | { type: 'RAISE_ROUND' }
   | { type: 'ANSWER_EVENT'; choiceIndex: number }
-  | { type: 'GO_PUBLIC' };
+  | { type: 'GO_PUBLIC' }
+  | { type: 'SET_FOCUS'; focus: FocusId };

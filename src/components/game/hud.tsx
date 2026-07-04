@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
-import { formatMoney, formatWeeks } from '@/lib/format';
+import { formatCount, formatMoney, formatWeeks } from '@/lib/format';
 import { useGame } from '@/state/game-store';
 
 /**
@@ -60,6 +60,18 @@ export function Hud() {
         <AnimatedNumber
           value={runway}
           format={formatWeeks}
+          goodDirection="up"
+          type="smallBold"
+          themeColor={insolvent ? 'danger' : undefined}
+        />
+      </View>
+      <View style={styles.stat}>
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
+          Customers
+        </ThemedText>
+        <AnimatedNumber
+          value={state.customers}
+          format={formatCount}
           goodDirection="up"
           type="smallBold"
           themeColor={insolvent ? 'danger' : undefined}

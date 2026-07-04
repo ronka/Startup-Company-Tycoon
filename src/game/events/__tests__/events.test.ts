@@ -42,10 +42,11 @@ describe('draw cadence in play', () => {
     for (let i = 0; i < 60 && newsWeeks.length < 6; i++) {
       const before = s.newsLog.length;
       s = tickAutoAnswer(s);
-      // Weekly-digest entries (kind: 'digest') also append to newsLog on
-      // ticks with no card draw; isolate the card entry to test cadence.
+      // Weekly-digest entries (kind: 'digest') and trend phase changes
+      // (kind: 'trend') also append to newsLog on ticks with no card draw;
+      // isolate the actual card entry to test cadence.
       const added = s.newsLog.slice(0, s.newsLog.length - before);
-      const cardEntry = added.find((entry) => entry.kind !== 'digest');
+      const cardEntry = added.find((entry) => entry.kind !== 'digest' && entry.kind !== 'trend');
       if (cardEntry) newsWeeks.push(cardEntry.week);
     }
     expect(newsWeeks.length).toBeGreaterThanOrEqual(3);

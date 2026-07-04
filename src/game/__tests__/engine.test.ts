@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ARPC,
   BANKRUPTCY_FUSE_WEEKS,
   BOOM_START_WEEK_MAX,
   BOOM_START_WEEK_MIN,
@@ -22,7 +23,6 @@ import {
   MORALE_LEVER_WEEKLY_COST,
   RECKONING_START_WEEK_MAX,
   RECKONING_START_WEEK_MIN,
-  REVENUE_PER_QUALITY_SHARE,
   STARTING_CASH,
   STARTING_HEADCOUNT,
   STARTING_HYPE,
@@ -30,7 +30,7 @@ import {
   STARTING_MORALE,
   VALUATION_HISTORY_CAP,
   WEEKLY_SALARY,
-  clamp,
+  bottleneckFor,
   devEffort,
   hypeAfterTick,
   moraleAfterTick,
@@ -39,9 +39,6 @@ import {
   qualityAfterTick,
   revenueFor,
   roundTermsFor,
-  salesFactorFor,
-  shareShiftFor,
-  supportProtectionFactor,
   valuationFor,
   weeklyBurnFor,
 } from '../balance';
@@ -108,8 +105,9 @@ describe('product quality', () => {
 });
 
 describe('revenue + valuation formulas', () => {
-  it('revenueFor matches quality × marketShare × hype × salesFactor × the revenue scalar exactly', () => {
-    expect(revenueFor(1000, 0.2, 1.5, 1.2)).toBe(1000 * 0.2 * 1.5 * 1.2 * REVENUE_PER_QUALITY_SHARE);
+  it('revenueFor matches customers × ARPC exactly, with an optional focus multiplier', () => {
+    expect(revenueFor(1000)).toBe(1000 * ARPC);
+    expect(revenueFor(1000, 1.1)).toBe(1000 * ARPC * 1.1);
   });
 
   it('valuationFor matches revenue × industryMultiple × hype exactly', () => {
@@ -174,17 +172,9 @@ describe('tick', () => {
   it('deducts burn net of that week\'s revenue and advances the clock', () => {
     const s0 = newGame(7);
     const burn = weeklyBurnFor(s0.headcount);
-    const quality = qualityAfterTick(s0.productQuality, s0.headcount.devs, s0.morale);
-
-    // tick() shifts market share against each rival before computing revenue.
-    const protection = supportProtectionFactor(s0.headcount.support);
-    const shareDelta = s0.rivals.reduce((sum, rival) => {
-      const shift = shareShiftFor(quality, rival.productQuality);
-      return sum + (shift < 0 ? shift * protection : shift);
-    }, 0);
-    const marketShare = clamp(s0.marketShare + shareDelta, 0, 1);
-
-    const revenue = revenueFor(quality, marketShare, s0.hype, salesFactorFor(s0.headcount.sales));
+    // Revenue is billed against the customer base held at the *start* of the
+    // week — the pipeline's gains/churn this tick affect next week's bill, not this one.
+    const revenue = revenueFor(s0.customers);
     const s1 = tick(s0);
     expect(s1.week).toBe(1);
     expect(s1.cash).toBe(STARTING_CASH - burn + revenue);
@@ -201,21 +191,35 @@ describe('tickMany (fast-forward)', () => {
     expect(a).toEqual(b);
   });
 
-  it('matches manual step-by-step ticking, stopping the instant a week is notable (or maxWeeks runs out)', () => {
+  it('matches manual step-by-step ticking, stopping the instant a week is notable, the bottleneck changes, or maxWeeks runs out', () => {
     const s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1000 };
+    const bottleneckOf = (s: GameState) =>
+      bottleneckFor({
+        quality: s.productQuality,
+        rivalAvgQuality: s.rivals.reduce((sum, r) => sum + r.productQuality, 0) / s.rivals.length,
+        support: s.headcount.support,
+        customers: s.customers,
+        marketCustomers: s.marketCustomers,
+      });
     let manual = s0;
     for (let i = 0; i < 5; i++) {
       if (manual.gameOver || manual.pendingEvent) break;
+      const bottleneckBefore = bottleneckOf(manual);
       const next = tick(manual);
       const weekEntries = next.newsLog.filter((entry) => entry.week === next.week);
       manual = next;
       if (manual.gameOver || manual.pendingEvent || isNotableWeek(weekEntries)) break;
+      if (bottleneckOf(manual) !== bottleneckBefore) break;
     }
     expect(tickMany(s0, 5)).toEqual(manual);
   });
 
   it('stops the moment a decision card is drawn, without answering it', () => {
-    const s0: GameState = { ...newGame(11), cash: 50_000_000, weeksUntilNextEvent: 1 };
+    // Seed 2 lands a decision card (not a news card) on the very first draw
+    // under the current RNG stream (Task 3's trend phase machine and Task 4's
+    // per-rival focus assignment both added draws ahead of this one in
+    // `newGame`/`tick`, shifting which seeds draw what).
+    const s0: GameState = { ...newGame(2), cash: 50_000_000, weeksUntilNextEvent: 1 };
     const result = tickMany(s0, 10);
     expect(result.pendingEvent).not.toBeNull();
     expect(result.week).toBeLessThan(10);
@@ -285,40 +289,32 @@ describe('weekly digest (wired into tick)', () => {
 });
 
 describe('hiring feedback loop', () => {
-  it('hiring 2 more devs measurably changes weekly revenue within 3 ticks', () => {
+  it('having devs at all (vs. none) measurably grows the customer base within 3 ticks (quality gates conversion & churn)', () => {
     // Drain the deck so a decision card can't freeze one branch and not the
     // other, and give both branches generous cash so neither goes bankrupt
-    // mid-comparison.
+    // mid-comparison. Compares zero devs (quality stays pinned near zero, so
+    // the quality-ratio curve sits at its conversion floor / churn ceiling)
+    // against the starting headcount (quality quickly clears the rival
+    // average) — a robust crossing regardless of exactly how fast quality
+    // compounds beyond that.
     const base: GameState = {
       ...newGame(11),
       cash: 5_000_000,
       drawnEventIds: SCRAPPY_DECK.map((c) => c.id),
     };
-    const baseline = tickN(base, 3);
-
-    const withMoreDevs: GameState = {
+    const noDevs: GameState = {
       ...base,
-      headcount: { ...base.headcount, devs: base.headcount.devs + 2 },
-      pendingHeadcount: { ...base.pendingHeadcount, devs: base.pendingHeadcount.devs + 2 },
+      headcount: { ...base.headcount, devs: 0 },
+      pendingHeadcount: { ...base.pendingHeadcount, devs: 0 },
     };
-    const boosted = tickN(withMoreDevs, 3);
+    const withDevs = tickN(base, 3);
+    const without = tickN(noDevs, 3);
 
-    const baselineRevenue = revenueFor(
-      baseline.productQuality,
-      baseline.marketShare,
-      baseline.hype,
-      salesFactorFor(baseline.headcount.sales),
-    );
-    const boostedRevenue = revenueFor(
-      boosted.productQuality,
-      boosted.marketShare,
-      boosted.hype,
-      salesFactorFor(boosted.headcount.sales),
-    );
-
-    expect(boosted.productQuality).toBeGreaterThan(baseline.productQuality);
-    // A noticeable lift: at least 10% more weekly revenue within 3 ticks.
-    expect(boostedRevenue).toBeGreaterThan(baselineRevenue * 1.1);
+    expect(withDevs.productQuality).toBeGreaterThan(without.productQuality);
+    // Higher quality lifts conversion and dampens churn, so the with-devs
+    // branch ends up with more installed customers — and therefore more revenue.
+    expect(withDevs.customers).toBeGreaterThan(without.customers);
+    expect(revenueFor(withDevs.customers)).toBeGreaterThan(revenueFor(without.customers));
   });
 });
 
@@ -558,7 +554,7 @@ describe('GO_PUBLIC / IPO eligibility', () => {
   };
 
   it('ends the run with gameOver "ipo" and a nonzero score when eligible', () => {
-    let s: GameState = { ...newGame(20), ...eligible, founderEquity: 0.4, productQuality: 1_000_000 };
+    let s: GameState = { ...newGame(20), ...eligible, founderEquity: 0.4, productQuality: 1_000_000, customers: 100_000 };
     s = reduce(s, { type: 'GO_PUBLIC' });
     expect(s.gameOver).toBe('ipo');
     expect(s.finalScore).toBeGreaterThan(0);
@@ -590,11 +586,11 @@ describe('GO_PUBLIC / IPO eligibility', () => {
   });
 
   it('tracks weeksRevenueAboveIpoBar across ticks: resets the moment revenue dips below the bar', () => {
-    let s: GameState = { ...newGame(25), productQuality: 1_000_000, marketShare: 1 };
+    let s: GameState = { ...newGame(25), customers: 10_000 };
     s = tick(s);
     expect(s.weeksRevenueAboveIpoBar).toBeGreaterThan(0);
 
-    s = { ...s, productQuality: 0 };
+    s = { ...s, customers: 0 };
     s = tick(s);
     expect(s.weeksRevenueAboveIpoBar).toBe(0);
   });

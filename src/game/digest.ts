@@ -4,7 +4,7 @@
  * deterministic — no RNG involved, so it needs no seed.
  */
 
-import { BRIDGE_RUNWAY_THRESHOLD_WEEKS } from './balance';
+import { BRIDGE_RUNWAY_THRESHOLD_WEEKS, CustomerFlowCauses } from './balance';
 import { Era, NewsEntry } from './events/types';
 import { Rival } from './types';
 
@@ -145,6 +145,45 @@ export function buildDigestEntries(before: WeeklySnapshot, after: WeeklySnapshot
   }
 
   return entries;
+}
+
+/** Net weekly customer swing (gained minus total churned) small enough to skip a digest entry entirely — noise, not news. */
+export const CUSTOMER_FLOW_NOTABLE_THRESHOLD = 10;
+
+/**
+ * Names this week's dominant customer-flow outcome: a plain gain, or a loss
+ * attributed to whichever of the three `customerFlowCausesFor` buckets
+ * (quality, uncovered, trend crash) churned the most customers. A no-op
+ * (`null`) when the net swing is too small to be worth a line — see
+ * `CUSTOMER_FLOW_NOTABLE_THRESHOLD`.
+ */
+export function customerFlowDigestEntry(flow: CustomerFlowCauses, week: number): NewsEntry | null {
+  const totalChurned = flow.churnedQuality + flow.churnedUncovered + flow.churnedTrendCrash;
+  const net = flow.gained - totalChurned;
+  if (Math.abs(net) < CUSTOMER_FLOW_NOTABLE_THRESHOLD) return null;
+
+  if (net > 0) {
+    return {
+      week,
+      kind: 'digest',
+      title: `Gained ${Math.round(net)} customers this week`,
+      flavor: `Sales landed ${Math.round(flow.gained)} — outpacing churn.`,
+    };
+  }
+
+  const causes: { label: string; amount: number }[] = [
+    { label: 'quality is lagging the market', amount: flow.churnedQuality },
+    { label: 'support is stretched thin', amount: flow.churnedUncovered },
+    { label: 'the trend crash is biting', amount: flow.churnedTrendCrash },
+  ];
+  const dominant = causes.reduce((a, b) => (b.amount > a.amount ? b : a));
+
+  return {
+    week,
+    kind: 'digest',
+    title: `Lost ${Math.round(-net)} customers this week`,
+    flavor: `${dominant.label} — churn outpaced new signups.`,
+  };
 }
 
 /** The highest band crossed between two values, and which direction it was crossed in. */

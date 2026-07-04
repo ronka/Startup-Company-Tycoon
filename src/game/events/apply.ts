@@ -22,9 +22,17 @@ export function applyEventEffects(state: GameState, effects: EventEffects): Game
       case 'productQuality':
         next = { ...next, productQuality: Math.max(0, next.productQuality + delta.amount) };
         break;
-      case 'marketShare':
-        next = { ...next, marketShare: clamp(next.marketShare + delta.amount, 0, 1) };
+      case 'marketShare': {
+        // marketShare is derived (customers / marketCustomers — see Task 1),
+        // so a card's share delta is applied as the equivalent customer swing,
+        // with the display field recomputed immediately so it doesn't go
+        // stale until the next tick.
+        const customerDelta = delta.amount * next.marketCustomers;
+        const customers = clamp(next.customers + customerDelta, 0, next.marketCustomers);
+        const marketShare = next.marketCustomers > 0 ? clamp(customers / next.marketCustomers, 0, 1) : 0;
+        next = { ...next, customers, marketShare };
         break;
+      }
     }
   }
 

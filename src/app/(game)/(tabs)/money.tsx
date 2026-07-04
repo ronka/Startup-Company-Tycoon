@@ -10,7 +10,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import {
+  ARPC,
   BRIDGE_RUNWAY_THRESHOLD_WEEKS,
+  FOCUS_PROFILES,
   IPO_REVENUE_BAR,
   IPO_SUSTAIN_WEEKS,
   ROUND_COOLDOWN_WEEKS,
@@ -20,12 +22,13 @@ import {
   nextRound,
   roundTermsFor,
   runwayWeeks,
+  weeklyReportFor,
 } from '@/game/balance';
 import { isIpoEligible } from '@/game/score';
 import { RoundType, Stage } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
-import { formatMoney, formatWeeks } from '@/lib/format';
+import { formatCount, formatMoney, formatWeeks } from '@/lib/format';
 import { STAT_EXPLAINERS } from '@/lib/stat-explainers';
 import { useGame } from '@/state/game-store';
 
@@ -53,6 +56,8 @@ export default function MoneyScreen() {
 
   const { burn, revenue, valuation, runway, stake } = deriveWeeklyStats(state);
   const previous = previousState ? deriveWeeklyStats(previousState) : null;
+  const report = weeklyReportFor(state);
+  const focusArpcMultiplier = FOCUS_PROFILES[state.focus].arpcMultiplier;
   const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
   const cfoDilutionMultiplier = cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-roundTerms');
 
@@ -120,6 +125,32 @@ export default function MoneyScreen() {
             explainer={STAT_EXPLAINERS.valuation}
           />
         </View>
+
+        <ThemedView type="backgroundElement" style={styles.breakdownBlock}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Revenue breakdown
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {formatCount(state.customers)} customers × {formatMoney(ARPC)} × {focusArpcMultiplier.toFixed(1)} focus ={' '}
+            {formatMoney(report.stats.revenue)}
+          </ThemedText>
+          <View style={styles.flowRow}>
+            <ThemedText type="small" themeColor="success">
+              +{formatCount(Math.round(report.customerFlow.gained))} gained
+            </ThemedText>
+            <ThemedText type="small" themeColor="danger">
+              -{formatCount(Math.round(report.customerFlow.churnedQuality))} quality
+            </ThemedText>
+            <ThemedText type="small" themeColor="danger">
+              -{formatCount(Math.round(report.customerFlow.churnedUncovered))} uncovered
+            </ThemedText>
+            {report.customerFlow.churnedTrendCrash > 0 ? (
+              <ThemedText type="small" themeColor="danger">
+                -{formatCount(Math.round(report.customerFlow.churnedTrendCrash))} trend crash
+              </ThemedText>
+            ) : null}
+          </View>
+        </ThemedView>
 
         <View style={styles.equityBlock}>
           <View style={styles.equityHeader}>
@@ -265,6 +296,16 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three,
+  },
+  breakdownBlock: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  flowRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.three,

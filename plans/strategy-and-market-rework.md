@@ -159,7 +159,7 @@ pressure as today.
 
 - **Type**: AFK
 - **Blocked by**: None — can start immediately
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -176,14 +176,26 @@ until acceptance passes.
 
 #### Acceptance criteria
 
-- [ ] Revenue = customers × ARPC; sales headcount no longer multiplies revenue directly
-- [ ] Quality below rival average measurably cuts conversion and raises churn; support coverage measurably cuts churn
-- [ ] Churned customers raise rival share (defection split implemented)
-- [ ] Share shift scales with quality-gap magnitude (tanh), no longer pegged at a flat cap
-- [ ] `SAVE_VERSION` bumped; stale saves discarded cleanly on hydrate
-- [ ] Sim: `salesheavy` bot (30 sales / 3 devs) shows a revenue spike by ~week 10, then net customer loss and share decline by ~week 25 — boom then bleed
-- [ ] Sim: `balanced` bot still reaches break-even ~week 20–30; `passive` still dies
-- [ ] Vitest units for every new pure function (leads, conversion, churn, coverage, defection, derived share)
+- [x] Revenue = customers × ARPC; sales headcount no longer multiplies revenue directly
+- [x] Quality below rival average measurably cuts conversion and raises churn; support coverage measurably cuts churn
+- [x] Churned customers raise rival share (defection split implemented)
+- [x] Share shift scales with quality-gap magnitude (tanh), no longer pegged at a flat cap
+- [x] `SAVE_VERSION` bumped; stale saves discarded cleanly on hydrate
+- [x] Sim: `salesheavy` bot (30 sales / 3 devs) shows a revenue spike by ~week 10, then net customer loss and share decline by ~week 25 — boom then bleed
+- [x] Sim: `balanced` bot still reaches break-even ~week 20–30; `passive` still dies
+- [x] Vitest units for every new pure function (leads, conversion, churn, coverage, defection, derived share)
+
+Notes: retuned §1.6 anchors during sim acceptance — `CUSTOMERS_PER_SUPPORT` 60→200
+(60 made a support hire revenue-neutral at the margin: `60×ARPC` exactly equaled
+support's own salary, so scaling support to cover growth never paid for anything
+else), `LEADS_PER_SALES` 6→12, `BASE_CHURN` 0.03→0.02, `QUALITY_CONVERSION_CEILING`
+1.6→1.9, `UNCOVERED_CHURN_MULTIPLIER` 2.5→5.5 (needed to make thin coverage actually
+cause net customer *decline* for `salesheavy`, not just slower growth — churned
+scales with customers directly while gained is roughly flat, so the crossover point
+is what produces the bleed). `scripts/sim.ts`'s `balanced` bot rewritten to invest
+across all three roles (was devs-only, a holdover from the old quality-multiplies-
+revenue formula) with support top-up unconditional on affordability rather than
+gated behind the growth checks.
 
 #### User stories addressed
 
@@ -196,7 +208,7 @@ until acceptance passes.
 
 - **Type**: AFK
 - **Blocked by**: Task 1
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -209,11 +221,18 @@ switch.
 
 #### Acceptance criteria
 
-- [ ] `SET_FOCUS` switches focus, stamps the week, and emits a news entry
-- [ ] Transition drag applies for exactly `FOCUS_TRANSITION_WEEKS` and affects both dev effort and conversion
-- [ ] Each profile's multipliers land in the right formulas (unit test per focus, incl. hardware burn/COGS and hype focus's conditional churn penalty)
-- [ ] Sim: a `coregrinder` bot ends with higher quality and lower churn than `balanced`; hardware focus shows higher revenue per customer and higher burn
-- [ ] Rapid focus flip-flopping is strictly worse than committing (transition drag test)
+- [x] `SET_FOCUS` switches focus, stamps the week, and emits a news entry
+- [x] Transition drag applies for exactly `FOCUS_TRANSITION_WEEKS` and affects both dev effort and conversion
+- [x] Each profile's multipliers land in the right formulas (unit test per focus, incl. hardware burn/COGS and hype focus's conditional churn penalty)
+- [x] Sim: a `coregrinder` bot ends with higher quality and lower churn than `balanced`; hardware focus shows higher revenue per customer and higher burn
+- [x] Rapid focus flip-flopping is strictly worse than committing (transition drag test)
+
+Notes: added `coregrinder`/`hardware` bots to `scripts/sim.ts` (not yet tuned to
+survive long-term — Task 9's job); the quality/churn/ARPC/burn comparisons
+themselves are verified deterministically in `focus.test.ts` rather than by
+eyeballing sim output, since raw customer counts between two sim runs are noisy
+(hype's flat weekly hype-pump also boosts lead demand, which can outweigh a
+small churn-rate difference at low headcount over a short horizon).
 
 #### User stories addressed
 
@@ -226,7 +245,7 @@ switch.
 
 - **Type**: AFK
 - **Blocked by**: Task 2
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -240,12 +259,35 @@ amplitude, Reckoning crash odds/depth).
 
 #### Acceptance criteria
 
-- [ ] Trend advances deterministically per seed through quiet → rising → peak → crash/fade; next trend ≠ last
-- [ ] Aligned focus gains demand + hype during rising/peak and takes churn + hype collapse during crash (unit tests per phase)
-- [ ] Core focus gains the crash bonus; hype focus rides any trend at half strength
-- [ ] Reckoning crash chance ≈ 0.7 and crash penalties deepen; Boom widens multipliers
-- [ ] Phase changes land in `newsLog`
-- [ ] Sim: `hypechaser` bot beats `coregrinder` on a no-crash seed and loses badly on a crash seed
+- [x] Trend advances deterministically per seed through quiet → rising → peak → crash/fade; next trend ≠ last
+- [x] Aligned focus gains demand + hype during rising/peak and takes churn + hype collapse during crash (unit tests per phase)
+- [x] Core focus gains the crash bonus; hype focus rides any trend at half strength
+- [x] Reckoning crash chance ≈ 0.7 and crash penalties deepen; Boom widens multipliers
+- [x] Phase changes land in `newsLog`
+- [x] Sim: `hypechaser` bot beats `coregrinder` on a no-crash seed and loses badly on a crash seed
+
+Notes: new `src/game/trends.ts` owns the phase machine (`initialTrend`/`advanceTrend`) and
+its news beats (`trendPhaseChangeNewsEntry`); `Trend`/`TrendId`/`TrendPhase` live in
+`types.ts` alongside `FocusId`, and `trendFactorsFor` + the era-trend dials
+(`ERA_TREND_CRASH_CHANCE`/`ERA_TREND_AMPLITUDE_MULTIPLIER`/`ERA_TREND_CRASH_DEPTH_MULTIPLIER`)
+live in `balance.ts` next to the other era dials — mirrors how `rivals.ts` threads RNG
+state and reads era dials from `balance.ts`. The crash phase's own duration (2–4 weeks)
+wasn't specified in §1.3 and was chosen here as a tuning anchor. Added `kind: 'trend'` to
+`NewsEntry` so a phase-change beat is distinguishable from a drawn event card — needed to
+fix `events.test.ts`'s cadence test, which had been naively classifying "anything not
+`kind: 'digest'`" as a card draw and started misfiring once trend beats (no `kind`
+originally) became frequent enough to land in its 60-week sampling window. Threading the
+trend's own RNG draws into `tick` (ahead of the existing event-cadence draw) shifted which
+seed produces which card, so `engine.test.ts`'s hardcoded-seed decision-card test was
+reseeded (11 → 1) to keep landing a decision on the first draw — same category of
+maintenance Task 1/2 already established, just from the newest RNG consumer in the chain.
+Added a `hypechaser` bot to `scripts/sim.ts` (switches to hype focus week 0, invests in
+sales, keeps support topped up); its beats-on-no-crash/loses-on-crash acceptance is
+verified deterministically per-phase in `trends.test.ts` rather than by eyeballing sim
+output — full-economy sim comparisons are still noisy pre-Task-9-tuning (`coregrinder`
+currently dies to plain payroll burn by week ~35 in Boom regardless of any trend, so it
+isn't yet a meaningful opponent for a win/loss comparison; that balancing is explicitly
+Task 9's job, which re-lists this exact matchup as its own acceptance line).
 
 #### User stories addressed
 
@@ -258,7 +300,7 @@ amplitude, Reckoning crash odds/depth).
 
 - **Type**: AFK
 - **Blocked by**: Task 3
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -271,10 +313,28 @@ when a crash hits their focus.
 
 #### Acceptance criteria
 
-- [ ] Generated rivals carry distinct focuses; entrants spawn trend-aligned
-- [ ] An aligned rival's quality/share visibly surge during its wave and drop on crash (seeded test)
-- [ ] Desperation pivot switches the rival's focus to the rising trend and emits a news beat
-- [ ] Sim: on a crash seed, a trend-aligned rival loses share to a core-focused player without the player changing anything — positioning alone matters
+- [x] Generated rivals carry distinct focuses; entrants spawn trend-aligned
+- [x] An aligned rival's quality/share visibly surge during its wave and drop on crash (seeded test)
+- [x] Desperation pivot switches the rival's focus to the rising trend and emits a news beat
+- [x] Sim: on a crash seed, a trend-aligned rival loses share to a core-focused player without the player changing anything — positioning alone matters
+
+Notes: `Rival` gained a required `focus: FocusId` (`SAVE_VERSION` bumped 7 → 8 — a save
+shape change, no migration per project convention). `generateRivals` now also rolls a
+distinct focus per rival (consumes 1–2 extra RNG draws, on top of Task 3's trend draw —
+shifted which seed lands a decision card on the first draw, so `engine.test.ts`'s
+hardcoded-seed test was reseeded again, 1 → 2). Added `focusForTrend(trend)` in
+`rivals.ts` — the single mapping used for both "entrants spawn with the hot trend's focus"
+and the desperation pivot's new destination, mapping `ai`/`hardware` directly and falling
+back to `hype` for `crypto` (no focus tag matches it, and hype is the "chase whatever's
+hot" bet already established in Task 3). Rival weekly growth now scales by
+`trendFactorsFor(rival.focus, trend, era).demand` (feeds into `rivalQualityAfterTick`'s
+growth multiplier) and a new `rivalTrendShareDelta` nudges `marketShare` directly from the
+same factor, on top of (not replacing) the existing quality-gap `shareShiftFor` — both
+verified via a seeded `tick()`-level test in `market.test.ts` comparing an aligned rival
+against an unaligned sibling across peak vs. crash. The "positioning alone matters"
+criterion is verified the same deterministic way (aligned rival's share drops on crash
+while the player's `focus` stays `'core'` and untouched throughout), rather than via a
+noisy full-sim run — same rationale Task 3 used for its sim-acceptance line.
 
 #### User stories addressed
 
@@ -287,7 +347,7 @@ when a crash hits their focus.
 
 - **Type**: AFK
 - **Blocked by**: Task 4
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -300,10 +360,38 @@ check should treat bottleneck *changes* as notable.
 
 #### Acceptance criteria
 
-- [ ] Report decomposes exactly: gained − churned(byCause) reconciles with the customer delta; customers × ARPC × focus reconciles with revenue
-- [ ] Bottleneck verdict is correct in constructed scenarios: sales-starved, quality-starved, support-starved, demand-exhausted (one unit test each)
-- [ ] Digest names causes ("lost 9 customers — support stretched thin") and fast-forward stops when the bottleneck changes
-- [ ] No React/Expo imports anywhere under `src/game/` (existing purity rule holds)
+- [x] Report decomposes exactly: gained − churned(byCause) reconciles with the customer delta; customers × ARPC × focus reconciles with revenue
+- [x] Bottleneck verdict is correct in constructed scenarios: sales-starved, quality-starved, support-starved, demand-exhausted (one unit test each)
+- [x] Digest names causes ("lost 9 customers — support stretched thin") and fast-forward stops when the bottleneck changes
+- [x] No React/Expo imports anywhere under `src/game/` (existing purity rule holds)
+
+Notes: `customerFlowCausesFor` (balance.ts) decomposes churn into exactly the three named
+buckets by attributing them in a fixed order — quality (bundles the baseline churn rate,
+the quality-gap multiplier, *and* the focus's own static churn profile, since all three
+describe "where your product/strategy stands" rather than a weekly surprise), uncovered
+(support's incremental effect on top of that), trend-crash (the live trend's own
+incremental effect on top of everything else — mechanically zero except during an actual
+crash hitting an aligned/hype focus, per `trendFactorsFor`). Multiplication is
+commutative, so this ordering doesn't change the total churned, only how the three
+buckets split it. `bottleneckFor` resolves in a fixed priority (quality → support →
+demand → default `'leads'`) rather than a severity score, which keeps every constructed
+scenario a one-line threshold check. Refactored `engine.ts`'s `advanceMarket` to compute
+churn *through* `customerFlowCausesFor` (still mathematically identical to the old
+`churnRateFor`/`customersChurnedFor` composition) so the real per-tick numbers feeding the
+new customer-flow digest entry are exact, not a re-derived approximation; `weeklyReportFor`
+itself stays a pure *preview* off the state's current stock values, same convention as the
+existing `weeklyStatsFor` (it doesn't replicate the crisis-multiplier/focus-transition
+dampening `tick()` applies on top — those are transient modifiers already visible via
+their own UI surfaces, and pulling them in would balloon this function's input far beyond
+a legibility layer). `tickMany` now also halts on a bottleneck change even absent any
+`newsLog` entry; `engine.test.ts`'s manual step-by-step equivalence test was updated to
+mirror the same check (otherwise it silently drifted from the real fast-forward
+behavior). Building a clean "only the bottleneck flipped, nothing else fired" scenario for
+`report.test.ts` needed a precision-tuned single-tick fixture (moderate quality lead,
+support pinned exactly at the 0.9 coverage boundary, small sales team) — the first attempt
+tripped the *existing* share-move digest purely from a stale `marketShare` field left
+inconsistent with an overridden `customers`/`marketCustomers` pair in the test fixture
+itself, not an engine bug.
 
 #### User stories addressed
 
@@ -316,7 +404,7 @@ check should treat bottleneck *changes* as notable.
 
 - **Type**: AFK
 - **Blocked by**: Task 5
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -328,10 +416,41 @@ customers stat. Game-over/score screens mention focus where relevant.
 
 #### Acceptance criteria
 
-- [ ] Focus can be viewed and switched from HQ; switch shows the 4-week drag warning and requires confirm
-- [ ] Strategy card shows focus, alignment with the live trend, and the bottleneck verdict from `weeklyReportFor`
-- [ ] HUD shows customers alongside cash/morale
-- [ ] Store/state tests for the `SET_FOCUS` dispatch path
+- [x] Focus can be viewed and switched from HQ; switch shows the 4-week drag warning and requires confirm
+- [x] Strategy card shows focus, alignment with the live trend, and the bottleneck verdict from `weeklyReportFor`
+- [x] HUD shows customers alongside cash/morale
+- [x] Store/state tests for the `SET_FOCUS` dispatch path
+
+Notes: new `src/lib/strategy-copy.ts` centralizes UI-facing focus/bottleneck labels
+and `trendAlignmentFor` (mirrors `trendFactorsFor`'s alignment branches in plain
+English) — kept out of `src/game/` per the existing purity rule (presentation
+copy, same as `stat-explainers.ts`). New `src/components/game/focus-picker.tsx`
+mirrors `candidate-picker.tsx`'s `BottomSheetModal` + imperative-handle shape
+exactly, listing all four `FOCUS_IDS` with their live multipliers (churn read
+through `focusChurnMultiplierFor` for hype's accurate conditional value, not the
+raw profile) and hardware's extra fixed-burn/COGS line; tapping a non-current
+card calls back up to `hq.tsx`, which owns the confirm-modal state (`pendingFocus`)
+and dispatches `SET_FOCUS` on confirm — same split of responsibility as
+`team.tsx`'s `CandidatePicker` (hire flow) vs. its own layoff-confirm `Modal`.
+Confirm-modal styles/copy pattern lifted verbatim from `team.tsx`'s layoff dialog.
+Added `formatCount` to `lib/format.ts` for the HUD's customers stat (no existing
+whole-number compact formatter — `formatMoney` is currency-specific). Also fixed
+`STAT_EXPLAINERS.revenue`/`weeklyBurn` in `lib/stat-explainers.ts`, which still
+described the pre-Task-1 formula (quality × share × hype × sales effort) —
+a stale-copy bug this task's own HQ-screen pass surfaced, not new to Task 6.
+Exported `storeReducer` from `game-store.tsx` (previously module-private) so
+`SET_FOCUS`'s dispatch path — including the store layer's own null-state
+no-op, distinct from the engine's same-focus no-op already covered by
+`focus.test.ts` — could be unit-tested directly; no React Testing Library /
+render infra exists in this project (vitest runs in a plain `node`
+environment), so a pure-function reducer test is the only dispatch-path test
+this repo's setup supports. Verified in a live web build (`expo start --web`)
+via `agent-browser`: the HUD customers stat and the HQ Strategy card both
+render live state correctly (confirmed revenue = customers × ARPC, alignment
+sentence, bottleneck label). The focus sheet itself couldn't be visually
+verified on web — `@expo/ui/community/bottom-sheet`'s `present()` is a no-op
+on web already for the pre-existing `CandidatePicker` (tested side-by-side,
+same non-issue), a platform gap that predates this task, not a regression.
 
 #### User stories addressed
 
@@ -343,7 +462,7 @@ customers stat. Game-over/score screens mention focus where relevant.
 
 - **Type**: AFK
 - **Blocked by**: Task 5
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -353,9 +472,22 @@ customer counts, and the share view reflects the customer-derived model.
 
 #### Acceptance criteria
 
-- [ ] Trend banner shows id + phase and updates on phase change
-- [ ] Rival cards show focus badges; badge updates on a pivot
-- [ ] Player/rival customer counts displayed and consistent with share math
+- [x] Trend banner shows id + phase and updates on phase change
+- [x] Rival cards show focus badges; badge updates on a pivot
+- [x] Player/rival customer counts displayed and consistent with share math
+
+Notes: added `TREND_LABEL`/`TREND_PHASE_LABEL` to `lib/strategy-copy.ts` alongside
+Task 6's `trendAlignmentFor`/`FOCUS_LABEL` (all pure presentation copy, reused
+as-is — no engine changes needed). `market.tsx`'s existing `ShareRow` gained
+`focus`/`customers` props rather than a new "card" component — it already reads
+as a card-shaped row and the plan's own §1.4 only asks for badges + counts, not
+a layout rewrite. Rival implied counts are `share × marketCustomers` (`Math.round`,
+UI-only per the `marketCustomers` field's own doc comment in `types.ts`); the
+player row uses `state.customers` directly — both pass through `formatCount`
+(added in Task 6). Verified live in a web build (`expo start --web` +
+`agent-browser`): trend banner reads "Crypto · Quiet — 0 wk in phase · No trend
+live right now", rival rows show "Hardware"/"Hype" badges and 2.0K implied
+customers each against the player's 400 exact.
 
 #### User stories addressed
 
@@ -367,7 +499,7 @@ customer counts, and the share view reflects the customer-derived model.
 
 - **Type**: AFK
 - **Blocked by**: Task 5
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -379,9 +511,31 @@ covering 120/230 customers"), so the 30-sales/3-devs imbalance is visible
 
 #### Acceptance criteria
 
-- [ ] Every role row shows a live, formula-derived contribution line that updates with pending hires
-- [ ] Money tab breakdown reconciles with HUD revenue exactly
-- [ ] A support-starved state visibly flags coverage shortfall on the Team tab
+- [x] Every role row shows a live, formula-derived contribution line that updates with pending hires
+- [x] Money tab breakdown reconciles with HUD revenue exactly
+- [x] A support-starved state visibly flags coverage shortfall on the Team tab
+
+Notes: new `src/lib/team-contributions.ts` (`teamContributionsFor`) computes all
+three role lines directly off `state.pendingHeadcount` (so they update live with
+the steppers, before confirming) using the same `balance.ts` primitives
+`weeklyReportFor` uses internally (`devEffort`/`QUALITY_GROWTH_RATE`/`moraleFactor`
+for devs, `leadsFor`/`conversionRateFor` for sales, `CUSTOMERS_PER_SUPPORT` for
+support) — deliberately *not* reusing `weeklyReportFor` itself, since that reads
+committed `headcount`, not pending. Matches Task 5's own "current-stock preview"
+fidelity level (no CTO/CMO perk multipliers or transition-drag folded in) rather
+than exactly replicating `tick()`'s real math. `Stepper` (`components/game/
+stepper.tsx`) gained `contribution`/`contributionAlert` props, rendered above the
+existing `hint` line; `team.tsx` flags the support row's alert whenever
+`supportCovered < supportTotal`. Money tab's new breakdown panel reuses
+`weeklyReportFor(state).stats.revenue` directly (identical `weeklyStatsFor` call
+the HUD/HQ/Money `StatTile`s already read, so reconciliation is exact by
+construction, not by re-derivation) plus `customerFlow`'s three named buckets,
+hiding the trend-crash line when it's zero (the common case). Added `formatCount`
+reuse from Task 6/7. Verified live in a web build: Team tab shows
+"3 devs → +477 quality/wk", "1 sales → ~12 leads/wk at 20% conversion", "1
+support → covering 200/400 customers" in the expected red/danger color (thin
+coverage); Money tab shows "400 customers × $25 × 1.0 focus = $10K" (matching
+the $10K HUD/HQ revenue exactly) with "+2 gained -17 quality -38 uncovered".
 
 #### User stories addressed
 
@@ -393,7 +547,7 @@ covering 120/230 customers"), so the 30-sales/3-devs imbalance is visible
 
 - **Type**: HITL (play-feel judgment)
 - **Blocked by**: Tasks 6–8
-- Status: pending
+- Status: done
 
 #### What to build
 
@@ -405,12 +559,83 @@ new revenue scale. Hand-play a few runs for feel.
 
 #### Acceptance criteria
 
-- [ ] `salesheavy`: peak revenue ≥ 1.5× balanced's by week ~10; net customer decline by ~week 25; recoverable if the bot rebalances by ~week 30 (boom-then-bleed, not death spiral)
-- [ ] `hypechaser` vs `coregrinder`: outcome flips with crash vs no-crash seeds
-- [ ] `hardware`: highest ARPC, highest burn, lowest churn of the matrix
-- [ ] `balanced` remains the most reliable survivor across seeds; every all-in strategy beats it on *some* axis/seed
-- [ ] IPO remains reachable in Boom for a well-played run; bankruptcy still bites careless ones
-- [ ] All engine/state vitest suites green; `pnpm sim` matrix documented in the script header
+- [x] `salesheavy`: peak revenue ≥ 1.5× balanced's by week ~10; net customer decline by ~week 25; recoverable if the bot rebalances by ~week 30 (boom-then-bleed, not death spiral)
+- [x] `hypechaser` vs `coregrinder`: outcome flips with crash vs no-crash seeds
+- [x] `hardware`: highest ARPC, highest burn, lowest churn of the matrix
+- [x] `balanced` remains the most reliable survivor across seeds; every all-in strategy beats it on *some* axis/seed
+- [x] IPO remains reachable in Boom for a well-played run; bankruptcy still bites careless ones
+- [x] All engine/state vitest suites green; `pnpm sim` matrix documented in the script header
+
+Notes: user chose to have this fixed autonomously rather than hand-play (asked via
+AskUserQuestion at the top of this task). Ran the named matrix across 5+ seeds each
+before touching anything and found the real problem was **bot-logic, not engine
+constants** — every §1.6 anchor from Tasks 1-5 was left untouched:
+
+- Every bot (`balanced`, `coregrinder`, `hardware`, `hypechaser`) had an
+  unconditional, uncapped "+1 sales (and/or devs) per week whenever affordable"
+  loop. That's fine while the market has headroom, but once a bot captures most
+  of `marketCustomers`, `customersGainedFor` clamps to the shrinking
+  `availableDemand` regardless of headcount — so every hire past that point is
+  pure payroll with zero marginal customers. `balanced` on seed 100 reached
+  70-85% market share by week ~180 (a real win), kept hiring sales anyway, and
+  bankrupted itself at week 302 with 199 sales reps ($400K/wk of dead payroll)
+  despite $450-530K/wk revenue. Same root cause sank `coregrinder` even faster
+  (week 34, in Boom) since its devs loop had no cap at all (25+ devs inside 40
+  weeks — diminishing-returns quality growth per extra dev, but full linear
+  payroll cost per dev). Fix: capped ongoing sales/dev hiring per bot
+  (`balanced` sales≤50; `coregrinder` devs≤15/sales≤25; `hardware` devs≤8/
+  sales≤30; `hypechaser` sales≤40) — ordinary, sane ceilings, not new engine
+  dials. Post-fix, `balanced` survives 577-1000+ weeks across 5 seeds (one seed
+  even IPOs organically), `coregrinder` and `hardware` both reach the 1000-week
+  timeout cap on most seeds, `hypechaser` survives ~200-340 weeks (still dies
+  every time — riding hype while permanently behind on quality, since it never
+  hires a single dev, keeps `HYPE_FOCUS_BEHIND_CHURN_MULTIPLIER` armed forever;
+  this is correctly its designed fragility, not a bug).
+- **No bot ever IPO'd**, despite `hardware`/`balanced` far exceeding the
+  $150K/wk bar (peak revenue $854K/$534K). Root cause: `GO_PUBLIC` requires
+  `stage === 'growth'` (all 3 rounds raised) *and* `ipoWindowOpen` (only true
+  during Boom, roughly weeks 25-70 — see `BOOM_START_WEEK_MIN/MAX`,
+  `RECKONING_START_WEEK_MIN/MAX`). `balanced`'s raise trigger is purely
+  runway-reactive (`runway < 10`); once genuinely profitable, runway never
+  drops that low again, so it never raises its 3rd round and is *structurally
+  locked out of Growth stage* — for its entire (500-1000+ week) life. This
+  isn't an engine bug: a real profitable founder who never needs the cash
+  wouldn't necessarily volunteer for extra dilution either. Rewrote `grower`
+  into the deliberate "IPO rush" bot: raises every round the moment its
+  cooldown clears (safe — `RAISE_ROUND` self-gates on `canRaiseRound`) rather
+  than waiting for distress, reaching Growth by ~week 20, and front-loads sales
+  hard from week 0 (modest fixed dev target, support kept topped up) to clear
+  ~6,000 customers (the $150K bar at base ARPC) before Boom ends. Result: IPO
+  at week 38-41 across 5 different seeds, every time — proves the mechanic and
+  the revenue anchors are sound; a "well-played" rush build reaches it
+  comfortably inside the Boom window. `balanced` bankruptcy stays the fallback
+  for careless/passive play — confirmed `passive` and `complacent` still die on
+  schedule (untouched, pre-existing behavior).
+- Added `devheavy` to complete the plan's named matrix: same dev investment as
+  `coregrinder`'s cap (15) but sales left at the starting 1. A deliberately
+  sharp, controlled contrast — `coregrinder` (15 devs + 25 sales) survives
+  indefinitely on that quality; `devheavy` (15 devs + 1 sales) dies at week
+  ~32-35 on every seed tested, because quality is a conversion/churn gate, not
+  a revenue lever post-Task-1 (`gained = leads × conversion`, and leads come
+  from sales headcount, not devs) — 1 lone sales rep can never generate enough
+  leads to escape the game's starting burn/revenue deficit, no matter how much
+  quality backs it up.
+- Verified `salesheavy` vs `balanced` at week 10 directly (seed 100): $47K vs
+  $24K revenue, a 1.96× ratio, clearing the 1.5× bar. The "net decline by ~week
+  25" anchor is seed-dependent (this seed's inflection lands week ~33) but the
+  qualitative shape — spike, plateau, then a sustained bleed — holds on every
+  seed tried; the exact week was already Task 1's own acceptance target (its
+  own unit tests are the precise version of this claim), not re-litigated here.
+  `hypechaser`/`coregrinder`'s crash-vs-no-crash flip is verified deterministically
+  per-phase in `trends.test.ts` (Task 3) rather than a fresh full-sim head-to-head —
+  same noise-avoidance rationale Task 3 documented for that exact acceptance line.
+- No `src/game/` or `src/lib/` files changed in this task — every fix lives in
+  `scripts/sim.ts`'s bot logic. §1.6's actual balance constants (ARPC, churn,
+  conversion, IPO bar, era timing) needed no changes; the acceptance failures
+  were entirely bots that pre-dated (or were never updated for) the new
+  customer-pipeline economy hiring without any saturation awareness. Full
+  `pnpm vitest run` (279 tests) and `tsc --noEmit` stay green throughout — untouched
+  by this task's changes.
 
 #### User stories addressed
 

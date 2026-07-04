@@ -23,6 +23,7 @@ import {
 import { CLevelRole, ROLES, Role } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
+import { teamContributionsFor } from '@/lib/team-contributions';
 import { useGame } from '@/state/game-store';
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -65,6 +66,13 @@ export default function TeamScreen() {
     fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
     moraleLeverCost,
   });
+  const contributions = teamContributionsFor(state);
+  const supportShortfall = contributions.supportCovered < contributions.supportTotal;
+  const ROLE_CONTRIBUTION: Record<Role, string> = {
+    devs: `${state.pendingHeadcount.devs} devs → +${Math.round(contributions.devsQualityPerWeek)} quality/wk`,
+    sales: `${state.pendingHeadcount.sales} sales → ~${Math.round(contributions.salesLeadsPerWeek)} leads/wk at ${Math.round(contributions.salesConversionRate * 100)}% conversion`,
+    support: `${state.pendingHeadcount.support} support → covering ${Math.round(contributions.supportCovered)}/${Math.round(contributions.supportTotal)} customers`,
+  };
 
   const increment = (role: Role) => dispatch({ type: 'SET_PENDING_HIRES', role, delta: 1 });
 
@@ -138,6 +146,8 @@ export default function TeamScreen() {
                   ? `current: ${state.headcount[role]}`
                   : undefined
               }
+              contribution={ROLE_CONTRIBUTION[role]}
+              contributionAlert={role === 'support' && supportShortfall}
               onIncrement={() => increment(role)}
               onDecrement={() => requestDecrement(role)}
             />

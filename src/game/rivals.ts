@@ -4,10 +4,10 @@
  * and weekly growth threads the RNG state through explicitly.
  */
 
-import { clamp, ERA_RIVAL_GROWTH_MULTIPLIER } from './balance';
+import { clamp, ERA_RIVAL_GROWTH_MULTIPLIER, TrendFactors } from './balance';
 import { Era } from './events/types';
 import { nextFloat, nextInt, nextRange } from './rng';
-import { Rival, RngState } from './types';
+import { FOCUS_IDS, FocusId, Rival, RngState, Trend } from './types';
 
 const RIVAL_NAME_POOL = [
   'Vertex Labs',
@@ -37,10 +37,11 @@ export function rivalGrowthMultiplier(roundsRaised: number, era: Era = 'scrappy'
   return (1 + roundsRaised * RIVAL_GROWTH_PER_ROUND_RAISED) * ERA_RIVAL_GROWTH_MULTIPLIER[era];
 }
 
-/** Two named rivals with distinct names, drawn deterministically from the run's RNG. */
+/** Two named rivals with distinct names and distinct focuses, drawn deterministically from the run's RNG. */
 export function generateRivals(rng: RngState): { rivals: Rival[]; rng: RngState } {
   let r = rng;
   const usedIndices = new Set<number>();
+  const usedFocuses = new Set<FocusId>();
   const rivals: Rival[] = [];
 
   while (rivals.length < 2) {
@@ -48,14 +49,39 @@ export function generateRivals(rng: RngState): { rivals: Rival[]; rng: RngState 
     [index, r] = nextInt(r, 0, RIVAL_NAME_POOL.length - 1);
     if (usedIndices.has(index)) continue;
     usedIndices.add(index);
+
+    let focus: FocusId;
+    do {
+      let focusIndex: number;
+      [focusIndex, r] = nextInt(r, 0, FOCUS_IDS.length - 1);
+      focus = FOCUS_IDS[focusIndex];
+    } while (usedFocuses.has(focus));
+    usedFocuses.add(focus);
+
     rivals.push({
       name: RIVAL_NAME_POOL[index],
       productQuality: STARTING_RIVAL_QUALITY,
       marketShare: STARTING_RIVAL_MARKET_SHARE,
+      focus,
     });
   }
 
   return { rivals, rng: r };
+}
+
+/** Which focus is "chasing what's hot" for the live trend: exact match for `ai`/`hardware`, `hype` for `crypto` (no focus tag matches it directly). */
+export function focusForTrend(trend: Trend): FocusId {
+  if (trend.id === 'ai') return 'ai';
+  if (trend.id === 'hardware') return 'hardware';
+  return 'hype';
+}
+
+/** Share points of swing per unit of trend-driven demand bonus/penalty — converts `trendFactorsFor`'s demand multiplier into a direct share delta for a trend-aligned rival, on top of the quality-gap-driven `shareShiftFor`. */
+export const RIVAL_TREND_SHARE_DELTA_SCALE = 0.05;
+
+/** Share swing from riding (or breaking on) a trend wave: positive during a rising/peak demand bonus, negative during a crash's demand collapse. */
+export function rivalTrendShareDelta(factors: TrendFactors): number {
+  return (factors.demand - 1) * RIVAL_TREND_SHARE_DELTA_SCALE;
 }
 
 /**
@@ -107,35 +133,51 @@ export interface RivalNewsBeat {
   flavor: string;
 }
 
+/** Flavor label for a pivot's destination focus — reads naturally after "goes all-in on". */
+const PIVOT_FOCUS_LABEL: Record<FocusId, string> = {
+  core: 'the core product',
+  ai: 'AI',
+  hardware: 'hardware',
+  hype: 'hype',
+};
+
 /**
  * Share-starved rivals occasionally gamble on a desperation pivot: a flat
- * quality surge that can claw back relevance. A no-op (and no RNG draw) for
- * any rival that isn't starved.
+ * quality surge, plus a focus switch toward whichever trend is currently hot
+ * (`focusForTrend`) — a starved rival doesn't just get better, it chases the
+ * wave it thinks will save it. A no-op (and no RNG draw) for any rival that
+ * isn't starved.
  */
 function applyDesperationPivots(
   rivals: Rival[],
+  trend: Trend,
   rng: RngState,
 ): { rivals: Rival[]; rng: RngState; beats: RivalNewsBeat[] } {
   let r = rng;
   const beats: RivalNewsBeat[] = [];
+  const pivotFocus = focusForTrend(trend);
   const next = rivals.map((rival) => {
     if (rival.marketShare >= RIVAL_DESPERATION_SHARE_THRESHOLD) return rival;
     const [roll, afterRoll] = nextFloat(r);
     r = afterRoll;
     if (roll >= RIVAL_DESPERATION_PIVOT_CHANCE) return rival;
+    const switchesFocus = rival.focus !== pivotFocus;
     beats.push({
       title: `${rival.name} makes a desperate pivot`,
-      flavor: `Starved for share, ${rival.name} surges its product quality in a bid to stay relevant.`,
+      flavor: switchesFocus
+        ? `Starved for share, ${rival.name} goes all-in on ${PIVOT_FOCUS_LABEL[pivotFocus]}, chasing the hot trend.`
+        : `Starved for share, ${rival.name} surges its product quality in a bid to stay relevant.`,
     });
-    return { ...rival, productQuality: rival.productQuality + RIVAL_DESPERATION_QUALITY_BOOST };
+    return { ...rival, productQuality: rival.productQuality + RIVAL_DESPERATION_QUALITY_BOOST, focus: pivotFocus };
   });
   return { rivals: next, rng: r, beats };
 }
 
-/** A fresh competitor distinct from every currently-alive rival name. */
+/** A fresh competitor distinct from every currently-alive rival name, spawning with the given focus. */
 function spawnEntrant(
   aliveNames: string[],
   playerQuality: number,
+  focus: FocusId,
   rng: RngState,
 ): { rival: Rival; rng: RngState } {
   const pool = RIVAL_NAME_POOL.filter((name) => !aliveNames.includes(name));
@@ -145,14 +187,37 @@ function spawnEntrant(
       name: pool[index],
       productQuality: Math.max(0, playerQuality * NEW_ENTRANT_STARTING_QUALITY_FRACTION),
       marketShare: NEW_ENTRANT_STARTING_SHARE,
+      focus,
     },
     rng: afterIndex,
   };
 }
 
+/**
+ * Splits a share-weighted majority of your churned-and-defected customers
+ * (`toRivals`, from `churnDefectionSplit` in balance.ts) across the rivals,
+ * proportional to each rival's current share (an even split if both are at
+ * zero). Converts the defector count into a share delta via `marketCustomers`
+ * so it lands in the same units as `rival.marketShare`.
+ */
+export function applyChurnDefectionToRivals(
+  rivals: Rival[],
+  defectorsToRivals: number,
+  marketCustomers: number,
+): Rival[] {
+  if (defectorsToRivals <= 0 || marketCustomers <= 0) return rivals;
+  const totalShare = rivals.reduce((sum, r) => sum + r.marketShare, 0);
+  return rivals.map((rival) => {
+    const weight = totalShare > 0 ? rival.marketShare / totalShare : 1 / rivals.length;
+    const gain = (defectorsToRivals * weight) / marketCustomers;
+    return { ...rival, marketShare: clamp(rival.marketShare + gain, 0, 1) };
+  });
+}
+
 export interface RivalDynamicsResult {
   rivals: Rival[];
-  marketShare: number;
+  /** The player's customer count, possibly carved down by a forced new entrant (monopoly guardrail). */
+  customers: number;
   rng: RngState;
   beats: RivalNewsBeat[];
 }
@@ -162,24 +227,28 @@ export interface RivalDynamicsResult {
  * math in `advanceMarket` (engine.ts): share-starved rivals can pivot (quality
  * surge, no share change); in Reckoning a weak-enough rival can collapse and
  * is immediately replaced by a fresh entrant carrying the freed share; and if
- * the player is closing in on monopoly, a new entrant is forced in regardless
- * of era, carving a starting share back out of the player. Exactly two named
+ * the player is closing in on monopoly (derived from `customers /
+ * marketCustomers`), a new entrant is forced in regardless of era, carving a
+ * starting share back out of the player's customer count. Exactly two named
  * rivals always exist — a "death" swaps the slot's occupant rather than
  * shrinking the array, so every other part of the game (market.tsx, digest
  * comparisons) can keep assuming a fixed two-rival shape.
  */
 export function applyRivalDynamics(
   rivals: Rival[],
-  playerMarketShare: number,
+  playerCustomers: number,
+  marketCustomers: number,
   playerQuality: number,
   era: Era,
+  trend: Trend,
   rng: RngState,
 ): RivalDynamicsResult {
-  const pivoted = applyDesperationPivots(rivals, rng);
+  const pivoted = applyDesperationPivots(rivals, trend, rng);
   let nextRivals = pivoted.rivals;
   let r = pivoted.rng;
   const beats = [...pivoted.beats];
-  let marketShare = playerMarketShare;
+  let customers = playerCustomers;
+  const entrantFocus = focusForTrend(trend);
 
   if (era === 'reckoning') {
     for (let i = 0; i < nextRivals.length; i++) {
@@ -190,7 +259,7 @@ export function applyRivalDynamics(
       if (roll >= RIVAL_DEATH_CHANCE) continue;
 
       const survivor = nextRivals[1 - i];
-      const entrant = spawnEntrant([survivor.name], playerQuality, r);
+      const entrant = spawnEntrant([survivor.name], playerQuality, entrantFocus, r);
       r = entrant.rng;
       const replaced = { ...entrant.rival, marketShare: rival.marketShare };
       nextRivals = nextRivals.map((v, idx) => (idx === i ? replaced : v));
@@ -202,14 +271,15 @@ export function applyRivalDynamics(
     }
   }
 
-  if (marketShare >= MONOPOLY_SHARE_THRESHOLD) {
+  const playerShare = marketCustomers > 0 ? customers / marketCustomers : 0;
+  if (playerShare >= MONOPOLY_SHARE_THRESHOLD) {
     const weakestIndex = nextRivals[0].marketShare <= nextRivals[1].marketShare ? 0 : 1;
     const survivor = nextRivals[1 - weakestIndex];
-    const entrant = spawnEntrant([survivor.name], playerQuality, r);
+    const entrant = spawnEntrant([survivor.name], playerQuality, entrantFocus, r);
     r = entrant.rng;
-    const carve = Math.max(NEW_ENTRANT_STARTING_SHARE, marketShare - MONOPOLY_SHARE_TARGET);
-    marketShare = clamp(marketShare - carve, 0, 1);
-    const replaced = { ...entrant.rival, marketShare: carve };
+    const carveShare = Math.max(NEW_ENTRANT_STARTING_SHARE, playerShare - MONOPOLY_SHARE_TARGET);
+    customers = Math.max(0, customers - carveShare * marketCustomers);
+    const replaced = { ...entrant.rival, marketShare: carveShare };
     nextRivals = nextRivals.map((v, idx) => (idx === weakestIndex ? replaced : v));
     beats.push({
       title: `${replaced.name} enters the market`,
@@ -217,5 +287,5 @@ export function applyRivalDynamics(
     });
   }
 
-  return { rivals: nextRivals, marketShare, rng: r, beats };
+  return { rivals: nextRivals, customers, rng: r, beats };
 }

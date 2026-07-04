@@ -89,7 +89,8 @@ export interface NewsEntry {
   /**
    * `'digest'` marks weekly-digest threshold crossings; `'era'` marks an era
    * transition (Scrappy → Boom → Reckoning) — both style distinctly from
-   * drawn event cards, and `'era'` renders full-width.
+   * drawn event cards, and `'era'` renders full-width. `'trend'` marks a tech
+   * trend wave phase change (see `trendPhaseChangeNewsEntry` in trends.ts).
    */
-  kind?: 'digest' | 'era';
+  kind?: 'digest' | 'era' | 'trend';
 }

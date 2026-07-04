@@ -14,7 +14,6 @@ import {
   type ReactNode,
 } from 'react';
 
-import { SAVE_VERSION } from '@/game/balance';
 import { newGame, reduce, tickMany } from '@/game/engine';
 import { standupCardForStreak } from '@/game/events/standup';
 import type { GameAction, GameState } from '@/game/types';
@@ -38,16 +37,11 @@ type StoreAction =
   | { type: 'HYDRATE'; state: GameState | null }
   | { type: 'SET_STATE'; state: GameState };
 
-/** Pre-release: no migrations. A save from an older shape just starts a new run. */
-function loadSave(state: GameState | null): GameState | null {
-  if (state && state.version !== SAVE_VERSION) return null;
-  return state;
-}
-
-function storeReducer(state: GameState | null, action: StoreAction): GameState | null {
+/** Exported for testing the store-layer dispatch path without rendering a `GameProvider`. */
+export function storeReducer(state: GameState | null, action: StoreAction): GameState | null {
   switch (action.type) {
     case 'HYDRATE':
-      return loadSave(action.state);
+      return action.state;
     case 'SET_STATE':
       return action.state;
     case 'NEW_GAME':

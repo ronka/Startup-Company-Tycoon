@@ -7,6 +7,7 @@ const rival = (name: string, marketShare: number, productQuality = 0): Rival => 
   name,
   productQuality,
   marketShare,
+  focus: 'core',
 });
 
 const baseSnapshot = (overrides: Partial<WeeklySnapshot> = {}): WeeklySnapshot => ({
