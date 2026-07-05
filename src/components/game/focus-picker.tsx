@@ -1,4 +1,4 @@
-import { BottomSheetModal, BottomSheetView } from '@expo/ui/community/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
 import { useImperativeHandle, useRef, type Ref } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -49,8 +49,12 @@ export function FocusPicker({
     rivals.length > 0 ? rivals.reduce((sum, r) => sum + r.productQuality, 0) / rivals.length : 0;
 
   return (
-    <BottomSheetModal ref={sheetRef} enablePanDownToClose backgroundStyle={{ backgroundColor: theme.background }}>
-      <BottomSheetView style={styles.sheet}>
+    <BottomSheetModal
+      ref={sheetRef}
+      snapPoints={['90%']}
+      enablePanDownToClose
+      backgroundStyle={{ backgroundColor: theme.background }}>
+      <BottomSheetScrollView style={styles.scroll} contentContainerStyle={styles.sheet}>
         <ThemedText type="smallBold">Company focus</ThemedText>
         {FOCUS_IDS.map((id) => {
           const profile = FOCUS_PROFILES[id];
@@ -89,12 +93,15 @@ export function FocusPicker({
             </ThemedView>
           );
         })}
-      </BottomSheetView>
+      </BottomSheetScrollView>
     </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+  },
   sheet: {
     padding: Spacing.four,
     gap: Spacing.three,

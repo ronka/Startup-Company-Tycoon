@@ -1,6 +1,26 @@
 # Bug: game stuck on the decision-card screen
 
-**Status:** diagnosed, not yet fixed
+**Status:** fixed (2026-07-05)
+
+## Fix applied
+
+Both same-commit present-while-dismiss races were removed by deferring the
+follow-up modal off the frame that clears `pendingEvent`:
+
+- **Standup re-injection** (`src/state/game-store.tsx`): the injection now runs
+  inside a `setTimeout(..., 400)` instead of dispatching `SET_STATE`
+  synchronously. The effect re-runs (and clears the timer) on every state
+  change, so the captured `state` is always current when it fires — no
+  stale-closure overwrite.
+- **Week recap** (`src/components/game/game-chrome.tsx`): `WeekInReviewSheet` /
+  `WeekTicker` now wait for a `recapArmedWeek` gate, set ~350ms after the tick's
+  decision card is answered, so the recap never presents into the frame the
+  `DecisionModal` is dismissing.
+
+Original diagnosis below.
+
+---
+
 **Symptom:** Occasionally the game freezes on a decision-card modal (e.g. "An Early
 Feeler"). The card's buttons don't respond and the **Next Week** button is greyed out.
 Force-quitting and reopening the app, then continuing, works fine.

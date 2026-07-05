@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,6 +30,21 @@ export function GameChrome() {
   const insets = useSafeAreaInsets();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
+  // Week whose recap has "settled" — armed a beat after its tick's decision
+  // card (if any) is answered, so the recap never presents into the same frame
+  // the DecisionModal is dismissing (present-while-dismiss hangs iOS — see
+  // docs/bug-stuck-decision-modal.md).
+  const [recapArmedWeek, setRecapArmedWeek] = useState<number | null>(null);
+
+  const pendingWeek =
+    state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
+      ? state.week
+      : null;
+  useEffect(() => {
+    if (pendingWeek === null) return;
+    const timer = setTimeout(() => setRecapArmedWeek(pendingWeek), 350);
+    return () => clearTimeout(timer);
+  }, [pendingWeek]);
 
   if (!state || state.gameOver) return null;
 
@@ -40,7 +55,7 @@ export function GameChrome() {
   // Show once per tick, after any decision card that tick drew has been
   // answered (pendingEvent clears). previousState only exists once at least
   // one tick has happened this session, so neither ever fires on app open.
-  const hasUnseenTick = previousState !== null && !state.pendingEvent;
+  const hasUnseenTick = previousState !== null && !state.pendingEvent && recapArmedWeek === state.week;
   const showReview = hasUnseenTick && notable && state.week !== reviewedWeek;
   const showTicker = hasUnseenTick && !notable && state.week !== tickerDismissedWeek;
 

@@ -1,4 +1,4 @@
-import { BottomSheetModal, BottomSheetView } from '@expo/ui/community/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
 import { useImperativeHandle, useRef, type Ref } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -37,9 +37,10 @@ export function CandidatePicker({
   return (
     <BottomSheetModal
       ref={sheetRef}
+      snapPoints={['90%']}
       enablePanDownToClose
       backgroundStyle={{ backgroundColor: theme.background }}>
-      <BottomSheetView style={styles.sheet}>
+      <BottomSheetScrollView style={styles.scroll} contentContainerStyle={styles.sheet}>
         <ThemedText type="smallBold">{title} candidates</ThemedText>
         {candidates.map((candidate) => (
           <ThemedView key={candidate.id} type="backgroundElement" style={styles.candidate}>
@@ -66,12 +67,15 @@ export function CandidatePicker({
             />
           </ThemedView>
         ))}
-      </BottomSheetView>
+      </BottomSheetScrollView>
     </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+  },
   sheet: {
     padding: Spacing.four,
     gap: Spacing.three,

@@ -215,9 +215,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (loading || !state || state.gameOver || state.pendingEvent) return;
     const today = dateKey(new Date());
     if (streak !== null && streak.lastPlayedDate === today) return;
-    const updatedStreak = streak === null ? initialStreak(new Date()) : updateStreak(streak, new Date());
-    setStreak(updatedStreak);
-    dispatch({ type: 'SET_STATE', state: { ...state, pendingEvent: standupCardForStreak(updatedStreak.streakDays) } });
+    // Defer the injection to a later frame instead of dispatching in the same
+    // commit that cleared `pendingEvent`. When the player answers a card that
+    // was hydrated as pending, `pendingEvent` flips true→false → the
+    // DecisionModal starts dismissing; injecting the Standup card synchronously
+    // flips it false→true mid-dismiss, and iOS hangs the modal (present-while-
+    // dismiss on the same <Modal> — see docs/bug-stuck-decision-modal.md). The
+    // timeout lets the dismiss animation finish first. The effect re-runs (and
+    // clears this timer) on every state change, so the captured `state` is
+    // always current when the timer fires — no stale-closure SET_STATE.
+    const timer = setTimeout(() => {
+      const updatedStreak = streak === null ? initialStreak(new Date()) : updateStreak(streak, new Date());
+      setStreak(updatedStreak);
+      dispatch({ type: 'SET_STATE', state: { ...state, pendingEvent: standupCardForStreak(updatedStreak.streakDays) } });
+    }, 400);
+    return () => clearTimeout(timer);
   }, [loading, state, streak]);
 
   const dispatchWithSnapshot = (action: GameAction) => {
