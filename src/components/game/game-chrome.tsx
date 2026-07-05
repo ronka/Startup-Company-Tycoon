@@ -14,19 +14,16 @@ import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { useGame } from '@/state/game-store';
 import { WEEKS_BANK_CAP, canSpendWeek } from '@/state/week-budget';
 
-/** How many weeks a single fast-forward tap advances (before an early stop). */
-const FAST_FORWARD_WEEKS = 4;
-
 /**
- * Persistent chrome shared by every game tab (Task 12): the Next Week /
- * fast-forward controls, the pending-decision modal, and the post-tick
+ * Persistent chrome shared by every game tab (Task 12): the Next Week
+ * control, the pending-decision modal, and the post-tick
  * recap (a full Week in Review sheet on notable weeks, a compact dismissible
  * ticker on quiet ones — Task 13). Rendered once in `(game)/_layout.tsx`
  * rather than per-screen so its two `Modal`s never stack duplicates across
  * tabs that stay mounted in the background.
  */
 export function GameChrome() {
-  const { state, previousState, dispatch, fastForward, weekBudget, devFreePlay, setDevFreePlay } = useGame();
+  const { state, previousState, dispatch, weekBudget, devFreePlay, setDevFreePlay } = useGame();
   const insets = useSafeAreaInsets();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
@@ -94,13 +91,6 @@ export function GameChrome() {
             onPress={() => dispatch({ type: 'TICK' })}
             disabled={!canAdvance}
             style={styles.nextButton}
-          />
-          <PrimaryButton
-            variant="secondary"
-            label={`⏩ ${FAST_FORWARD_WEEKS}`}
-            onPress={() => fastForward(FAST_FORWARD_WEEKS)}
-            disabled={!canAdvance}
-            style={styles.ffButton}
           />
         </View>
 
@@ -178,10 +168,6 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     flex: 1,
-    paddingVertical: Spacing.two,
-  },
-  ffButton: {
-    minWidth: 72,
     paddingVertical: Spacing.two,
   },
   budgetRow: {

@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { newGame, reduce, tickMany } from '@/game/engine';
+import { newGame, reduce } from '@/game/engine';
 import { standupCardForStreak } from '@/game/events/standup';
 import type { GameAction, GameState } from '@/game/types';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
@@ -24,7 +24,6 @@ import {
   initialWeekBudget,
   refreshWeekBudget,
   spendWeek,
-  spendWeeks,
   type WeekBudget,
 } from '@/state/week-budget';
 
@@ -71,12 +70,6 @@ interface GameContextValue {
   /** True until the initial AsyncStorage load resolves. */
   loading: boolean;
   dispatch: (action: GameAction) => void;
-  /**
-   * Advance up to `weeks` at once, stopping early per `tickMany`'s rules
-   * (game over, a decision card, or a notable week). A no-op while a
-   * decision is already pending or the run has ended — same gating as TICK.
-   */
-  fastForward: (weeks: number) => void;
   startNewGame: (companyName: string, seed?: number) => void;
   /** Wipe the autosave and clear in-memory state. */
   clearSave: () => void;
@@ -97,7 +90,7 @@ interface GameContextValue {
   setCeoName: (name: string) => void;
   /**
    * The daily week budget (PRD F12): null until the initial load resolves.
-   * `TICK`/`fastForward` are rejected once `weeksRemaining` hits 0, unless
+   * `TICK` is rejected once `weeksRemaining` hits 0, unless
    * `devFreePlay` is on. Everything else (hiring, raising, answering a
    * decision, browsing tabs) stays fully usable at zero.
    */
@@ -247,24 +240,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch(action);
   };
 
-  const fastForward = (weeks: number) => {
-    if (!state || state.gameOver || state.pendingEvent) return;
-    const allowance =
-      !devFreePlay && weekBudget ? Math.min(weeks, weekBudget.weeksRemaining) : weeks;
-    if (allowance <= 0) return;
-    const result = tickMany(state, allowance);
-    const consumed = result.week - state.week;
-    setPreviousState(state);
-    if (!devFreePlay && weekBudget) setWeekBudget(spendWeeks(weekBudget, consumed));
-    dispatch({ type: 'SET_STATE', state: result });
-  };
-
   const value: GameContextValue = {
     state,
     previousState,
     loading,
     dispatch: dispatchWithSnapshot,
-    fastForward,
     startNewGame: (companyName: string, seed?: number) => {
       setPreviousState(null);
       dispatch({ type: 'NEW_GAME', companyName, seed });

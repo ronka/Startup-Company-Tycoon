@@ -6,7 +6,6 @@ import {
   initialWeekBudget,
   refreshWeekBudget,
   spendWeek,
-  spendWeeks,
   WEEKS_BANK_CAP,
   WEEKS_PER_DAY,
   type WeekBudget,
@@ -60,7 +59,7 @@ describe('refreshWeekBudget', () => {
   });
 });
 
-describe('canSpendWeek / spendWeek / spendWeeks', () => {
+describe('canSpendWeek / spendWeek', () => {
   it('allows spending while weeks remain, and blocks at zero', () => {
     const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 1 };
     expect(canSpendWeek(budget)).toBe(true);
@@ -72,11 +71,5 @@ describe('canSpendWeek / spendWeek / spendWeeks', () => {
   it('spendWeek never goes negative', () => {
     const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 0 };
     expect(spendWeek(budget).weeksRemaining).toBe(0);
-  });
-
-  it('spendWeeks deducts several at once and floors at zero', () => {
-    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 3 };
-    expect(spendWeeks(budget, 2).weeksRemaining).toBe(1);
-    expect(spendWeeks(budget, 10).weeksRemaining).toBe(0);
   });
 });
