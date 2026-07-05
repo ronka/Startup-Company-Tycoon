@@ -1,6 +1,6 @@
 /** Applies an EventEffects bundle to a GameState. Shared by news auto-apply and ANSWER_EVENT. */
 
-import { clamp } from '../balance';
+import { clamp, EVENT_MARKET_SHARE_CUSTOMER_SCALE } from '../balance';
 import { generateCandidates } from '../clevels';
 import { C_LEVEL_ROLES, GameState } from '../types';
 import { EventEffects } from './types';
@@ -27,7 +27,7 @@ export function applyEventEffects(state: GameState, effects: EventEffects): Game
         // so a card's share delta is applied as the equivalent customer swing,
         // with the display field recomputed immediately so it doesn't go
         // stale until the next tick.
-        const customerDelta = delta.amount * next.marketCustomers;
+        const customerDelta = delta.amount * next.marketCustomers * EVENT_MARKET_SHARE_CUSTOMER_SCALE;
         const customers = clamp(next.customers + customerDelta, 0, next.marketCustomers);
         const marketShare = next.marketCustomers > 0 ? clamp(customers / next.marketCustomers, 0, 1) : 0;
         next = { ...next, customers, marketShare };

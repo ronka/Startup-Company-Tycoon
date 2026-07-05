@@ -9,6 +9,7 @@ import {
   MARKET_GROWTH_RATE,
   MAX_CONVERSION_RATE,
   MAX_SHARE_SHIFT,
+  ORGANIC_LEADS_PER_WEEK,
   QUALITY_CHURN_CEILING,
   QUALITY_CHURN_FLOOR,
   QUALITY_CONVERSION_CEILING,
@@ -31,12 +32,13 @@ import { newGame, tick } from '../engine';
 import { GameState } from '../types';
 
 describe('leadsFor', () => {
-  it('matches LEADS_PER_SALES × sales^SALES_EXPONENT × demand multiplier exactly', () => {
-    expect(leadsFor(10, 1.5)).toBeCloseTo(12 * Math.pow(10, 0.9) * 1.5);
+  it('matches (organic + LEADS_PER_SALES × sales^SALES_EXPONENT) × demand multiplier exactly', () => {
+    expect(leadsFor(10, 1.5)).toBeCloseTo((ORGANIC_LEADS_PER_WEEK + 12 * Math.pow(10, 0.9)) * 1.5);
   });
 
-  it('zero sales means zero leads, regardless of demand multiplier', () => {
-    expect(leadsFor(0, 5)).toBe(0);
+  it('zero sales still generates the organic (word-of-mouth) floor, scaled by demand', () => {
+    expect(leadsFor(0, 5)).toBeCloseTo(ORGANIC_LEADS_PER_WEEK * 5);
+    expect(leadsFor(0, 1)).toBeCloseTo(ORGANIC_LEADS_PER_WEEK);
   });
 
   it('is sublinear: doubling sales less than doubles leads', () => {

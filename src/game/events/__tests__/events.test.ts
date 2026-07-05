@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { acquisitionOfferValuationFor, weeklyStatsFor } from '../../balance';
+import { acquisitionOfferValuationFor, EVENT_MARKET_SHARE_CUSTOMER_SCALE, weeklyStatsFor } from '../../balance';
 import { newGame, reduce, tick } from '../../engine';
 import { GameState } from '../../types';
 import { applyEventEffects } from '../apply';
@@ -97,7 +97,9 @@ describe('applyEventEffects', () => {
     expect(s1.morale).toBe(s0.morale - 5);
     expect(s1.hype).toBeCloseTo(s0.hype + 0.1);
     expect(s1.productQuality).toBe(s0.productQuality + 20);
-    expect(s1.marketShare).toBeCloseTo(s0.marketShare + 0.01);
+    // A market-share card's swing only partially lands as customers (see
+    // EVENT_MARKET_SHARE_CUSTOMER_SCALE), so the derived share moves by the scaled amount.
+    expect(s1.marketShare).toBeCloseTo(s0.marketShare + 0.01 * EVENT_MARKET_SHARE_CUSTOMER_SCALE);
   });
 
   it('pushes a timedEffect onto activeTimedEffects', () => {

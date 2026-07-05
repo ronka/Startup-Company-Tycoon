@@ -109,8 +109,10 @@ describe('HIRE_CLEVEL', () => {
     const devBoost = cLevelPerkMultiplierFor(hired.cLevels, 'cto', 'cto-productivity');
     expect(devBoost).toBe(1.2);
 
-    const withoutBoost = qualityAfterTick(100, s0.headcount.devs, s0.morale);
-    const withBoost = qualityAfterTick(100, s0.headcount.devs, s0.morale, devBoost);
+    // The game now starts with no devs, so exercise the perk against an explicit dev count.
+    const devs = 3;
+    const withoutBoost = qualityAfterTick(100, devs, s0.morale);
+    const withBoost = qualityAfterTick(100, devs, s0.morale, devBoost);
     expect(withBoost).toBeGreaterThan(withoutBoost);
   });
 

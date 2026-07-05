@@ -20,7 +20,7 @@ const RIVAL_NAME_POOL = [
   'Meridian',
 ];
 
-export const STARTING_RIVAL_QUALITY = 50;
+export const STARTING_RIVAL_QUALITY = 250;
 export const STARTING_RIVAL_MARKET_SHARE = 0.2;
 
 /** Flat weekly quality growth every rival gets, script-driven rather than input-driven. */

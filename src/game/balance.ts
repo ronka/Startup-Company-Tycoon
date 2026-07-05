@@ -37,7 +37,8 @@ export const BANKRUPTCY_FUSE_WEEKS = 3;
 
 // ── Starting conditions ────────────────────────────────────────────────
 export const STARTING_CASH = 250_000;
-export const STARTING_HEADCOUNT: Headcount = { devs: 3, sales: 1, support: 1 };
+/** You start with an empty company — every head is a deliberate hire against the runway clock. */
+export const STARTING_HEADCOUNT: Headcount = { devs: 0, sales: 0, support: 0 };
 export const STARTING_MORALE = 70;
 export const STARTING_PRODUCT_QUALITY = 0;
 export const STARTING_HYPE = 1.0;
@@ -133,13 +134,17 @@ export function qualityAfterTick(
 
 // ── Customer pipeline ────────────────────────────────────────────────────
 /** Dollars of weekly revenue per customer, before any focus ARPC multiplier (Task 2). */
-export const ARPC = 25;
+export const ARPC = 35;
 /** Raw leads a single sales head generates per week, before the headcount exponent and demand multipliers. */
 export const LEADS_PER_SALES = 12;
+/** Baseline word-of-mouth leads per week even with zero sales headcount, so an idle company still trickles a few customers instead of flatlining at zero. */
+export const ORGANIC_LEADS_PER_WEEK = 10;
+/** Fraction of a market-share event card's swing that lands as actual customers — keeps event lumps from dwarfing the organic pipeline. */
+export const EVENT_MARKET_SHARE_CUSTOMER_SCALE = 0.2;
 /** Sublinear exponent on sales headcount: extra reps still help, but with diminishing returns. */
 export const SALES_EXPONENT = 0.9;
 /** Fraction of leads that convert to paying customers at quality parity with the rival average. */
-export const BASE_CONVERSION = 0.5;
+export const BASE_CONVERSION = 0.12;
 /** Ceiling on the computed conversion rate, independent of the quality curve below. */
 export const MAX_CONVERSION_RATE = 0.95;
 /** Weekly churn rate at quality parity with full support coverage. */
@@ -181,7 +186,7 @@ export function marketCustomersAfterTick(marketCustomers: number, era: Era = 'sc
  * scales the same lead count.
  */
 export function leadsFor(sales: number, demandMultiplier: number = 1): number {
-  return LEADS_PER_SALES * Math.pow(sales, SALES_EXPONENT) * demandMultiplier;
+  return (ORGANIC_LEADS_PER_WEEK + LEADS_PER_SALES * Math.pow(sales, SALES_EXPONENT)) * demandMultiplier;
 }
 
 /**

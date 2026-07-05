@@ -48,12 +48,20 @@ import { BOOM_DECK } from '../events/boom';
 import { RECKONING_DECK } from '../events/reckoning';
 import { SCRAPPY_DECK } from '../events/scrappy';
 import { rivalGrowthMultiplier } from '../rivals';
-import { GameState } from '../types';
+import { GameState, Headcount } from '../types';
 
 const tickN = (state: GameState, n: number): GameState => {
   let s = state;
   for (let i = 0; i < n; i++) s = tick(s);
   return s;
+};
+
+/** A staffed starting roster — the game now starts empty, so tests exercising team/layoff mechanics staff up explicitly. */
+const STAFFED: Headcount = { devs: 3, sales: 1, support: 1 };
+/** newGame with an explicit non-empty team, for tests that assumed the old default roster. */
+const staffedGame = (seed: number): GameState => {
+  const g = newGame('Acme', seed);
+  return { ...g, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
 };
 
 /** Every era's unique card ids — pre-seeding this as `drawnEventIds` isolates a
@@ -235,7 +243,7 @@ describe('tickMany (fast-forward)', () => {
   it('never advances past a notable week even mid-run', () => {
     // Force a morale-band crossing on the very first tick by cratering morale
     // before advancing — the digest entry should halt the fast-forward at week 1.
-    let s0: GameState = { ...newGame('Acme', 11), cash: 50_000_000, weeksUntilNextEvent: 1000, morale: 71 };
+    let s0: GameState = { ...staffedGame(11), cash: 50_000_000, weeksUntilNextEvent: 1000, morale: 71 };
     s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: -3 });
     s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'sales', delta: -1 });
     s0 = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'support', delta: -1 });
@@ -252,7 +260,7 @@ describe('weekly digest (wired into tick)', () => {
   };
 
   it('appends kind:"digest" entries when a big layoff craters morale through every band', () => {
-    const s0 = craterMorale(newGame('Acme', 11));
+    const s0 = craterMorale(staffedGame(11));
     const s1 = tick(s0);
     const digestEntries = s1.newsLog.filter((e) => e.kind === 'digest' && e.week === s1.week);
     expect(digestEntries.map((e) => e.title)).toEqual(
@@ -265,7 +273,7 @@ describe('weekly digest (wired into tick)', () => {
   });
 
   it('does not re-fire a morale-band entry while morale stays under the band', () => {
-    const s1 = tick(craterMorale(newGame('Acme', 11)));
+    const s1 = tick(craterMorale(staffedGame(11)));
     expect(s1.morale).toBeLessThan(30);
 
     const s2 = tick(s1); // no further cuts queued; morale drifts up but stays under 30
@@ -275,7 +283,7 @@ describe('weekly digest (wired into tick)', () => {
   });
 
   it('is deterministic for a given seed', () => {
-    const runDigest = () => tick(craterMorale(newGame('Acme', 11))).newsLog.filter((e) => e.kind === 'digest');
+    const runDigest = () => tick(craterMorale(staffedGame(11))).newsLog.filter((e) => e.kind === 'digest');
     expect(runDigest()).toEqual(runDigest());
   });
 
@@ -299,7 +307,7 @@ describe('hiring feedback loop', () => {
     // average) — a robust crossing regardless of exactly how fast quality
     // compounds beyond that.
     const base: GameState = {
-      ...newGame('Acme', 11),
+      ...staffedGame(11),
       cash: 5_000_000,
       drawnEventIds: SCRAPPY_DECK.map((c) => c.id),
     };
@@ -626,7 +634,7 @@ describe('morale attrition and productivity penalties (forced low morale)', () =
   };
 
   it('crashes morale below both documented thresholds', () => {
-    const s1 = tick(craterMorale(newGame('Acme', 11)));
+    const s1 = tick(craterMorale(staffedGame(11)));
     expect(s1.morale).toBeLessThan(MORALE_ATTRITION_THRESHOLD);
     expect(s1.morale).toBeLessThan(MORALE_CRISIS_THRESHOLD);
   });
@@ -646,7 +654,7 @@ describe('morale attrition and productivity penalties (forced low morale)', () =
     let sawAttrition = false;
     for (let seed = 1; seed <= 30 && !sawAttrition; seed++) {
       // Apply the deliberate layoff first — only *subsequent* headcount drops are attrition.
-      let s = tick(craterMorale(newGame('Acme', seed)));
+      let s = tick(craterMorale(staffedGame(seed)));
       for (let i = 0; i < 15; i++) {
         const before = s.headcount.devs + s.headcount.sales + s.headcount.support;
         s = tick(s);

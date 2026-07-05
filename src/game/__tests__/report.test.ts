@@ -209,13 +209,15 @@ describe('tickMany stops when the bottleneck changes', () => {
       ...base,
       cash: 50_000_000,
       weeksUntilNextEvent: 1000,
-      productQuality: 60, // rivals default to ~50: ahead, but only modestly
+      productQuality: 300, // rivals default to ~250: ahead, but only modestly
       customers: 222, // support(1)*200/222 ≈ 0.9009 — just above the 0.9 coverage threshold
       marketCustomers: 10_000,
       marketShare: 222 / 10_000, // keep internally consistent with customers/marketCustomers above — a stale value here spuriously trips the share-move digest
       trend: { id: 'ai', phase: 'quiet', weeksInPhase: 0, phaseDuration: 6 },
-      headcount: { ...base.headcount, support: 1 },
-      pendingHeadcount: { ...base.pendingHeadcount, support: 1 },
+      // A small staffed team so customers tick up just enough to push support coverage under 0.9
+      // this week, while gained/churned each stay under the customer-flow digest threshold.
+      headcount: { ...base.headcount, devs: 3, sales: 4, support: 1 },
+      pendingHeadcount: { ...base.pendingHeadcount, devs: 3, sales: 4, support: 1 },
     };
     expect(
       bottleneckFor({

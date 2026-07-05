@@ -18,7 +18,10 @@ import {
   weeklyStatsFor,
 } from '../balance';
 import { newGame, reduce, tick } from '../engine';
-import { GameState } from '../types';
+import { GameState, Headcount } from '../types';
+
+/** A staffed starting roster — the game now starts empty, so tests exercising dev output staff up explicitly. */
+const STAFFED: Headcount = { devs: 3, sales: 1, support: 1 };
 
 describe('SET_FOCUS', () => {
   it('switches focus, stamps the week, and emits a news entry', () => {
@@ -57,11 +60,11 @@ describe('focus transition drag', () => {
   });
 
   it('measurably slows quality growth while transitioning, back to normal once settled', () => {
-    let mid: GameState = { ...newGame('Acme', 2), week: 0, focus: 'core', focusChangedWeek: 0 };
+    let mid: GameState = { ...newGame('Acme', 2), week: 0, focus: 'core', focusChangedWeek: 0, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
     mid = reduce(mid, { type: 'SET_FOCUS', focus: 'hardware' }); // focusChangedWeek stamped at week 0
     const duringTransition = tick(mid); // week 1: still within FOCUS_TRANSITION_WEEKS of week 0
 
-    let settled: GameState = { ...newGame('Acme', 2), focus: 'hardware', focusChangedWeek: -1000 };
+    let settled: GameState = { ...newGame('Acme', 2), focus: 'hardware', focusChangedWeek: -1000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
     const afterSettled = tick(settled);
 
     // Same starting quality (0) and dev headcount, only the drag differs.
@@ -82,8 +85,8 @@ describe('focus transition drag', () => {
   it('rapid flip-flopping is strictly worse than committing: constant drag beats never settling', () => {
     // Flip-flopper: switches focus every single week, so it's permanently
     // inside the transition window and never gets the settled multiplier.
-    let flopper: GameState = { ...newGame('Acme', 4), cash: 5_000_000 };
-    let committed: GameState = { ...newGame('Acme', 4), cash: 5_000_000 };
+    let flopper: GameState = { ...newGame('Acme', 4), cash: 5_000_000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
+    let committed: GameState = { ...newGame('Acme', 4), cash: 5_000_000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
     committed = reduce(committed, { type: 'SET_FOCUS', focus: 'hardware' });
 
     const focuses: Array<'hardware' | 'ai'> = ['hardware', 'ai'];
@@ -101,7 +104,7 @@ describe('focus transition drag', () => {
 describe('focus profile multipliers land in the right formulas', () => {
   it('quality growth multiplier: core grows quality fastest, hype slowest, once settled (no transition drag)', () => {
     const grow = (focus: 'core' | 'ai' | 'hardware' | 'hype') =>
-      qualityAfterTick(1000, STARTING_HEADCOUNT.devs, 70, FOCUS_PROFILES[focus].qualityGrowthMultiplier);
+      qualityAfterTick(1000, STAFFED.devs, 70, FOCUS_PROFILES[focus].qualityGrowthMultiplier);
 
     expect(grow('core')).toBeGreaterThan(grow('ai'));
     expect(grow('ai')).toBeGreaterThan(grow('hardware'));
@@ -154,8 +157,8 @@ describe('focus profile multipliers land in the right formulas', () => {
 
 describe('Sim-equivalent: core vs hype quality/churn, hardware vs core revenue/burn per customer', () => {
   it('a core-focused run ends with higher quality and a lower effective churn rate than an equivalent hype-focused run', () => {
-    let core: GameState = { ...newGame('Acme', 5), cash: 50_000_000, focus: 'core', focusChangedWeek: -1000 };
-    let hype: GameState = { ...newGame('Acme', 5), cash: 50_000_000, focus: 'hype', focusChangedWeek: -1000 };
+    let core: GameState = { ...newGame('Acme', 5), cash: 50_000_000, focus: 'core', focusChangedWeek: -1000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
+    let hype: GameState = { ...newGame('Acme', 5), cash: 50_000_000, focus: 'hype', focusChangedWeek: -1000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
     for (let i = 0; i < 15; i++) {
       core = tick(core);
       hype = tick(hype);

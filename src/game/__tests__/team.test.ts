@@ -3,17 +3,19 @@ import { describe, expect, it } from 'vitest';
 import {
   MORALE_BASELINE,
   MORALE_HIT_PER_LAYOFF_FRACTION,
-  STARTING_HEADCOUNT,
   maxHireableHeadcount,
   qualityAfterTick,
   weeklyBurnFor,
 } from '../balance';
 import { newGame, reduce, tick } from '../engine';
 import { SCRAPPY_DECK } from '../events/scrappy';
-import { GameState } from '../types';
+import { GameState, Headcount } from '../types';
 
 /** Deck exhausted up front so a test isolates pure engine mechanics from event RNG. */
 const ALL_EVENT_IDS = SCRAPPY_DECK.map((c) => c.id);
+
+/** A staffed starting roster — the game now starts empty, so tests that exercise team mechanics staff up explicitly. */
+const STAFFED: Headcount = { devs: 3, sales: 1, support: 1 };
 
 describe('SET_PENDING_HIRES', () => {
   it('queues a hire without changing headcount until the next tick', () => {
@@ -46,7 +48,7 @@ describe('SET_PENDING_HIRES', () => {
 
 describe('morale from layoffs', () => {
   it('firing 50% of devs drops morale by the balance-file ballpark', () => {
-    const s0 = newGame('Acme', 2);
+    const s0: GameState = { ...newGame('Acme', 2), headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
     const cutDevs = Math.ceil(s0.headcount.devs / 2);
     const fired = reduce(s0, { type: 'SET_PENDING_HIRES', role: 'devs', delta: -cutDevs });
     const s1 = tick(fired);
@@ -94,7 +96,7 @@ describe('morale drift', () => {
 
 describe('morale affects quality growth', () => {
   it('low morale measurably slows quality growth over 10 ticks', () => {
-    const devs = STARTING_HEADCOUNT.devs;
+    const devs = STAFFED.devs;
     let lowMorale = 10;
     let highMorale = 90;
     let qLow = 0;
