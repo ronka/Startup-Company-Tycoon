@@ -68,6 +68,8 @@ export interface CLevelCandidate {
   id: string;
   name: string;
   personality: string;
+  /** Flavor background, e.g. 'ex-Foogle' or 'bootcamp grad'. Signals the candidate's price band. */
+  exEmployer: string;
   salary: number;
   perk: CLevelPerk;
   quirk: CLevelQuirk | null;

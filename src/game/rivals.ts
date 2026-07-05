@@ -10,14 +10,18 @@ import { nextFloat, nextInt, nextRange } from './rng';
 import { FOCUS_IDS, FocusId, Rival, RngState, Trend } from './types';
 
 const RIVAL_NAME_POOL = [
-  'Vertex Labs',
-  'Nimbus',
-  'Forge Systems',
-  'Halcyon',
-  'Quanta',
-  'Brightline',
-  'Ironclad',
-  'Meridian',
+  'Foogle',
+  'ClosedAI',
+  'Macrosoft',
+  'Metta',
+  'Amazoom',
+  'Applle',
+  'Nvidiaa',
+  'Tesler',
+  'Netflex',
+  'Palantear',
+  'Uper',
+  'Spacey X',
 ];
 
 export const STARTING_RIVAL_QUALITY = 250;

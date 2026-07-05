@@ -90,6 +90,7 @@ function makeCandidate(overrides: Partial<CLevelCandidate>): CLevelCandidate {
     id: 'test-candidate',
     name: 'Test Candidate',
     personality: 'Flavor text.',
+    exEmployer: 'ex-Foogle',
     salary: 6_000,
     perk: { id: 'test-perk', label: 'test perk', axis: 'cto-productivity', multiplier: 1.2 },
     quirk: null,

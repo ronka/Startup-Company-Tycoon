@@ -233,23 +233,35 @@ describe('rival trend coupling (Task 4: rivals as strategic actors)', () => {
   });
 
   it("an aligned rival's quality visibly surges during its wave and its growth slows on crash, vs. an unaligned sibling", () => {
-    let state: GameState = {
-      ...newGame('Acme', 1),
+    // Rival growth carries a 15% random jitter that can swamp the trend signal in
+    // any single tick, so average the comparison over many seeds to isolate the
+    // deterministic trend coupling from that noise.
+    const makeState = (seed: number, trend: GameState['trend']): GameState => ({
+      ...newGame('Acme', seed),
       cash: 50_000_000,
-      trend: PEAK_AI,
+      trend,
       rivals: [
         { name: 'Vertex Labs', productQuality: 100, marketShare: 0.3, focus: 'ai' }, // aligned
         { name: 'Nimbus', productQuality: 100, marketShare: 0.3, focus: 'hardware' }, // unaligned
       ],
-    };
-    const afterPeak = tick(state);
-    const alignedGrowthAtPeak = afterPeak.rivals[0].productQuality - state.rivals[0].productQuality;
-    const unalignedGrowthAtPeak = afterPeak.rivals[1].productQuality - state.rivals[1].productQuality;
-    expect(alignedGrowthAtPeak).toBeGreaterThan(unalignedGrowthAtPeak);
+    });
 
-    state = { ...state, trend: CRASH_AI };
-    const afterCrash = tick(state);
-    const alignedGrowthAtCrash = afterCrash.rivals[0].productQuality - state.rivals[0].productQuality;
+    let alignedGrowthAtPeak = 0;
+    let unalignedGrowthAtPeak = 0;
+    let alignedGrowthAtCrash = 0;
+    const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+    for (const seed of SEEDS) {
+      const peakState = makeState(seed, PEAK_AI);
+      const afterPeak = tick(peakState);
+      alignedGrowthAtPeak += afterPeak.rivals[0].productQuality - peakState.rivals[0].productQuality;
+      unalignedGrowthAtPeak += afterPeak.rivals[1].productQuality - peakState.rivals[1].productQuality;
+
+      const crashState = makeState(seed, CRASH_AI);
+      const afterCrash = tick(crashState);
+      alignedGrowthAtCrash += afterCrash.rivals[0].productQuality - crashState.rivals[0].productQuality;
+    }
+
+    expect(alignedGrowthAtPeak).toBeGreaterThan(unalignedGrowthAtPeak);
     expect(alignedGrowthAtCrash).toBeLessThan(alignedGrowthAtPeak);
   });
 

@@ -43,7 +43,9 @@ export function CandidatePicker({
         <ThemedText type="smallBold">{title} candidates</ThemedText>
         {candidates.map((candidate) => (
           <ThemedView key={candidate.id} type="backgroundElement" style={styles.candidate}>
-            <ThemedText type="smallBold">{candidate.name}</ThemedText>
+            <ThemedText type="smallBold">
+              {candidate.name} · {candidate.exEmployer}
+            </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               {candidate.personality}
             </ThemedText>

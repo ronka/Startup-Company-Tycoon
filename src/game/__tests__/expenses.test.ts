@@ -32,6 +32,7 @@ function cfoWithBurnCut(multiplier: number): CLevels {
     id: 'cfo-1',
     name: 'Pat',
     personality: 'frugal',
+    exEmployer: 'ex-Netflex',
     salary: 6_000,
     perk: { id: 'cfo-burnCut', label: 'Burn cut', axis: 'cfo-burnCut', multiplier },
     quirk: null,

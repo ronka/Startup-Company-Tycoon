@@ -28,7 +28,7 @@ import {
   type WeekBudget,
 } from '@/state/week-budget';
 
-export const STORAGE_KEY = 'startup-tycoon/save/v2';
+export const STORAGE_KEY = 'startup-tycoon/save/v3';
 export const WEEK_BUDGET_STORAGE_KEY = 'startup-tycoon/week-budget/v1';
 export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';

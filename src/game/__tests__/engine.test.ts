@@ -83,7 +83,7 @@ describe('newGame', () => {
     expect(s.marketShare).toBe(STARTING_MARKET_SHARE);
     expect(s.valuationHistory).toEqual([]);
     expect(s.cLevels.cto.hired).toBeNull();
-    expect(s.cLevels.cto.candidates).toHaveLength(3);
+    expect(s.cLevels.cto.candidates).toHaveLength(6);
   });
 });
 
@@ -224,11 +224,12 @@ describe('tickMany (fast-forward)', () => {
   });
 
   it('stops the moment a decision card is drawn, without answering it', () => {
-    // Seed 2 lands a decision card (not a news card) on the very first draw
-    // under the current RNG stream (Task 3's trend phase machine and Task 4's
-    // per-rival focus assignment both added draws ahead of this one in
-    // `newGame`/`tick`, shifting which seeds draw what).
-    const s0: GameState = { ...newGame('Acme', 2), cash: 50_000_000, weeksUntilNextEvent: 1 };
+    // Seed 5 lands a decision card (not a news card) on the very first draw
+    // under the current RNG stream. Note candidate offers, the trend phase
+    // machine, and per-rival focus assignment all draw ahead of this one in
+    // `newGame`/`tick`, so the exact seed that draws a decision card shifts
+    // whenever any of those change.
+    const s0: GameState = { ...newGame('Acme', 5), cash: 50_000_000, weeksUntilNextEvent: 1 };
     const result = tickMany(s0, 10);
     expect(result.pendingEvent).not.toBeNull();
     expect(result.week).toBeLessThan(10);
