@@ -65,7 +65,10 @@
     "sim": "tsx scripts/sim.ts",
     "update": "node scripts/increment-update-version.js 'src/app/(game)/settings.tsx' && npx eas update",
     "build:production:ios": "node scripts/bump-app-version.js && npx eas build --platform ios --profile production",
-    "build:production:android": "node scripts/bump-app-version.js && npx eas build --platform android --profile production"
+    "build:production:android": "node scripts/bump-app-version.js && npx eas build --platform android --profile production",
+    "submit:production": "npx eas submit --profile production",
+    "submit:production:ios": "npx eas submit --platform ios --profile production",
+    "submit:production:android": "npx eas submit --platform android --profile production"
   },
   "private": true
 }

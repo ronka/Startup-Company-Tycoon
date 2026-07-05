@@ -81,6 +81,13 @@ interface GameContextValue {
   /** Wipe the autosave and clear in-memory state. */
   clearSave: () => void;
   /**
+   * Full factory reset: wipes the current run *and* the player's profile (CEO
+   * name), streak, and week budget, and removes their persisted keys. Unlike
+   * `clearSave`, the next onboarding starts from scratch — both name and
+   * company are asked again.
+   */
+  resetAll: () => void;
+  /**
    * The player's own profile (CEO name): null until the initial load resolves,
    * and also doubles as "never set" — this player's very first run ever.
    * Outlives `NEW_GAME`; not cleared by `clearSave()`.
@@ -253,6 +260,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
     clearSave: () => {
       setPreviousState(null);
       dispatch({ type: 'HYDRATE', state: null });
+    },
+    resetAll: () => {
+      setPreviousState(null);
+      setProfileState(null);
+      setStreak(null);
+      setWeekBudget(initialWeekBudget(new Date()));
+      // State→null lets the autosave effect remove the save key, and the fresh
+      // week budget is written by its own effect. Profile and streak are
+      // guarded against null-persist, so their keys never auto-clear — remove
+      // them here.
+      dispatch({ type: 'HYDRATE', state: null });
+      Promise.all([
+        AsyncStorage.removeItem(PROFILE_STORAGE_KEY),
+        AsyncStorage.removeItem(STREAK_STORAGE_KEY),
+      ]).catch(() => {});
     },
     weekBudget,
     devFreePlay,

@@ -12,10 +12,11 @@
     },
     "updates": {
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 10000
+      "fallbackToCacheTimeout": 10000,
+      "url": "https://u.expo.dev/beac599a-ac7b-4f0d-8a15-f616f063ce21"
     },
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.ronkaa.startuptycoon",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -23,10 +24,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#0B4F91",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },

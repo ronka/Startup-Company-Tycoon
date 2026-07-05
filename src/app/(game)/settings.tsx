@@ -17,7 +17,7 @@ import { useGame } from '@/state/game-store';
  * gives a unique build+update stamp (e.g. `1.0.0-3`) so we can tell exactly
  * which JS bundle a device is running.
  */
-const UPDATE_VERSION = 1;
+const UPDATE_VERSION = 3;
 
 /** How many hint keys live under this prefix (see first-run-hint.tsx). */
 const HINT_KEY_PREFIX = 'startup-tycoon/hints/';
@@ -26,7 +26,7 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { devFreePlay, setDevFreePlay } = useGame();
+  const { devFreePlay, setDevFreePlay, resetAll } = useGame();
 
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
 
@@ -45,6 +45,26 @@ export default function SettingsScreen() {
     const hintKeys = keys.filter((k) => k.startsWith(HINT_KEY_PREFIX));
     if (hintKeys.length) await AsyncStorage.multiRemove(hintKeys);
   }, []);
+
+  const confirmReset = useCallback(() => {
+    Alert.alert(
+      'Reset app?',
+      "This erases your CEO name, current company, and all progress. You'll set everything up again from scratch.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            resetAll();
+            resetHints().catch(() => {});
+            router.replace('/onboarding');
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [resetAll, resetHints, router]);
 
   const showDebugOptions = useCallback(() => {
     Alert.alert(
@@ -109,6 +129,21 @@ export default function SettingsScreen() {
             <ThemedText type="default">Version</ThemedText>
             <ThemedText type="default" themeColor="textSecondary">
               {appVersion}
+            </ThemedText>
+          </ThemedView>
+        </Pressable>
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          Reset
+        </ThemedText>
+
+        <Pressable onPress={confirmReset} accessibilityRole="button">
+          <ThemedView type="backgroundElement" style={styles.row}>
+            <ThemedText type="default" themeColor="danger">
+              Reset app
+            </ThemedText>
+            <ThemedText type="default" themeColor="textSecondary">
+              ›
             </ThemedText>
           </ThemedView>
         </Pressable>
