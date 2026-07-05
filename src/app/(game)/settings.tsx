@@ -17,7 +17,7 @@ import { useGame } from '@/state/game-store';
  * gives a unique build+update stamp (e.g. `1.0.0-3`) so we can tell exactly
  * which JS bundle a device is running.
  */
-const UPDATE_VERSION = 3;
+const UPDATE_VERSION = 4;
 
 /** How many hint keys live under this prefix (see first-run-hint.tsx). */
 const HINT_KEY_PREFIX = 'startup-tycoon/hints/';
