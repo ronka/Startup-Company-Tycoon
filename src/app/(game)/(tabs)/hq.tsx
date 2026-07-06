@@ -57,7 +57,7 @@ export default function HqScreen() {
 
         {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 
-        <Sparkline data={state.valuationHistory} />
+        {state.valuationHistory && state.valuationHistory.length > 0 ? <Sparkline data={state.valuationHistory} /> : null}
 
         <View style={styles.grid}>
           <StatTile
