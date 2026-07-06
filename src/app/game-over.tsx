@@ -31,6 +31,11 @@ export default function GameOverScreen() {
   if (!state || !state.gameOver) return <Redirect href="/" />;
 
   const startFresh = () => {
+    // This screen is presented as a modal (see app/_layout.tsx). Pushing
+    // onboarding directly would stack it *inside* this modal's sheet container,
+    // so it would open in a bottom sheet instead of full screen. Dismiss the
+    // modal first, then push onboarding onto the clean root stack.
+    router.dismissAll();
     router.push('/onboarding');
   };
 
