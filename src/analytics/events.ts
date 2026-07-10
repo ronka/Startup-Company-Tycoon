@@ -61,6 +61,12 @@ export const EVENTS = {
   DEBUG_MENU_OPENED: 'debug_menu_opened',
   HINTS_RESET: 'hints_reset',
   DEV_FREE_PLAY_TOGGLED: 'dev_free_play_toggled',
+
+  // IAP week packs
+  PAYWALL_SHOWN: 'paywall_shown',
+  PURCHASE_STARTED: 'purchase_started',
+  PURCHASE_COMPLETED: 'purchase_completed',
+  PURCHASE_FAILED: 'purchase_failed',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

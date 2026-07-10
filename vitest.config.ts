@@ -16,8 +16,9 @@ export default defineConfig({
   },
   test: {
     // Engine tests are pure TypeScript — no React Native test infra needed.
-    // src/state's non-React logic modules (e.g. week-budget.ts) get the same treatment.
-    include: ['src/game/**/*.test.ts', 'src/state/**/*.test.ts'],
+    // src/state's non-React logic modules (e.g. week-budget.ts) and
+    // src/purchases' client interface get the same treatment.
+    include: ['src/game/**/*.test.ts', 'src/state/**/*.test.ts', 'src/purchases/**/*.test.ts'],
     environment: 'node',
   },
 });

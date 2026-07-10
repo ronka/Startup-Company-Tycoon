@@ -21,6 +21,18 @@
       },
       "channel": "development"
     },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "APP_ENV": "development",
+        "EXPO_PUBLIC_APP_ENV": "development"
+      },
+      "channel": "development"
+    },
     "preview": {
       "ios": {
         "simulator": true,

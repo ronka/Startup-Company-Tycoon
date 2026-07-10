@@ -18,7 +18,7 @@ import { useGame } from '@/state/game-store';
  * gives a unique build+update stamp (e.g. `1.0.0-3`) so we can tell exactly
  * which JS bundle a device is running.
  */
-const UPDATE_VERSION = 5;
+const UPDATE_VERSION = 6;
 
 /** How many hint keys live under this prefix (see first-run-hint.tsx). */
 const HINT_KEY_PREFIX = 'startup-tycoon/hints/';
@@ -27,7 +27,7 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { devFreePlay, setDevFreePlay, resetAll } = useGame();
+  const { devFreePlay, setDevFreePlay, resetAll, purchasedWeeks, grantPurchasedWeeks } = useGame();
 
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
 
@@ -89,6 +89,10 @@ export default function SettingsScreen() {
           },
         },
         {
+          text: `Grant 20 purchased weeks (have ${purchasedWeeks?.weeksRemaining ?? 0})`,
+          onPress: () => grantPurchasedWeeks(20),
+        },
+        {
           text: 'Start new game',
           style: 'destructive',
           onPress: () => {
@@ -99,7 +103,7 @@ export default function SettingsScreen() {
       ],
       { cancelable: true },
     );
-  }, [devFreePlay, setDevFreePlay, resetHints, router]);
+  }, [devFreePlay, setDevFreePlay, resetHints, router, purchasedWeeks, grantPurchasedWeeks]);
 
   const handleVersionPress = useCallback(() => {
     tapCountRef.current += 1;

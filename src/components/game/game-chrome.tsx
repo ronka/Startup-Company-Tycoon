@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
@@ -12,7 +13,11 @@ import { isNotableWeek } from '@/game/digest';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { useGame } from '@/state/game-store';
-import { WEEKS_BANK_CAP, canSpendWeek } from '@/state/week-budget';
+import { WEEKS_BANK_CAP, canSpendAnyWeek } from '@/state/week-budget';
+
+// Week packs (Task 2, PRD week-packs) are iOS-only for v1 — Android/web keep
+// today's free-only behavior exactly, no sheet and no tappable affordance.
+const IS_IOS = Platform.OS === 'ios';
 
 /**
  * Persistent chrome shared by every game tab (Task 12): the Next Week
@@ -23,10 +28,12 @@ import { WEEKS_BANK_CAP, canSpendWeek } from '@/state/week-budget';
  * tabs that stay mounted in the background.
  */
 export function GameChrome() {
-  const { state, previousState, dispatch, weekBudget, devFreePlay, setDevFreePlay } = useGame();
+  const { state, previousState, dispatch, weekBudget, purchasedWeeks, creditPurchase, devFreePlay, setDevFreePlay } =
+    useGame();
   const insets = useSafeAreaInsets();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
+  const [buySheetTrigger, setBuySheetTrigger] = useState<BuyWeeksTrigger | null>(null);
   // Week whose recap has "settled" — armed a beat after its tick's decision
   // card (if any) is answered, so the recap never presents into the same frame
   // the DecisionModal is dismissing (present-while-dismiss hangs iOS — see
@@ -66,10 +73,11 @@ export function GameChrome() {
       }))
     : [];
 
-  // Store-layer daily week budget (PRD F12) — a no-op while the initial load
-  // is still resolving (weekBudget null), so play is never blocked by a slow
-  // AsyncStorage read.
-  const budgetExhausted = !devFreePlay && weekBudget !== null && !canSpendWeek(weekBudget);
+  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
+  // no-op while either is still resolving (null), so play is never blocked
+  // by a slow AsyncStorage read.
+  const budgetExhausted =
+    !devFreePlay && weekBudget !== null && purchasedWeeks !== null && !canSpendAnyWeek(weekBudget, purchasedWeeks);
   const canAdvance = !state.pendingEvent && !budgetExhausted;
 
   return (
@@ -96,11 +104,34 @@ export function GameChrome() {
 
         <View style={styles.budgetRow}>
           {budgetExhausted ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
-              That&apos;s the week planned out — the team gets to work. Come back tomorrow.
-            </ThemedText>
+            IS_IOS ? (
+              <Pressable onPress={() => setBuySheetTrigger('out_of_weeks')} accessibilityRole="button">
+                <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
+                  That&apos;s the week planned out — the team gets to work.{' '}
+                  <ThemedText type="smallBold" themeColor="text">
+                    Buy more weeks →
+                  </ThemedText>
+                </ThemedText>
+              </Pressable>
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
+                That&apos;s the week planned out — the team gets to work. Come back tomorrow.
+              </ThemedText>
+            )
           ) : weekBudget ? (
-            <WeekBudgetDots weeksRemaining={weekBudget.weeksRemaining} />
+            IS_IOS ? (
+              <Pressable onPress={() => setBuySheetTrigger('hud')} accessibilityRole="button">
+                <WeekBudgetDots
+                  weeksRemaining={weekBudget.weeksRemaining}
+                  purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
+                />
+              </Pressable>
+            ) : (
+              <WeekBudgetDots
+                weeksRemaining={weekBudget.weeksRemaining}
+                purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
+              />
+            )
           ) : null}
 
           {__DEV__ ? (
@@ -131,16 +162,33 @@ export function GameChrome() {
         entries={weekEntries}
         onDismiss={() => setReviewedWeek(state.week)}
       />
+
+      {IS_IOS ? (
+        <BuyWeeksSheet
+          visible={buySheetTrigger !== null}
+          trigger={buySheetTrigger ?? 'hud'}
+          onClose={() => setBuySheetTrigger(null)}
+          onPurchased={creditPurchase}
+        />
+      ) : null}
     </>
   );
 }
 
 /**
  * Diegetic, non-numeric stand-in for a battery/energy meter: one filled dot
- * per week still available today (banked weeks included), out of the bank
- * cap. No digits anywhere — just how full the row looks.
+ * per free week still available today (banked weeks included), out of the
+ * bank cap. Purchased weeks are cap-exempt and shown separately as a "+N"
+ * companion — since they never expire, a dot-per-week meter would grow
+ * unbounded — so a numeric badge is used there instead.
  */
-function WeekBudgetDots({ weeksRemaining }: { weeksRemaining: number }) {
+function WeekBudgetDots({
+  weeksRemaining,
+  purchasedWeeksRemaining,
+}: {
+  weeksRemaining: number;
+  purchasedWeeksRemaining: number;
+}) {
   const theme = useTheme();
   return (
     <View style={styles.dotsRow}>
@@ -153,6 +201,11 @@ function WeekBudgetDots({ weeksRemaining }: { weeksRemaining: number }) {
           ]}
         />
       ))}
+      {purchasedWeeksRemaining > 0 ? (
+        <ThemedText type="small" themeColor="success" style={styles.purchasedBadge}>
+          +{purchasedWeeksRemaining}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -189,5 +242,8 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  purchasedBadge: {
+    marginLeft: Spacing.half,
   },
 });

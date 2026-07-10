@@ -20,6 +20,9 @@ export default class PostHog {
   identify(): void {}
   group(): void {}
   reset(): void {}
+  getDistinctId(): string {
+    return 'test-distinct-id';
+  }
   flush(): Promise<void> {
     return Promise.resolve();
   }

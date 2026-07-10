@@ -20,18 +20,25 @@ import { posthog } from '@/analytics/posthog';
 import { newGame, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type GameAction, type GameState } from '@/game/types';
+import { configurePurchases, reconcileOnLaunch, syncPostHogAttribute } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import {
-  canSpendWeek,
+  canSpendAnyWeek,
+  creditTransaction,
+  creditTransactions,
   dateKey,
+  grantPurchasedWeeks,
+  initialPurchasedWeeksPool,
   initialWeekBudget,
   refreshWeekBudget,
-  spendWeek,
+  spendWeekFromPools,
+  type PurchasedWeeksPool,
   type WeekBudget,
 } from '@/state/week-budget';
 
 export const STORAGE_KEY = 'startup-tycoon/save/v3';
 export const WEEK_BUDGET_STORAGE_KEY = 'startup-tycoon/week-budget/v1';
+export const PURCHASED_WEEKS_STORAGE_KEY = 'startup-tycoon/purchased-weeks/v1';
 export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
 
@@ -121,9 +128,13 @@ interface GameContextValue {
   clearSave: () => void;
   /**
    * Full factory reset: wipes the current run *and* the player's profile (CEO
-   * name), streak, and week budget, and removes their persisted keys. Unlike
-   * `clearSave`, the next onboarding starts from scratch — both name and
-   * company are asked again.
+   * name), streak, week budget, and purchased-weeks pool, and removes their
+   * persisted keys. Unlike `clearSave`, the next onboarding starts from
+   * scratch — both name and company are asked again. Purchased weeks are not
+   * special-cased here: the design already accepts local week-loss on
+   * reinstall (anonymous RC IDs), and `resetAll` is the in-app equivalent —
+   * Task 5's launch reconciliation re-credits any still-owed weeks from
+   * RevenueCat once that lands.
    */
   resetAll: () => void;
   /**
@@ -141,6 +152,21 @@ interface GameContextValue {
    * decision, browsing tabs) stays fully usable at zero.
    */
   weekBudget: WeekBudget | null;
+  /**
+   * IAP-purchased weeks (separate from the free daily budget): cap-exempt,
+   * never expire, and outlive `NEW_GAME` / game over. Spent only after the
+   * free budget is exhausted. Null until the initial load resolves.
+   */
+  purchasedWeeks: PurchasedWeeksPool | null;
+  /** Dev-only grant with no transaction ledger involved (debug menu). */
+  grantPurchasedWeeks: (amount: number) => void;
+  /**
+   * Credits a completed IAP by its transaction ID (Task 5): the weeks and
+   * the granted-tx ledger update in the same write, so a purchase can never
+   * end up marked granted without its weeks landing too. Idempotent per
+   * transaction ID.
+   */
+  creditPurchase: (weeksGranted: number, transactionId: string) => void;
   /** Dev-only escape hatch so playtesting is never rate-limited. Not persisted. */
   devFreePlay: boolean;
   setDevFreePlay: (freePlay: boolean) => void;
@@ -155,6 +181,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [previousState, setPreviousState] = useState<GameState | null>(null);
   const [loading, setLoading] = useState(true);
   const [weekBudget, setWeekBudget] = useState<WeekBudget | null>(null);
+  const [purchasedWeeks, setPurchasedWeeks] = useState<PurchasedWeeksPool | null>(null);
   const [devFreePlay, setDevFreePlay] = useState(false);
   // Null (not `initialStreak`) until the load resolves: null also doubles as
   // "no streak was ever saved", which the standup-injection effect below
@@ -185,6 +212,34 @@ export function GameProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.warn('[game-store] failed to load week budget', err);
         if (!cancelled) setWeekBudget(initialWeekBudget(new Date()));
+      }
+      let loadedPurchasedWeeks = initialPurchasedWeeksPool();
+      try {
+        const raw = await AsyncStorage.getItem(PURCHASED_WEEKS_STORAGE_KEY);
+        const saved = raw ? (JSON.parse(raw) as PurchasedWeeksPool) : null;
+        loadedPurchasedWeeks = saved ?? initialPurchasedWeeksPool();
+        if (!cancelled) setPurchasedWeeks(loadedPurchasedWeeks);
+      } catch (err) {
+        console.warn('[game-store] failed to load purchased weeks', err);
+        if (!cancelled) setPurchasedWeeks(loadedPurchasedWeeks);
+      }
+      try {
+        // No-ops off iOS / in Expo Go (see src/purchases/index.native.ts).
+        // Crash-safe delivery (Task 5): diffs RC's transaction history against
+        // what's already been granted (the ledger just loaded above) and
+        // credits anything still owed, so a purchase interrupted mid-flow
+        // (e.g. app killed right after payment) self-heals on the next
+        // launch instead of losing the weeks. `creditTransactions` folds the
+        // credit and the ledger update into the *same* persisted object, so
+        // there's no window where one could land without the other.
+        configurePurchases();
+        syncPostHogAttribute(posthog.getDistinctId()).catch(() => {});
+        const { newlyGranted } = await reconcileOnLaunch(new Set(loadedPurchasedWeeks.grantedTransactionIds));
+        if (!cancelled && newlyGranted.length > 0) {
+          setPurchasedWeeks((prev) => creditTransactions(prev ?? loadedPurchasedWeeks, newlyGranted));
+        }
+      } catch (err) {
+        console.warn('[game-store] failed to reconcile purchases', err);
       }
       try {
         const raw = await AsyncStorage.getItem(STREAK_STORAGE_KEY);
@@ -225,6 +280,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save week budget', err),
     );
   }, [weekBudget, loading]);
+
+  // Persist the purchased-weeks pool whenever it changes.
+  useEffect(() => {
+    if (loading || purchasedWeeks === null) return;
+    AsyncStorage.setItem(PURCHASED_WEEKS_STORAGE_KEY, JSON.stringify(purchasedWeeks)).catch((err) =>
+      console.warn('[game-store] failed to save purchased weeks', err),
+    );
+  }, [purchasedWeeks, loading]);
 
   // Persist the streak whenever it changes.
   useEffect(() => {
@@ -330,13 +393,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // shifts when a tick will actually advance the week.
       if (!state || state.gameOver || state.pendingEvent) return;
       // Store-layer-only rate limit (PRD F12) — the engine never sees this.
-      if (!devFreePlay && weekBudget && !canSpendWeek(weekBudget)) {
+      // Purchased weeks (IAP week-packs) top up the free budget rather than
+      // replacing it: spend order is free-first via `spendWeekFromPools`.
+      if (
+        !devFreePlay &&
+        weekBudget &&
+        purchasedWeeks &&
+        !canSpendAnyWeek(weekBudget, purchasedWeeks)
+      ) {
         // The player hit the daily wall — a key retention/monetization signal.
         track(EVENTS.WEEK_ADVANCE_BLOCKED, gameProps(state));
         return;
       }
       setPreviousState(state);
-      if (!devFreePlay && weekBudget) setWeekBudget(spendWeek(weekBudget));
+      if (!devFreePlay && weekBudget && purchasedWeeks) {
+        const spent = spendWeekFromPools(weekBudget, purchasedWeeks);
+        setWeekBudget(spent.budget);
+        setPurchasedWeeks(spent.purchased);
+      }
       dispatch(action);
       // `week_advanced` itself is emitted by the state-diff effect, with the
       // fresh post-tick numbers, once the reducer commits.
@@ -374,13 +448,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setProfileState(null);
       setStreak(null);
       setWeekBudget(initialWeekBudget(new Date()));
+      setPurchasedWeeks(initialPurchasedWeeksPool());
       track(EVENTS.APP_RESET);
       // New anonymous identity so a fresh setup isn't attributed to the old player.
       posthog.reset();
       // State→null lets the autosave effect remove the save key, and the fresh
-      // week budget is written by its own effect. Profile and streak are
-      // guarded against null-persist, so their keys never auto-clear — remove
-      // them here.
+      // week budget / purchased pool are written by their own effects.
+      // Profile and streak are guarded against null-persist, so their keys
+      // never auto-clear — remove them here.
       dispatch({ type: 'HYDRATE', state: null });
       Promise.all([
         AsyncStorage.removeItem(PROFILE_STORAGE_KEY),
@@ -388,6 +463,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       ]).catch(() => {});
     },
     weekBudget,
+    purchasedWeeks,
+    grantPurchasedWeeks: (amount: number) => {
+      setPurchasedWeeks((prev) => grantPurchasedWeeks(prev ?? initialPurchasedWeeksPool(), amount));
+    },
+    creditPurchase: (weeksGranted: number, transactionId: string) => {
+      setPurchasedWeeks((prev) => creditTransaction(prev ?? initialPurchasedWeeksPool(), transactionId, weeksGranted));
+    },
     devFreePlay,
     setDevFreePlay,
     streak,

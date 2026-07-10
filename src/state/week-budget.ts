@@ -54,3 +54,77 @@ export function canSpendWeek(budget: WeekBudget): boolean {
 export function spendWeek(budget: WeekBudget): WeekBudget {
   return { ...budget, weeksRemaining: Math.max(0, budget.weeksRemaining - 1) };
 }
+
+/**
+ * Weeks bought via IAP (PRD week-packs). Kept as a pool entirely separate
+ * from the free daily `WeekBudget`: unlike the free budget it is exempt from
+ * `WEEKS_BANK_CAP`, never expires, and outlives `NEW_GAME` — a purchase is a
+ * durable entitlement, not a daily allowance.
+ *
+ * `grantedTransactionIds` lives on the same object (not a separate store) so
+ * it always persists in the same write as `weeksRemaining` (Task 5): a
+ * RevenueCat transaction can only ever be marked granted in the same atomic
+ * update that credits its weeks, so a crash between the two is impossible —
+ * the transaction is either fully applied or, on the next reconciliation
+ * pass, looks exactly like it was never applied at all.
+ */
+export interface PurchasedWeeksPool {
+  weeksRemaining: number;
+  grantedTransactionIds: string[];
+}
+
+/** The pool as it stands before any purchase has ever been made. */
+export function initialPurchasedWeeksPool(): PurchasedWeeksPool {
+  return { weeksRemaining: 0, grantedTransactionIds: [] };
+}
+
+/** Credit `amount` weeks with no transaction ledger involved (dev grant, stub purchases). */
+export function grantPurchasedWeeks(pool: PurchasedWeeksPool, amount: number): PurchasedWeeksPool {
+  return { ...pool, weeksRemaining: pool.weeksRemaining + amount };
+}
+
+/**
+ * Credits `weeks` for a specific RevenueCat transaction and marks it granted,
+ * in one update — the crash-safe primitive purchase completion and launch
+ * reconciliation both funnel through (Task 5). Idempotent: a transaction
+ * already in the ledger is a no-op, so calling this twice for the same
+ * transaction (e.g. an overlapping purchase-completion and launch-reconcile
+ * pass) never double-grants.
+ */
+export function creditTransaction(pool: PurchasedWeeksPool, transactionId: string, weeks: number): PurchasedWeeksPool {
+  if (pool.grantedTransactionIds.includes(transactionId)) return pool;
+  return {
+    weeksRemaining: pool.weeksRemaining + weeks,
+    grantedTransactionIds: [...pool.grantedTransactionIds, transactionId],
+  };
+}
+
+/** Credits a batch of transactions in one pass (e.g. the result of launch reconciliation). */
+export function creditTransactions(
+  pool: PurchasedWeeksPool,
+  transactions: readonly { transactionId: string; weeks: number }[],
+): PurchasedWeeksPool {
+  return transactions.reduce((acc, tx) => creditTransaction(acc, tx.transactionId, tx.weeks), pool);
+}
+
+/** True once either pool — free or purchased — has a week left to spend. */
+export function canSpendAnyWeek(budget: WeekBudget, purchased: PurchasedWeeksPool): boolean {
+  return canSpendWeek(budget) || purchased.weeksRemaining > 0;
+}
+
+/**
+ * Spend one week, free budget first and the purchased pool only once the
+ * free budget is exhausted — a purchase should never feel like it "ate" the
+ * daily free allotment. No-op if both pools are already empty; callers
+ * should gate on `canSpendAnyWeek` first.
+ */
+export function spendWeekFromPools(
+  budget: WeekBudget,
+  purchased: PurchasedWeeksPool,
+): { budget: WeekBudget; purchased: PurchasedWeeksPool } {
+  if (canSpendWeek(budget)) return { budget: spendWeek(budget), purchased };
+  if (purchased.weeksRemaining > 0) {
+    return { budget, purchased: { ...purchased, weeksRemaining: purchased.weeksRemaining - 1 } };
+  }
+  return { budget, purchased };
+}

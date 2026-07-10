@@ -5,7 +5,7 @@
 
 ## Overview
 
-Monetize the game with consumable "week pack" in-app purchases via RevenueCat, iOS only for v1. Two SKUs — 20 weeks / $1.99 and 60 weeks / $4.99 — sold from a bottom sheet that appears when the daily free budget (5/day, bank cap 10, unchanged) runs out, and from a tappable HUD week counter. Purchased weeks live in a separate pool: spent after free weeks, exempt from the bank cap, never expire, persist across game runs. Delivery is made idempotent via transaction-ID reconciliation against RevenueCat's `nonSubscriptionTransactions` on purchase and on launch. Reinstall loss of unspent weeks is accepted (anonymous RC IDs). Funnel is measured with client PostHog events plus the RevenueCat→PostHog integration. Android and web keep today's free-only behavior behind a platform gate.
+Monetize the game with consumable "week pack" in-app purchases via RevenueCat, iOS only for v1. Two SKUs — 20 weeks / $1.99 and 60 weeks / $4.99 — sold from a bottom sheet that appears when the daily free budget (5/day, bank cap 10, unchanged) runs out, and from a tappable HUD week counter. Purchased weeks live in a separate pool: spent after free weeks, exempt from the bank cap, never expire, persist across game runs. Delivery is made idempotent via transaction-ID reconciliation against RevenueCat's `nonSubscriptionTransactions` on purchase and on launch. Reinstall loss of unspent weeks is accepted (anonymous RC IDs). Funnel is measured with client PostHog events. Android and web keep today's free-only behavior behind a platform gate.
 
 ---
 
@@ -22,12 +22,14 @@ The economy layer for purchased weeks, with no RevenueCat dependency. Extend `sr
 
 #### Acceptance criteria
 
-- [ ] `week-budget.ts` exposes a purchased pool with free-first spend order, cap-exempt, covered by unit tests (grant, spend order, day-rollover with non-zero purchased pool, persistence round-trip)
-- [ ] Purchased pool persists across app restarts and across game runs (new game / game over does not reset it)
-- [ ] HUD shows "+N" when purchased weeks exist; advancing weeks consumes free first, then purchased
-- [ ] "Come back tomorrow" state only appears when both pools are empty
-- [ ] Dev-only grant path allows demoing the whole flow without IAP
-- [ ] `npm test` passes; web build unaffected
+- [x] `week-budget.ts` exposes a purchased pool with free-first spend order, cap-exempt, covered by unit tests (grant, spend order, day-rollover with non-zero purchased pool, persistence round-trip)
+- [x] Purchased pool persists across app restarts and across game runs (new game / game over does not reset it)
+- [x] HUD shows "+N" when purchased weeks exist; advancing weeks consumes free first, then purchased
+- [x] "Come back tomorrow" state only appears when both pools are empty
+- [x] Dev-only grant path allows demoing the whole flow without IAP
+- [x] `npm test` passes; web build unaffected
+
+Status: done
 
 #### User stories addressed
 
@@ -47,11 +49,13 @@ The full purchase UX against a stub. Create `src/purchases/` exposing a small in
 
 #### Acceptance criteria
 
-- [ ] Sheet opens from both triggers on iOS; buying a pack via the stub credits the purchased pool from Task 1
-- [ ] Android and web never show the sheet or the tappable affordance; existing out-of-weeks copy remains there
-- [ ] All four analytics events fire with correct properties (verifiable in PostHog debug/dev)
-- [ ] Purchase-failure path shows a non-blocking error state in the sheet
-- [ ] Works in Expo Go and web dev (stub only, no native module yet); `npm test` passes
+- [x] Sheet opens from both triggers on iOS; buying a pack via the stub credits the purchased pool from Task 1
+- [x] Android and web never show the sheet or the tappable affordance; existing out-of-weeks copy remains there
+- [x] All four analytics events fire with correct properties (verifiable in PostHog debug/dev)
+- [x] Purchase-failure path shows a non-blocking error state in the sheet
+- [x] Works in Expo Go and web dev (stub only, no native module yet); `npm test` passes
+
+Status: done — verified end to end in Expo Go on iOS Simulator (HUD tap → sheet → stub purchase → +20 badge) and confirmed web/Android render the unchanged plain copy with no tappable affordance.
 
 #### User stories addressed
 
@@ -65,6 +69,16 @@ The full purchase UX against a stub. Create `src/purchases/` exposing a small in
 - **Type**: HITL (thin) + AFK — most console work is automatable via the connected RevenueCat MCP
 - **Blocked by**: None - can start immediately (parallel with Tasks 1–2)
 
+Status: done
+- Created RC project "Startup Tycoon" (`projb69142f2`) and iOS app "Startup Tycoon iOS" (`app46a13f3d51`, bundle `com.ronkaa.startuptycoon`).
+- Created both consumable products: `com.ronkaa.startuptycoon.weeks20` (`proddbab1244b2`), `com.ronkaa.startuptycoon.weeks60` (`prode0c4656b84`).
+- Created the `weeks` offering (`ofrngf9292f4475`) with packages `$rc_custom_weeks20` / `$rc_custom_weeks60`, each attached to its product — verified via `get-offering` with `expand=[package,package.product]`.
+- Fetched the public iOS SDK key and added it to `.env` as `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`.
+- User attached the App Store Connect API key to the RC app (confirmed via `get-app`: `app_store_connect_api_key_configured: true`).
+- Pushed both products to App Store Connect via `set-product-store-state` (pricing $1.99/$4.99 USD, US territory, en-US localization) — both now `raw_store_status: READY_TO_SUBMIT`, confirmed via `get-product-store-state`.
+- Tried `submit-products-to-store`: both `skipped` — Apple requires an app's first IAP to be submitted together with a new app version in App Store Connect directly, so this folds into Task 6's App Store submission, not standalone.
+- User signed the Paid Apps agreement and created a sandbox tester (`ronkamail+sandbox@gmail.com`), 2026-07-10.
+
 #### What to build
 
 Split between a thin human slice and MCP-driven setup. **Human-only**: sign the Paid Apps agreement in App Store Connect (banking + tax — sandbox purchases fail silently without it), provide the App Store Connect API credentials when the RevenueCat app is created, and create a sandbox tester account. **Via RevenueCat MCP** (no `startup-tycoon` project exists yet — verified 2026-07-10): create the project and iOS app (`com.ronkaa.startuptycoon`), create the two consumable products (`com.ronkaa.startuptycoon.weeks20` at $1.99, `com.ronkaa.startuptycoon.weeks60` at $4.99) and push them into App Store Connect with `create-product-in-store` / `submit-products-to-store`, create the `weeks` offering with two packages attached to the products, and fetch the public iOS SDK key (`list-app-public-api-keys`) into `.env` (following the existing PostHog `.env` pattern).
@@ -73,11 +87,11 @@ Note: RevenueCat Virtual Currencies were considered for the weeks balance and re
 
 #### Acceptance criteria
 
-- [ ] Paid Apps agreement is Active in App Store Connect (human)
-- [ ] Sandbox tester account created and signed in on the test device (human)
-- [ ] RC project + iOS app exist; both consumable products created and pushed to App Store Connect in "Ready to Submit" state
-- [ ] Offering `weeks` returns both packages (verifiable via MCP `get-offering`)
-- [ ] Public SDK key in `.env` (never the secret key)
+- [x] Paid Apps agreement is Active in App Store Connect (human)
+- [x] Sandbox tester account created and signed in on the test device (human)
+- [x] RC project + iOS app exist; both consumable products created and pushed to App Store Connect in "Ready to Submit" state
+- [x] Offering `weeks` returns both packages (verifiable via MCP `get-offering`)
+- [x] Public SDK key in `.env` (never the secret key)
 
 #### User stories addressed
 
@@ -90,15 +104,22 @@ Note: RevenueCat Virtual Currencies were considered for the weeks balance and re
 - **Type**: HITL
 - **Blocked by**: None - can start immediately (parallel with Tasks 1–3)
 
+Status: done — completed on iOS Simulator instead of a physical device
+- Added a `development` profile to `eas.json` (physical device: `ios.simulator: false`, `developmentClient: true`, internal distribution — kept separate from the existing simulator-only `development-simulator` profile) and `"build:dev:ios": "npx eas build --platform ios --profile development"` in `package.json`, matching the production scripts' shape. No app-version bump wired in, per the eas-publish skill convention for dev builds.
+- First automated run failed: `expo-dev-client` wasn't installed (required for any dev-client build, including the pre-existing `development-simulator` profile). Installed via `npx expo install expo-dev-client`; tests still pass (298/298).
+- First non-interactive attempt failed on credential setup (internal distribution needs an interactive first-time cert/provisioning-profile flow). User ran `npm run build:dev:ios` interactively and it succeeded: https://expo.dev/accounts/ronkaa/projects/startup-tycoon/builds/7c0345fd-973a-4d2e-9c77-d975d9f18f33
+- User's physical iPhone is corp-managed (Google MDM) and blocks trusting ad-hoc/enterprise-signed apps (no team entry under VPN & Device Management) — the physical-device install was a dead end there. Switched to the Simulator path instead: added `"build:simulator:ios": "npx eas build --platform ios --profile development-simulator"`, ran it, installed with `eas build:run --platform ios --latest`, started `npx expo start --dev-client`, and connected via `xcrun simctl openurl booted "exp://<lan-ip>:8081"`. Confirmed running: dev-client chrome (gear-icon debug menu) loading the real app, not Expo Go.
+- Simulator is a fully valid substitute here, not just a fallback for local dev: since iOS 16/Xcode 14 the Simulator supports real App Store **sandbox** purchases when signed into a sandbox Apple ID under Settings → App Store on the Simulator itself — so Task 6's sandbox purchase testing can also happen here instead of a physical device.
+
 #### What to build
 
 A development client so native purchase code can be tested (`react-native-purchases` cannot run in Expo Go). Add a `development` profile to `eas.json` (internal distribution, development client) and an npm script (e.g. `build:dev:ios`) consistent with the existing production scripts in `package.json`. Build and install the dev client on a physical iPhone. Per the eas-publish/expo-publish skill conventions, do not bump the app version for dev builds.
 
 #### Acceptance criteria
 
-- [ ] `eas.json` has a `development` profile; `npm run build:dev:ios` produces an installable dev client
-- [ ] Dev client runs the app from the local metro server on a physical iPhone
-- [ ] Production build scripts and profiles unchanged
+- [x] `eas.json` has a `development` profile; `npm run build:dev:ios` produces an installable dev client
+- [x] Dev client runs the app from the local metro server — verified on iOS Simulator (physical iPhone blocked by corporate MDM; Simulator supports real sandbox IAP testing too, so this is not a regression for Task 6)
+- [x] Production build scripts and profiles unchanged
 
 #### User stories addressed
 
@@ -111,18 +132,26 @@ A development client so native purchase code can be tested (`react-native-purcha
 - **Type**: AFK
 - **Blocked by**: Task 2, Task 3
 
+Status: done — verified via unit tests + live device logs; a hands-on sandbox purchase pass is Task 6's job
+- Added `react-native-purchases`. Module boundary via Metro platform extensions: `index.ts` (universal — web/vitest, stub only) vs `index.native.ts` (iOS/Android; a runtime `Constants.appOwnership === 'expo'` check + deferred `require('./revenuecat')` keeps the native SDK out of Expo Go too). `react-native-purchases` is never imported anywhere reachable from web or vitest.
+- **Crash-safety fix (caught by advisor review before merge):** the first draft had `src/purchases/` persist the granted-transaction ledger itself, separately from `game-store.tsx`'s persistence of the purchased-weeks pool — a crash between those two writes could mark a transaction "granted" without its weeks ever landing, silently losing a paid purchase. Fixed by moving `grantedTransactionIds` onto `PurchasedWeeksPool` itself (`week-budget.ts`), so the pool and its ledger persist in one `AsyncStorage.setItem` call. `src/purchases/` now only *computes* what's owed (`reconcilePurchases`, pure); `game-store.tsx` applies and persists it via the new `creditTransaction`/`creditTransactions`, which are idempotent per transaction ID.
+- `PurchaseResult`'s success case now carries a `transactionId` (real RC transaction ID, or a synthetic one from the stub) so both paths funnel through the same idempotent credit primitive.
+- `$posthogUserId` confirmed as RevenueCat's actual reserved PostHog-integration attribute key via RC's own docs (not guessed).
+- Verified end-to-end on the iOS Simulator dev client (rebuilt after adding the native dependency — a stale build without it briefly threw "native module not found", expected): Metro/RC debug logs show a fully clean run — SDK configured, bundle ID correct, `$posthogUserId` attribute set with the real PostHog distinct ID, the `weeks` offering fetched with both real products (200 OK), CustomerInfo fetched, reconciliation ran with zero errors.
+- Did not complete a live purchase through the UI — attempts to tap through the iOS permission dialog via blind screen-coordinate automation became unreliable (clicks were landing in the host coding-agent's own window instead of the Simulator) and risked interfering with unrelated things on screen, so that was abandoned rather than pushed further. This is exactly the sandbox purchase pass Task 6 already covers by hand.
+
 #### What to build
 
-Replace the stub with the real thing behind the same `src/purchases/` interface. Add `react-native-purchases`, configure it at app start (iOS only) with the public key from `.env` and anonymous app user IDs. Fetch the `weeks` offering so the sheet shows live localized prices instead of hardcoded ones (fall back gracefully if offerings fail to load). Implement transaction-ID reconciliation: persist a set of granted transaction IDs; on purchase completion AND on every app launch, diff `customerInfo.nonSubscriptionTransactions` against the granted set and credit any missing grants to the purchased pool — making delivery idempotent and crash-safe. Pass PostHog's distinct ID to RevenueCat via `setAttributes` (for the Task 6 PostHog integration). Provide a vitest stub and a web/Expo Go-safe module boundary mirroring the existing PostHog stubbing approach, so `npm test` and web builds stay green.
+Replace the stub with the real thing behind the same `src/purchases/` interface. Add `react-native-purchases`, configure it at app start (iOS only) with the public key from `.env` and anonymous app user IDs. Fetch the `weeks` offering so the sheet shows live localized prices instead of hardcoded ones (fall back gracefully if offerings fail to load). Implement transaction-ID reconciliation: persist a set of granted transaction IDs; on purchase completion AND on every app launch, diff `customerInfo.nonSubscriptionTransactions` against the granted set and credit any missing grants to the purchased pool — making delivery idempotent and crash-safe. Pass PostHog's distinct ID to RevenueCat via `setAttributes`. Provide a vitest stub and a web/Expo Go-safe module boundary mirroring the existing PostHog stubbing approach, so `npm test` and web builds stay green.
 
 #### Acceptance criteria
 
-- [ ] Sheet displays live prices from the RC offering on iOS; stub still used on web/tests
-- [ ] Reconciliation is pure/injectable and unit-tested: missing grant credited once, already-granted tx never re-credited, multiple pending grants all credited
-- [ ] Reconciliation runs on launch and after purchase; granted-tx set persists in AsyncStorage
-- [ ] PostHog distinct ID set as an RC subscriber attribute before first purchase
-- [ ] `purchase_failed` distinguishes user-cancelled from real errors (cancellation is not an error state in the sheet)
-- [ ] `npm test` passes; web build and Expo Go unaffected
+- [x] Sheet displays live prices from the RC offering on iOS; stub still used on web/tests
+- [x] Reconciliation is pure/injectable and unit-tested: missing grant credited once, already-granted tx never re-credited, multiple pending grants all credited
+- [x] Reconciliation runs on launch and after purchase; granted-tx set persists in AsyncStorage (as part of the same `purchasedWeeks` object as the pool — see crash-safety note above)
+- [x] PostHog distinct ID set as an RC subscriber attribute before first purchase — confirmed via device logs
+- [x] `purchase_failed` distinguishes user-cancelled from real errors (cancellation is not an error state in the sheet) — `isUserCancelled` checks `PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR`; not yet exercised via a live cancel
+- [x] `npm test` passes (312/312); web build and Expo Go unaffected by design (module boundary)
 
 #### User stories addressed
 
@@ -131,26 +160,25 @@ Replace the stub with the real thing behind the same `src/purchases/` interface.
 
 ---
 
-### Task 6: Sandbox verification, PostHog integration, TestFlight pass
+### Task 6: Sandbox verification, TestFlight pass
 
 - **Type**: HITL
 - **Blocked by**: Task 4, Task 5
 
 #### What to build
 
-End-to-end verification with real money rails. On the dev client with the sandbox tester: buy both packs, confirm credits and spend order; force-kill the app between purchase and grant to prove launch reconciliation self-heals; verify Android/web still show no purchase UI. Use the RevenueCat MCP (`list-purchases`, `get-customer`) to confirm each sandbox purchase landed server-side, instead of manual dashboard checks. In the RevenueCat dashboard, enable the PostHog integration (project 505800 token) and confirm server-verified revenue events plus the client funnel events land in PostHog. Finish with a TestFlight build via the existing production scripts and a final purchase pass there.
+End-to-end verification with real money rails. On the dev client with the sandbox tester: buy both packs, confirm credits and spend order; force-kill the app between purchase and grant to prove launch reconciliation self-heals; verify Android/web still show no purchase UI. Use the RevenueCat MCP (`list-purchases`, `get-customer`) to confirm each sandbox purchase landed server-side, instead of manual dashboard checks. Finish with a TestFlight build via the existing production scripts and a final purchase pass there.
 
 #### Acceptance criteria
 
 - [ ] Both packs purchasable in sandbox; balances and spend order correct
 - [ ] Kill-app-mid-purchase test: weeks appear on next launch, exactly once
-- [ ] RevenueCat→PostHog integration live; revenue events and client funnel events visible in PostHog project 505800
 - [ ] TestFlight build passes a full purchase flow
 - [ ] Submission checklist ready: IAPs attached to the app version for App Review
 
 #### User stories addressed
 
 - Player on the released app can buy week packs that are delivered reliably
-- Developer can see paywall funnel and verified revenue in PostHog
+- Developer can see the paywall funnel in PostHog via the client-side events (Task 2)
 
 ---
