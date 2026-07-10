@@ -84,6 +84,7 @@ export function BuyWeeksSheet({
                 key={pack.id}
                 label={`${pack.weeks} weeks — ${pack.priceLabel}`}
                 disabled={pendingPackId !== null}
+                loading={pendingPackId === pack.id}
                 onPress={() => handlePurchase(pack)}
               />
             ))}
