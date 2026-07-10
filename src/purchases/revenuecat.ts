@@ -14,13 +14,19 @@
 import Purchases, { PURCHASES_ERROR_CODE, type PurchasesError } from 'react-native-purchases';
 
 import { REVENUECAT_IOS_API_KEY } from './config';
-import { shortIdFromProductIdentifier, weeksForProduct } from './product-weeks';
-import { reconcilePurchases, type ReconciliationResult } from './reconciliation';
+import { isReviveProduct, shortIdFromProductIdentifier, weeksForProduct } from './product-weeks';
+import {
+  reconcilePurchases,
+  reconcileRevivePurchases,
+  type LaunchReconciliation,
+} from './reconciliation';
 import { WEEK_PACKS } from './stub';
 import type { PurchaseResult, PurchasesClient, WeekPack } from './types';
 
 /** Matches the `weeks` offering created in Task 3. */
 const OFFERING_LOOKUP_KEY = 'weeks';
+/** Matches the `revive` offering — one package, the single bailout consumable. */
+const OFFERING_LOOKUP_KEY_REVIVE = 'revive';
 
 let configured = false;
 
@@ -39,14 +45,23 @@ export function configurePurchases(): void {
  * a purchase that completes but never gets credited (e.g. the app is killed
  * right after payment) self-heals here on the next launch.
  */
-export async function reconcileOnLaunch(grantedTransactionIds: ReadonlySet<string>): Promise<ReconciliationResult> {
-  if (!configured) return { newlyGranted: [] };
+export async function reconcileOnLaunch(
+  grantedWeekTransactionIds: ReadonlySet<string>,
+  grantedReviveTransactionIds: ReadonlySet<string>,
+): Promise<LaunchReconciliation> {
+  if (!configured) return { newlyGrantedWeeks: [], newlyGrantedRevives: [] };
   try {
+    // One SDK round-trip, fanned out into both reward buckets. Each pool
+    // owns its own granted-tx ledger, so the two reconcile independently.
     const customerInfo = await Purchases.getCustomerInfo();
-    return reconcilePurchases(customerInfo.nonSubscriptionTransactions, grantedTransactionIds, weeksForProduct);
+    const txns = customerInfo.nonSubscriptionTransactions;
+    return {
+      newlyGrantedWeeks: reconcilePurchases(txns, grantedWeekTransactionIds, weeksForProduct).newlyGranted,
+      newlyGrantedRevives: reconcileRevivePurchases(txns, grantedReviveTransactionIds, isReviveProduct).newlyGranted,
+    };
   } catch (err) {
     console.warn('[purchases] launch reconciliation failed', err);
-    return { newlyGranted: [] };
+    return { newlyGrantedWeeks: [], newlyGrantedRevives: [] };
   }
 }
 
@@ -70,6 +85,16 @@ function isUserCancelled(error: unknown): boolean {
 async function fetchWeeksOffering() {
   const offerings = await Purchases.getOfferings();
   return offerings.all[OFFERING_LOOKUP_KEY] ?? offerings.current;
+}
+
+/** The revive offering's single package (the bailout consumable), or undefined if misconfigured. */
+async function fetchRevivePackage() {
+  const offerings = await Purchases.getOfferings();
+  const offering = offerings.all[OFFERING_LOOKUP_KEY_REVIVE];
+  if (!offering) return undefined;
+  return (
+    offering.availablePackages.find((p) => isReviveProduct(p.product.identifier)) ?? offering.availablePackages[0]
+  );
 }
 
 export const purchasesClient: PurchasesClient = {
@@ -105,10 +130,41 @@ export const purchasesClient: PurchasesClient = {
       if (!pkg) return { status: 'error', code: 'unknown' };
 
       const result = await Purchases.purchasePackage(pkg);
-      const weeksGranted = weeksForProduct(result.productIdentifier) ?? 0;
-      return { status: 'success', weeksGranted, transactionId: result.transaction.transactionIdentifier };
+      const weeks = weeksForProduct(result.productIdentifier) ?? 0;
+      return {
+        status: 'success',
+        reward: { kind: 'weeks', weeks },
+        transactionId: result.transaction.transactionIdentifier,
+      };
     } catch (error) {
       return { status: 'error', code: isUserCancelled(error) ? 'cancelled' : 'unknown' };
+    }
+  },
+
+  async purchaseRevive(): Promise<PurchaseResult> {
+    try {
+      const pkg = await fetchRevivePackage();
+      if (!pkg) return { status: 'error', code: 'unknown' };
+      const result = await Purchases.purchasePackage(pkg);
+      // Only honor a transaction that's actually the revive product.
+      if (!isReviveProduct(result.productIdentifier)) return { status: 'error', code: 'unknown' };
+      return {
+        status: 'success',
+        reward: { kind: 'revive' },
+        transactionId: result.transaction.transactionIdentifier,
+      };
+    } catch (error) {
+      return { status: 'error', code: isUserCancelled(error) ? 'cancelled' : 'unknown' };
+    }
+  },
+
+  async getRevivePrice(): Promise<string | null> {
+    try {
+      const pkg = await fetchRevivePackage();
+      return pkg?.product.priceString ?? null;
+    } catch (err) {
+      console.warn('[purchases] failed to load revive price', err);
+      return null;
     }
   },
 };

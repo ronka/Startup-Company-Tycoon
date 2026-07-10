@@ -240,4 +240,11 @@ export type GameAction =
   | { type: 'RAISE_ROUND' }
   | { type: 'ANSWER_EVENT'; choiceIndex: number }
   | { type: 'GO_PUBLIC' }
-  | { type: 'SET_FOCUS'; focus: FocusId };
+  | { type: 'SET_FOCUS'; focus: FocusId }
+  /**
+   * Bailout IAP (bankruptcy revive): restores cash to a healthy fixed amount,
+   * clears the red-week fuse, and un-ends the run. `reason` is the purely
+   * cosmetic windfall flavor chosen in the UI (e.g. "your uncle died…"); it
+   * only feeds the news log and never affects the cash granted.
+   */
+  | { type: 'REVIVE'; reason: string };

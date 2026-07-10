@@ -48,12 +48,13 @@ export function BuyWeeksSheet({
       .then((result) => {
         setPendingPackId(null);
         if (result.status === 'success') {
+          const weeksGranted = result.reward.kind === 'weeks' ? result.reward.weeks : 0;
           track(EVENTS.PURCHASE_COMPLETED, {
             pack_id: pack.id,
-            weeks_granted: result.weeksGranted,
+            weeks_granted: weeksGranted,
             price_label: pack.priceLabel,
           });
-          onPurchased(result.weeksGranted, result.transactionId);
+          onPurchased(weeksGranted, result.transactionId);
           onClose();
         } else {
           track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code });

@@ -39,3 +39,41 @@ export function reconcilePurchases(
   }
   return { newlyGranted };
 }
+
+export interface ReviveReconciliationResult {
+  /** Transaction IDs of revive purchases not yet credited to the revive-token pool. */
+  newlyGranted: string[];
+}
+
+/**
+ * The revive counterpart to `reconcilePurchases`: a bailout grants one token
+ * rather than a week count, so it only needs the transaction ID (no per-tx
+ * payload). Same idempotency contract — skips anything already in the revive
+ * ledger — and the revive pool keeps its own granted-tx ledger, distinct from
+ * the weeks pool's, so the two never interfere (a transaction is for exactly
+ * one product).
+ */
+export function reconcileRevivePurchases(
+  transactions: readonly PurchaseTransaction[],
+  grantedTransactionIds: ReadonlySet<string>,
+  isReviveProduct: (productIdentifier: string) => boolean,
+): ReviveReconciliationResult {
+  const newlyGranted: string[] = [];
+  for (const tx of transactions) {
+    if (grantedTransactionIds.has(tx.transactionIdentifier)) continue;
+    if (!isReviveProduct(tx.productIdentifier)) continue;
+    newlyGranted.push(tx.transactionIdentifier);
+  }
+  return { newlyGranted };
+}
+
+/**
+ * The combined result of one launch reconciliation pass over a customer's
+ * store history: weeks owed (per-transaction) and revive tokens owed (by
+ * transaction ID). `revenuecat.ts` fetches `customerInfo` once and fans it
+ * out into both buckets so the store can fold each into its own pool.
+ */
+export interface LaunchReconciliation {
+  newlyGrantedWeeks: GrantedTransaction[];
+  newlyGrantedRevives: string[];
+}

@@ -26,6 +26,7 @@ import {
   MORALE_LEVER_WEEKLY_COST,
   RECKONING_START_WEEK_MAX,
   RECKONING_START_WEEK_MIN,
+  REVIVE_CASH,
   STAGE_AFTER_ROUND,
   STARTING_CASH,
   STARTING_CUSTOMERS,
@@ -684,6 +685,25 @@ export function reduce(state: GameState, action: GameAction): GameState {
         ...applied,
         pendingEvent: null,
         newsLog: [newsEntry, ...applied.newsLog],
+      };
+    }
+    case 'REVIVE': {
+      // Bailout IAP: a bankrupt run is frozen (`tick` no-ops once `gameOver`
+      // is set), so reviving must both refill cash and fully un-end the run in
+      // one update — restore cash to a healthy amount, reset the red-week fuse
+      // (otherwise the next tick immediately re-triggers `checkGameOver`), and
+      // clear `gameOver`/`finalScore`. Cash is a fixed grant (`REVIVE_CASH`),
+      // never the random `reason` flavor, which only annotates the news log.
+      return {
+        ...state,
+        cash: Math.max(state.cash, REVIVE_CASH),
+        weeksInTheRed: 0,
+        gameOver: null,
+        finalScore: null,
+        newsLog: [
+          { week: state.week, title: 'Bailed out', flavor: action.reason },
+          ...state.newsLog,
+        ],
       };
     }
     case 'SET_FOCUS': {

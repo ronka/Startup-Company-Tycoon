@@ -34,6 +34,13 @@ export interface WeeklyStatsInput {
 // ── Insolvency ───────────────────────────────────────────────────────────
 /** Consecutive weeks with cash < 0 before the run ends in bankruptcy, regardless of rounds left. */
 export const BANKRUPTCY_FUSE_WEEKS = 3;
+/**
+ * Cash a bankruptcy bailout (revive IAP) restores the player to — a flat set,
+ * not additive, so the depth of the hole doesn't eat the windfall. ~10 weeks
+ * of runway: a genuine second chance that keeps all progress without
+ * trivializing the money game the way a full starting stake would.
+ */
+export const REVIVE_CASH = 50_000;
 
 // ── Starting conditions ────────────────────────────────────────────────
 export const STARTING_CASH = 250_000;

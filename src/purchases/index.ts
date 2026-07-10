@@ -5,6 +5,12 @@
  * iOS/Android native builds. Never import `./revenuecat` or
  * `react-native-purchases` from here.
  */
-export { configurePurchases, purchasesClient, reconcileOnLaunch, syncPostHogAttribute } from './fallback';
-export { WEEK_PACKS } from './stub';
-export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, WeekPack } from './types';
+export {
+  configurePurchases,
+  purchasesAvailable,
+  purchasesClient,
+  reconcileOnLaunch,
+  syncPostHogAttribute,
+} from './fallback';
+export { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
+export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, Reward, WeekPack } from './types';

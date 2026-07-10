@@ -23,6 +23,7 @@ import {
   MORALE_LEVER_WEEKLY_COST,
   RECKONING_START_WEEK_MAX,
   RECKONING_START_WEEK_MIN,
+  REVIVE_CASH,
   STARTING_CASH,
   STARTING_HEADCOUNT,
   STARTING_HYPE,
@@ -522,6 +523,38 @@ describe('bankruptcy', () => {
     s = tick(s);
     expect(s.gameOver).toBeNull();
     expect(s.weeksInTheRed).toBe(1);
+  });
+});
+
+describe('REVIVE (bailout)', () => {
+  it('un-ends a bankrupt run: restores cash, clears the fuse, and unfreezes the engine', () => {
+    // Drive into bankruptcy the same way the fuse test does.
+    const bankrupt: GameState = {
+      ...newGame('Acme', 7),
+      cash: -50_000,
+      weeksInTheRed: BANKRUPTCY_FUSE_WEEKS,
+      gameOver: 'bankruptcy',
+      finalScore: 0,
+    };
+
+    const revived = reduce(bankrupt, { type: 'REVIVE', reason: 'Your uncle died and left you his fortune.' });
+
+    expect(revived.gameOver).toBeNull();
+    expect(revived.finalScore).toBeNull();
+    expect(revived.weeksInTheRed).toBe(0);
+    expect(revived.cash).toBe(REVIVE_CASH);
+    // The reason is logged as flavor, never as cash.
+    expect(revived.newsLog[0].flavor).toContain('uncle');
+
+    // The engine is live again: a tick advances the week instead of freezing.
+    const ticked = tick(revived);
+    expect(ticked.week).toBe(revived.week + 1);
+  });
+
+  it('never reduces cash already above the grant', () => {
+    const flush: GameState = { ...newGame('Acme', 8), cash: REVIVE_CASH * 3 };
+    const revived = reduce(flush, { type: 'REVIVE', reason: 'anything' });
+    expect(revived.cash).toBe(REVIVE_CASH * 3);
   });
 });
 

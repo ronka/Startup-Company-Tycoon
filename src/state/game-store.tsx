@@ -23,6 +23,15 @@ import { ROUND_ORDER, type GameAction, type GameState } from '@/game/types';
 import { configurePurchases, reconcileOnLaunch, syncPostHogAttribute } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import {
+  canRedeemRevive,
+  creditReviveTransaction,
+  creditReviveTransactions,
+  grantReviveToken,
+  initialRevivePool,
+  consumeReviveToken,
+  type RevivePool,
+} from '@/state/revive';
+import {
   canSpendAnyWeek,
   creditTransaction,
   creditTransactions,
@@ -39,6 +48,7 @@ import {
 export const STORAGE_KEY = 'startup-tycoon/save/v3';
 export const WEEK_BUDGET_STORAGE_KEY = 'startup-tycoon/week-budget/v1';
 export const PURCHASED_WEEKS_STORAGE_KEY = 'startup-tycoon/purchased-weeks/v1';
+export const REVIVE_STORAGE_KEY = 'startup-tycoon/revive/v1';
 export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
 
@@ -167,9 +177,29 @@ interface GameContextValue {
    * transaction ID.
    */
   creditPurchase: (weeksGranted: number, transactionId: string) => void;
+  /**
+   * Bankruptcy-bailout (revive) token pool: cap-free consumables bought via
+   * IAP, redeemed on the game-over screen. Null until the initial load resolves.
+   */
+  revivePool: RevivePool | null;
+  /** Dev-only grant of one revive token with no transaction ledger (debug menu). */
+  grantReviveToken: () => void;
+  /**
+   * Credits a completed revive IAP by its transaction ID: the token and the
+   * granted-tx ledger update in the same write. Idempotent per transaction ID.
+   */
+  creditRevivePurchase: (transactionId: string) => void;
+  /**
+   * Redeem one revive token: consume it and dispatch the `REVIVE` engine action
+   * (restore cash, clear the fuse, un-end the run) with the given windfall
+   * `reason` flavor. No-op if no token is available or no run is active.
+   */
+  redeemRevive: (reason: string) => void;
   /** Dev-only escape hatch so playtesting is never rate-limited. Not persisted. */
   devFreePlay: boolean;
   setDevFreePlay: (freePlay: boolean) => void;
+  /** Dev-only: drop the current run straight into bankruptcy game-over, to exercise the bailout flow. */
+  devForceBankruptcy: () => void;
   /** Daily-play streak (PRD F12); null until the initial load resolves. */
   streak: StreakState | null;
 }
@@ -182,6 +212,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [weekBudget, setWeekBudget] = useState<WeekBudget | null>(null);
   const [purchasedWeeks, setPurchasedWeeks] = useState<PurchasedWeeksPool | null>(null);
+  const [revivePool, setRevivePool] = useState<RevivePool | null>(null);
+  // A synchronous mirror of `revivePool` so a purchase-success handler that
+  // credits a token and then immediately redeems it (same tick, before React
+  // re-renders) reads the just-credited token instead of a stale value. Kept
+  // in sync on commit below, and updated eagerly by `applyRevivePool`.
+  const revivePoolRef = useRef<RevivePool | null>(null);
   const [devFreePlay, setDevFreePlay] = useState(false);
   // Null (not `initialStreak`) until the load resolves: null also doubles as
   // "no streak was ever saved", which the standup-injection effect below
@@ -223,6 +259,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         console.warn('[game-store] failed to load purchased weeks', err);
         if (!cancelled) setPurchasedWeeks(loadedPurchasedWeeks);
       }
+      let loadedRevivePool = initialRevivePool();
+      try {
+        const raw = await AsyncStorage.getItem(REVIVE_STORAGE_KEY);
+        const saved = raw ? (JSON.parse(raw) as RevivePool) : null;
+        loadedRevivePool = saved ?? initialRevivePool();
+        if (!cancelled) setRevivePool(loadedRevivePool);
+      } catch (err) {
+        console.warn('[game-store] failed to load revive pool', err);
+        if (!cancelled) setRevivePool(loadedRevivePool);
+      }
       try {
         // No-ops off iOS / in Expo Go (see src/purchases/index.native.ts).
         // Crash-safe delivery (Task 5): diffs RC's transaction history against
@@ -234,9 +280,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
         // there's no window where one could land without the other.
         configurePurchases();
         syncPostHogAttribute(posthog.getDistinctId()).catch(() => {});
-        const { newlyGranted } = await reconcileOnLaunch(new Set(loadedPurchasedWeeks.grantedTransactionIds));
-        if (!cancelled && newlyGranted.length > 0) {
-          setPurchasedWeeks((prev) => creditTransactions(prev ?? loadedPurchasedWeeks, newlyGranted));
+        const { newlyGrantedWeeks, newlyGrantedRevives } = await reconcileOnLaunch(
+          new Set(loadedPurchasedWeeks.grantedTransactionIds),
+          new Set(loadedRevivePool.grantedTransactionIds),
+        );
+        if (!cancelled && newlyGrantedWeeks.length > 0) {
+          setPurchasedWeeks((prev) => creditTransactions(prev ?? loadedPurchasedWeeks, newlyGrantedWeeks));
+        }
+        if (!cancelled && newlyGrantedRevives.length > 0) {
+          setRevivePool((prev) => creditReviveTransactions(prev ?? loadedRevivePool, newlyGrantedRevives));
         }
       } catch (err) {
         console.warn('[game-store] failed to reconcile purchases', err);
@@ -288,6 +340,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save purchased weeks', err),
     );
   }, [purchasedWeeks, loading]);
+
+  // Persist the revive-token pool whenever it changes, and keep the ref mirror
+  // in sync with each committed value.
+  useEffect(() => {
+    revivePoolRef.current = revivePool;
+    if (loading || revivePool === null) return;
+    AsyncStorage.setItem(REVIVE_STORAGE_KEY, JSON.stringify(revivePool)).catch((err) =>
+      console.warn('[game-store] failed to save revive pool', err),
+    );
+  }, [revivePool, loading]);
 
   // Persist the streak whenever it changes.
   useEffect(() => {
@@ -422,6 +484,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch(action);
   };
 
+  // Updates the revive pool through both the synchronous ref mirror and React
+  // state, so back-to-back reads within one handler (credit → redeem) are
+  // consistent.
+  const applyRevivePool = (updater: (prev: RevivePool) => RevivePool) => {
+    const next = updater(revivePoolRef.current ?? initialRevivePool());
+    revivePoolRef.current = next;
+    setRevivePool(next);
+  };
+
   const value: GameContextValue = {
     state,
     previousState,
@@ -449,6 +520,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setStreak(null);
       setWeekBudget(initialWeekBudget(new Date()));
       setPurchasedWeeks(initialPurchasedWeeksPool());
+      setRevivePool(initialRevivePool());
       track(EVENTS.APP_RESET);
       // New anonymous identity so a fresh setup isn't attributed to the old player.
       posthog.reset();
@@ -470,8 +542,33 @@ export function GameProvider({ children }: { children: ReactNode }) {
     creditPurchase: (weeksGranted: number, transactionId: string) => {
       setPurchasedWeeks((prev) => creditTransaction(prev ?? initialPurchasedWeeksPool(), transactionId, weeksGranted));
     },
+    revivePool,
+    grantReviveToken: () => applyRevivePool(grantReviveToken),
+    creditRevivePurchase: (transactionId: string) =>
+      applyRevivePool((prev) => creditReviveTransaction(prev, transactionId)),
+    redeemRevive: (reason: string) => {
+      if (!state) return;
+      // Read the synchronous mirror, so a credit in this same handler (the
+      // purchase path) is already visible. Only dispatch REVIVE when a token
+      // is actually consumed — no free revives from a stale render or double-tap.
+      const pool = revivePoolRef.current ?? initialRevivePool();
+      if (!canRedeemRevive(pool)) return;
+      applyRevivePool(consumeReviveToken);
+      track(EVENTS.REVIVE_REDEEMED, { ...gameProps(state), reason });
+      dispatch({ type: 'REVIVE', reason });
+    },
     devFreePlay,
     setDevFreePlay,
+    devForceBankruptcy: () => {
+      if (!state) return;
+      // Uses the raw store dispatch (SET_STATE) to drop straight into the
+      // bankruptcy end-state so the game-over bailout flow can be exercised
+      // without grinding a run into the red for three weeks.
+      dispatch({
+        type: 'SET_STATE',
+        state: { ...state, cash: -40_000, weeksInTheRed: 3, gameOver: 'bankruptcy', finalScore: 0 },
+      });
+    },
     streak,
     profile,
     setCeoName: (name: string) => {

@@ -14,3 +14,11 @@ export function shortIdFromProductIdentifier(productIdentifier: string): string 
     ? productIdentifier.slice(PRODUCT_ID_PREFIX.length)
     : productIdentifier;
 }
+
+/** The single consumable product behind the bankruptcy bailout IAP (Task: revive). */
+export const REVIVE_PRODUCT_ID = `${PRODUCT_ID_PREFIX}revive`;
+
+/** Whether a store transaction is for the revive product (drives the revive reconciliation pass). */
+export function isReviveProduct(productIdentifier: string): boolean {
+  return productIdentifier === REVIVE_PRODUCT_ID;
+}

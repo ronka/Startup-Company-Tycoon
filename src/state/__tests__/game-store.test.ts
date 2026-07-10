@@ -32,6 +32,24 @@ describe('storeReducer — SET_FOCUS dispatch path', () => {
   });
 });
 
+describe('storeReducer — REVIVE dispatch path', () => {
+  it('un-ends a bankrupt run through the store layer', () => {
+    const bankrupt = { ...newGame('Acme', 1), cash: -40_000, weeksInTheRed: 3, gameOver: 'bankruptcy' as const, finalScore: 0 };
+
+    const next = storeReducer(bankrupt, { type: 'REVIVE', reason: 'Your uncle died and left you his fortune.' });
+
+    expect(next?.gameOver).toBeNull();
+    expect(next?.finalScore).toBeNull();
+    expect(next?.weeksInTheRed).toBe(0);
+    expect(next?.cash).toBeGreaterThan(0);
+    expect(next?.newsLog[0].flavor).toContain('uncle');
+  });
+
+  it('is a no-op when there is no active run', () => {
+    expect(storeReducer(null, { type: 'REVIVE', reason: 'x' })).toBeNull();
+  });
+});
+
 describe('storeReducer — NEW_GAME dispatch path', () => {
   it('produces a fresh run carrying the given company name', () => {
     const next = storeReducer(null, { type: 'NEW_GAME', companyName: 'Widgets Inc', seed: 42 });

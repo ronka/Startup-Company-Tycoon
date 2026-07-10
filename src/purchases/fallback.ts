@@ -1,4 +1,4 @@
-import type { ReconciliationResult } from './reconciliation';
+import type { LaunchReconciliation } from './reconciliation';
 import { stubPurchasesClient } from './stub';
 import type { PurchasesClient } from './types';
 
@@ -9,10 +9,21 @@ import type { PurchasesClient } from './types';
  */
 export const purchasesClient: PurchasesClient = stubPurchasesClient;
 
+/**
+ * Whether real in-app purchases can be made in this environment. False on the
+ * no-native-SDK path (web/tests/Expo Go/Android) — the UI gates purchase
+ * affordances on this, not on `Platform.OS`, so it never shows a live paywall
+ * that the stub would "complete" for free. `index.native.ts` overrides it.
+ */
+export const purchasesAvailable = false;
+
 export function configurePurchases(): void {}
 
-export async function reconcileOnLaunch(_grantedTransactionIds: ReadonlySet<string>): Promise<ReconciliationResult> {
-  return { newlyGranted: [] };
+export async function reconcileOnLaunch(
+  _grantedWeekTransactionIds: ReadonlySet<string>,
+  _grantedReviveTransactionIds: ReadonlySet<string>,
+): Promise<LaunchReconciliation> {
+  return { newlyGrantedWeeks: [], newlyGrantedRevives: [] };
 }
 
 export async function syncPostHogAttribute(_distinctId: string): Promise<void> {}

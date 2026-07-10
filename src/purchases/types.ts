@@ -16,15 +16,23 @@ export interface WeekPack {
 /** Why a purchase didn't complete. `cancelled` is not an error state in the UI. */
 export type PurchaseErrorCode = 'cancelled' | 'unknown';
 
+/**
+ * What a completed purchase grants. Weeks top up the purchased-weeks pool
+ * (`week-budget.ts`); a revive grants one bankruptcy-bailout token
+ * (`revive.ts`). Both are consumable and delivered idempotently per
+ * transaction ID.
+ */
+export type Reward = { kind: 'weeks'; weeks: number } | { kind: 'revive' };
+
 export type PurchaseResult =
   | {
       status: 'success';
-      weeksGranted: number;
+      reward: Reward;
       /**
        * A stable identifier for this purchase — a real store transaction ID
        * on the RC-backed client, a synthetic one on the stub. Lets the
-       * caller credit the pool via `week-budget.ts`'s `creditTransaction`,
-       * which is idempotent per transaction (Task 5 crash-safety).
+       * caller credit the matching pool idempotently per transaction (the
+       * crash-safety ledger), whether weeks or a revive token.
        */
       transactionId: string;
     }
@@ -33,4 +41,8 @@ export type PurchaseResult =
 export interface PurchasesClient {
   getPacks(): Promise<WeekPack[]>;
   purchasePack(packId: string): Promise<PurchaseResult>;
+  /** Buy a single bankruptcy bailout (revive). One consumable product, one price. */
+  purchaseRevive(): Promise<PurchaseResult>;
+  /** Localized store price for the revive product, or null if it can't be loaded. */
+  getRevivePrice(): Promise<string | null>;
 }

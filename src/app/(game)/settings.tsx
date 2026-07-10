@@ -27,7 +27,16 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { devFreePlay, setDevFreePlay, resetAll, purchasedWeeks, grantPurchasedWeeks } = useGame();
+  const {
+    devFreePlay,
+    setDevFreePlay,
+    resetAll,
+    purchasedWeeks,
+    grantPurchasedWeeks,
+    revivePool,
+    grantReviveToken,
+    devForceBankruptcy,
+  } = useGame();
 
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
 
@@ -93,6 +102,18 @@ export default function SettingsScreen() {
           onPress: () => grantPurchasedWeeks(20),
         },
         {
+          text: `Grant revive token (have ${revivePool?.tokensRemaining ?? 0})`,
+          onPress: () => grantReviveToken(),
+        },
+        {
+          text: 'Force bankruptcy (test bailout)',
+          style: 'destructive',
+          onPress: () => {
+            devForceBankruptcy();
+            router.back();
+          },
+        },
+        {
           text: 'Start new game',
           style: 'destructive',
           onPress: () => {
@@ -103,7 +124,17 @@ export default function SettingsScreen() {
       ],
       { cancelable: true },
     );
-  }, [devFreePlay, setDevFreePlay, resetHints, router, purchasedWeeks, grantPurchasedWeeks]);
+  }, [
+    devFreePlay,
+    setDevFreePlay,
+    resetHints,
+    router,
+    purchasedWeeks,
+    grantPurchasedWeeks,
+    revivePool,
+    grantReviveToken,
+    devForceBankruptcy,
+  ]);
 
   const handleVersionPress = useCallback(() => {
     tapCountRef.current += 1;

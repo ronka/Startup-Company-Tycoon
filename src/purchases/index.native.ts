@@ -2,9 +2,9 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import * as fallback from './fallback';
-import type { ReconciliationResult } from './reconciliation';
-import { WEEK_PACKS } from './stub';
-import type { PurchaseErrorCode, PurchaseResult, PurchasesClient, WeekPack } from './types';
+import type { LaunchReconciliation } from './reconciliation';
+import { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
+import type { PurchaseErrorCode, PurchaseResult, PurchasesClient, Reward, WeekPack } from './types';
 
 /**
  * `react-native-purchases` is a native module: absent from Expo Go (only
@@ -23,9 +23,13 @@ const canUseRevenueCat = Platform.OS === 'ios' && Constants.appOwnership !== 'ex
 const impl: typeof fallback = canUseRevenueCat ? require('./revenuecat') : fallback;
 
 export const purchasesClient: PurchasesClient = impl.purchasesClient;
+/** True only on genuine iOS custom builds (see `canUseRevenueCat`); the UI gates paywalls on this. */
+export const purchasesAvailable = canUseRevenueCat;
 export const configurePurchases: () => void = impl.configurePurchases;
-export const reconcileOnLaunch: (grantedTransactionIds: ReadonlySet<string>) => Promise<ReconciliationResult> =
-  impl.reconcileOnLaunch;
+export const reconcileOnLaunch: (
+  grantedWeekTransactionIds: ReadonlySet<string>,
+  grantedReviveTransactionIds: ReadonlySet<string>,
+) => Promise<LaunchReconciliation> = impl.reconcileOnLaunch;
 export const syncPostHogAttribute: (distinctId: string) => Promise<void> = impl.syncPostHogAttribute;
-export { WEEK_PACKS };
-export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, WeekPack };
+export { REVIVE_PRICE_LABEL, WEEK_PACKS };
+export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, Reward, WeekPack };

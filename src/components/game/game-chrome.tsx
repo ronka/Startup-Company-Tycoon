@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { purchasesAvailable } from '@/purchases';
 import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { PrimaryButton } from '@/components/game/primary-button';
@@ -14,10 +15,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { useGame } from '@/state/game-store';
 import { WEEKS_BANK_CAP, canSpendAnyWeek } from '@/state/week-budget';
-
-// Week packs (Task 2, PRD week-packs) are iOS-only for v1 — Android/web keep
-// today's free-only behavior exactly, no sheet and no tappable affordance.
-const IS_IOS = Platform.OS === 'ios';
 
 /**
  * Persistent chrome shared by every game tab (Task 12): the Next Week
@@ -104,7 +101,7 @@ export function GameChrome() {
 
         <View style={styles.budgetRow}>
           {budgetExhausted ? (
-            IS_IOS ? (
+            purchasesAvailable ? (
               <Pressable onPress={() => setBuySheetTrigger('out_of_weeks')} accessibilityRole="button">
                 <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
                   That&apos;s the week planned out — the team gets to work.{' '}
@@ -119,7 +116,7 @@ export function GameChrome() {
               </ThemedText>
             )
           ) : weekBudget ? (
-            IS_IOS ? (
+            purchasesAvailable ? (
               <Pressable onPress={() => setBuySheetTrigger('hud')} accessibilityRole="button">
                 <WeekBudgetDots
                   weeksRemaining={weekBudget.weeksRemaining}
@@ -163,7 +160,7 @@ export function GameChrome() {
         onDismiss={() => setReviewedWeek(state.week)}
       />
 
-      {IS_IOS ? (
+      {purchasesAvailable ? (
         <BuyWeeksSheet
           visible={buySheetTrigger !== null}
           trigger={buySheetTrigger ?? 'hud'}
