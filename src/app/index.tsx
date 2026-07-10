@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -15,7 +16,13 @@ export default function StartMenu() {
   const inProgress = state != null && state.gameOver == null;
 
   const newGame = () => {
+    track(EVENTS.NEW_GAME_TAPPED, { has_run_in_progress: inProgress });
     router.push('/onboarding');
+  };
+
+  const continueRun = () => {
+    track(EVENTS.CONTINUE_RUN_TAPPED, { week: state?.week });
+    router.replace('/hq');
   };
 
   return (
@@ -37,7 +44,7 @@ export default function StartMenu() {
             {inProgress ? (
               <PrimaryButton
                 label={`Continue — Week ${state!.week}`}
-                onPress={() => router.replace('/hq')}
+                onPress={continueRun}
               />
             ) : null}
             <PrimaryButton

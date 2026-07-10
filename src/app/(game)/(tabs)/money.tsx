@@ -2,6 +2,8 @@ import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
+import { useTabView } from '@/analytics/use-tab-view';
 import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
@@ -52,6 +54,7 @@ export default function MoneyScreen() {
   const [confirming, setConfirming] = useState(false);
   const [ipoConfirming, setIpoConfirming] = useState(false);
   const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
+  useTabView('money');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
@@ -109,7 +112,10 @@ export default function MoneyScreen() {
             format={formatMoney}
             goodDirection="down"
             hint="Tap for breakdown"
-            onPress={() => setBurnBreakdownOpen(true)}
+            onPress={() => {
+              track(EVENTS.BURN_BREAKDOWN_OPENED, { screen: 'money' });
+              setBurnBreakdownOpen(true);
+            }}
           />
           <StatTile
             label="Runway"

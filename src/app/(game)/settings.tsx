@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EVENTS, track } from '@/analytics/events';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -35,6 +36,7 @@ export default function SettingsScreen() {
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    track(EVENTS.SETTINGS_VIEWED);
     return () => {
       if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
     };
@@ -67,17 +69,22 @@ export default function SettingsScreen() {
   }, [resetAll, resetHints, router]);
 
   const showDebugOptions = useCallback(() => {
+    track(EVENTS.DEBUG_MENU_OPENED);
     Alert.alert(
       'Debug Options',
       'Developer-only actions',
       [
         {
           text: devFreePlay ? 'Free play: turn OFF' : 'Free play: turn ON',
-          onPress: () => setDevFreePlay(!devFreePlay),
+          onPress: () => {
+            track(EVENTS.DEV_FREE_PLAY_TOGGLED, { active: !devFreePlay });
+            setDevFreePlay(!devFreePlay);
+          },
         },
         {
           text: 'Reset first-run hints',
           onPress: () => {
+            track(EVENTS.HINTS_RESET);
             resetHints().catch(() => {});
           },
         },

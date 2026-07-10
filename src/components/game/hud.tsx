@@ -2,6 +2,7 @@ import { useNavigation } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EVENTS, track } from '@/analytics/events';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -25,7 +26,10 @@ export function Hud() {
 
   // The Hud renders inside the drawer's `(tabs)` screen, so `navigation` here
   // is the drawer navigator — `openDrawer` slides in the settings menu.
-  const openMenu = () => (navigation as unknown as { openDrawer?: () => void }).openDrawer?.();
+  const openMenu = () => {
+    track(EVENTS.MENU_OPENED);
+    (navigation as unknown as { openDrawer?: () => void }).openDrawer?.();
+  };
 
   return (
     <ThemedView

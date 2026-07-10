@@ -2,6 +2,8 @@ import { Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
+import { useTabView } from '@/analytics/use-tab-view';
 import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
@@ -28,6 +30,7 @@ export default function HqScreen() {
   const [pendingFocus, setPendingFocus] = useState<FocusId | null>(null);
   const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
   const focusPickerRef = useRef<FocusPickerHandle>(null);
+  useTabView('hq');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
@@ -67,7 +70,10 @@ export default function HqScreen() {
             format={formatMoney}
             goodDirection="down"
             hint="Tap for breakdown"
-            onPress={() => setBurnBreakdownOpen(true)}
+            onPress={() => {
+              track(EVENTS.BURN_BREAKDOWN_OPENED, { screen: 'hq' });
+              setBurnBreakdownOpen(true);
+            }}
           />
           <StatTile
             label="Revenue"
@@ -88,7 +94,10 @@ export default function HqScreen() {
         </View>
 
         <Pressable
-          onPress={() => focusPickerRef.current?.present()}
+          onPress={() => {
+            track(EVENTS.FOCUS_PICKER_OPENED, { focus: state.focus });
+            focusPickerRef.current?.present();
+          }}
           accessibilityRole="button"
           accessibilityLabel="Change company focus">
           <ThemedView type="backgroundElement" style={styles.strategyCard}>

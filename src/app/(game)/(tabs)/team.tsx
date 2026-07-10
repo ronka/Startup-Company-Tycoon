@@ -2,6 +2,8 @@ import { Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
+import { useTabView } from '@/analytics/use-tab-view';
 import { CandidatePicker, type CandidatePickerHandle } from '@/components/game/candidate-picker';
 import { CLevelCard } from '@/components/game/clevel-card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
@@ -51,6 +53,7 @@ export default function TeamScreen() {
     cmo: cmoPickerRef,
     cfo: cfoPickerRef,
   };
+  useTabView('team');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
@@ -100,7 +103,10 @@ export default function TeamScreen() {
   };
 
   const confirmLayoff = () => {
-    if (confirmRole) dispatch({ type: 'SET_PENDING_HIRES', role: confirmRole, delta: -1 });
+    if (confirmRole) {
+      track(EVENTS.LAYOFF_CONFIRMED, { role: confirmRole });
+      dispatch({ type: 'SET_PENDING_HIRES', role: confirmRole, delta: -1 });
+    }
     setConfirmRole(null);
   };
 
@@ -178,7 +184,10 @@ export default function TeamScreen() {
                 title={C_LEVEL_TITLE[role]}
                 hired={state.cLevels[role].hired}
                 onFire={() => requestFire(role)}
-                onViewCandidates={() => pickerRefs[role].current?.present()}
+                onViewCandidates={() => {
+                  track(EVENTS.CANDIDATES_VIEWED, { role });
+                  pickerRefs[role].current?.present();
+                }}
               />
             ))}
           </View>

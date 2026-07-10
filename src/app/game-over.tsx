@@ -1,6 +1,8 @@
 import { Redirect, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -26,6 +28,16 @@ export default function GameOverScreen() {
   const { state } = useGame();
   const router = useRouter();
   const theme = useTheme();
+
+  const reason = state?.gameOver ?? null;
+  useEffect(() => {
+    if (!reason) return;
+    track(EVENTS.GAME_OVER_VIEWED, {
+      reason,
+      final_score: Math.round(state?.finalScore ?? 0),
+      weeks: state?.week,
+    });
+  }, [reason, state?.finalScore, state?.week]);
 
   // Reached only when a run has actually ended.
   if (!state || !state.gameOver) return <Redirect href="/" />;

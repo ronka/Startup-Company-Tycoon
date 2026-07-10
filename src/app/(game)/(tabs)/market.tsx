@@ -1,6 +1,7 @@
 import { Redirect } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { useTabView } from '@/analytics/use-tab-view';
 import { ProgressBar } from '@/components/game/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -20,6 +21,7 @@ const RIVAL_COLORS = ['#f59e0b', '#ef4444'];
 export default function MarketScreen() {
   const { state } = useGame();
   const theme = useTheme();
+  useTabView('market');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;

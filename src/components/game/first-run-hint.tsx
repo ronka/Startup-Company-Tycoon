@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -30,6 +31,7 @@ export function FirstRunHint({ id, text }: { id: string; text: string }) {
   if (!visible) return null;
 
   const dismiss = () => {
+    track(EVENTS.HINT_DISMISSED, { id });
     setVisible(false);
     AsyncStorage.setItem(HINT_KEY_PREFIX + id, 'true').catch(() => {});
   };

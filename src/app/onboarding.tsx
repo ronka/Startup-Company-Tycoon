@@ -1,9 +1,10 @@
 import { Button, Column, Host, ScrollView, Text, TextInput, type TextInputProps } from '@expo/ui';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EVENTS, track } from '@/analytics/events';
 import { Spacing } from '@/constants/theme';
 import { DEFAULT_COMPANY_NAME } from '@/game/engine';
 import { useTheme } from '@/hooks/use-theme';
@@ -32,8 +33,13 @@ export default function OnboardingScreen() {
     ? trimmedCompanyName.length > 0
     : trimmedCeoName.length > 0 && trimmedCompanyName.length > 0;
 
+  useEffect(() => {
+    track(EVENTS.ONBOARDING_VIEWED, { is_returning_ceo: isReturningCeo });
+  }, [isReturningCeo]);
+
   const confirm = () => {
     if (!canConfirm) return;
+    track(EVENTS.ONBOARDING_COMPLETED, { is_returning_ceo: isReturningCeo });
     if (!isReturningCeo) setCeoName(trimmedCeoName);
     startNewGame(trimmedCompanyName || DEFAULT_COMPANY_NAME);
     router.replace('/hq');

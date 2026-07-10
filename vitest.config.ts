@@ -8,6 +8,10 @@ export default defineConfig({
     // src/state can import `@/lib/...` and `@/game/...` like the app does.
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // The store transitively imports the analytics client; the real
+      // posthog-react-native package needs React Native infra the node test
+      // env lacks. Swap in a no-op stub for tests.
+      'posthog-react-native': path.resolve(__dirname, './src/analytics/__tests__/posthog-stub.ts'),
     },
   },
   test: {

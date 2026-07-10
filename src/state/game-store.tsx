@@ -10,13 +10,16 @@ import {
   useContext,
   useEffect,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 
+import { EVENTS, gameProps, track } from '@/analytics/events';
+import { posthog } from '@/analytics/posthog';
 import { newGame, reduce } from '@/game/engine';
-import { standupCardForStreak } from '@/game/events/standup';
-import type { GameAction, GameState } from '@/game/types';
+import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
+import { ROUND_ORDER, type GameAction, type GameState } from '@/game/types';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import {
   canSpendWeek,
@@ -53,6 +56,49 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
       return newGame(action.companyName, action.seed);
     default:
       return state === null ? state : reduce(state, action);
+  }
+}
+
+/**
+ * Emit the analytics event for a single non-TICK game action, tagged with the
+ * action's own params and the run context as it stood just before the action.
+ * TICK is handled separately (rate-limit + post-tick diff); this covers every
+ * other player decision from one place.
+ */
+function captureAction(action: GameAction, state: GameState): void {
+  const base = gameProps(state);
+  switch (action.type) {
+    case 'SET_PENDING_HIRES':
+      track(EVENTS.HIRES_CHANGED, { ...base, role: action.role, delta: action.delta });
+      break;
+    case 'SET_MORALE_LEVER':
+      track(EVENTS.MORALE_LEVER_TOGGLED, { ...base, active: action.active });
+      break;
+    case 'HIRE_CLEVEL':
+      track(EVENTS.CLEVEL_HIRED, { ...base, role: action.role, candidate_id: action.candidateId });
+      break;
+    case 'FIRE_CLEVEL':
+      track(EVENTS.CLEVEL_FIRED, { ...base, role: action.role });
+      break;
+    case 'RAISE_ROUND':
+      track(EVENTS.FUNDING_ROUND_RAISED, { ...base, round: ROUND_ORDER[state.roundsRaised] ?? null });
+      break;
+    case 'GO_PUBLIC':
+      track(EVENTS.RUN_ENDED_IPO, base);
+      break;
+    case 'ANSWER_EVENT':
+      track(EVENTS.EVENT_DECISION_MADE, {
+        ...base,
+        choice_index: action.choiceIndex,
+        card_id: state.pendingEvent?.id ?? null,
+        card_title: state.pendingEvent?.title ?? null,
+      });
+      break;
+    case 'SET_FOCUS':
+      track(EVENTS.FOCUS_CHANGED, { ...base, focus: action.focus, previous_focus: state.focus });
+      break;
+    default:
+      break;
   }
 }
 
@@ -220,10 +266,63 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => {
       const updatedStreak = streak === null ? initialStreak(new Date()) : updateStreak(streak, new Date());
       setStreak(updatedStreak);
+      track(EVENTS.DAILY_STREAK_CREDITED, { streak_days: updatedStreak.streakDays });
+      track(EVENTS.DAILY_STANDUP_SHOWN, {
+        streak_days: updatedStreak.streakDays,
+        tier: standupTierForStreak(updatedStreak.streakDays),
+      });
       dispatch({ type: 'SET_STATE', state: { ...state, pendingEvent: standupCardForStreak(updatedStreak.streakDays) } });
     }, 400);
     return () => clearTimeout(timer);
   }, [loading, state, streak]);
+
+  // Capture engine-driven transitions the store never dispatches directly.
+  // The engine stays pure (no analytics under src/game/) — instead we diff the
+  // serialized GameState against the previous render's and emit the deltas.
+  const prevStateRef = useRef<GameState | null>(null);
+  useEffect(() => {
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+    if (loading || !state) return;
+
+    // Keep run context on every subsequent event (incl. UI-only ones) so any
+    // capture can be broken down by where the player is in the run.
+    posthog.register({ week: state.week, stage: state.stage, era: state.era }).catch(() => {});
+
+    if (!prev) return; // first observed state (hydrate / new game) — nothing to diff
+
+    // Don't diff across two different runs. Starting a new game replaces the
+    // whole GameState in place (e.g. growth→garage), which would otherwise read
+    // as a stage/era regression. A run is identified by its immutable seed.
+    if (prev.createdWithSeed !== state.createdWithSeed || state.week < prev.week) return;
+
+    // A week actually advanced (week only ever increases via TICK).
+    if (state.week > prev.week) {
+      track(EVENTS.WEEK_ADVANCED, gameProps(state));
+    }
+    if (state.stage !== prev.stage) {
+      track(EVENTS.STAGE_ADVANCED, { from: prev.stage, to: state.stage, week: state.week });
+    }
+    if (state.era !== prev.era) {
+      track(EVENTS.ERA_CHANGED, { from: prev.era, to: state.era, week: state.week });
+    }
+    if (state.trend.phase !== prev.trend.phase || state.trend.id !== prev.trend.id) {
+      track(EVENTS.TREND_PHASE_CHANGED, {
+        trend_id: state.trend.id,
+        phase: state.trend.phase,
+        week: state.week,
+      });
+    }
+    // The run just ended (null → reason). Fires exactly once per run.
+    if (state.gameOver && !prev.gameOver) {
+      track(EVENTS.GAME_OVER, {
+        ...gameProps(state),
+        reason: state.gameOver,
+        final_score: Math.round(state.finalScore ?? 0),
+        $set: { last_game_over_reason: state.gameOver },
+      });
+    }
+  }, [state, loading]);
 
   const dispatchWithSnapshot = (action: GameAction) => {
     if (action.type === 'TICK') {
@@ -231,12 +330,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // shifts when a tick will actually advance the week.
       if (!state || state.gameOver || state.pendingEvent) return;
       // Store-layer-only rate limit (PRD F12) — the engine never sees this.
-      if (!devFreePlay && weekBudget && !canSpendWeek(weekBudget)) return;
+      if (!devFreePlay && weekBudget && !canSpendWeek(weekBudget)) {
+        // The player hit the daily wall — a key retention/monetization signal.
+        track(EVENTS.WEEK_ADVANCE_BLOCKED, gameProps(state));
+        return;
+      }
       setPreviousState(state);
       if (!devFreePlay && weekBudget) setWeekBudget(spendWeek(weekBudget));
       dispatch(action);
+      // `week_advanced` itself is emitted by the state-diff effect, with the
+      // fresh post-tick numbers, once the reducer commits.
       return;
     }
+    // Every other game action carries its params + the pre-action run context.
+    // (Outcomes like stage/era changes are emitted separately by the diff effect.)
+    if (state) captureAction(action, state);
     dispatch(action);
   };
 
@@ -247,10 +355,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch: dispatchWithSnapshot,
     startNewGame: (companyName: string, seed?: number) => {
       setPreviousState(null);
+      track(EVENTS.GAME_STARTED, {
+        company_name: companyName,
+        is_returning_ceo: profile?.ceoName != null,
+        seed: seed ?? null,
+        $set: { company_name: companyName },
+        $set_once: { first_game_at: new Date().toISOString() },
+      });
       dispatch({ type: 'NEW_GAME', companyName, seed });
     },
     clearSave: () => {
       setPreviousState(null);
+      track(EVENTS.SAVE_CLEARED);
       dispatch({ type: 'HYDRATE', state: null });
     },
     resetAll: () => {
@@ -258,6 +374,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setProfileState(null);
       setStreak(null);
       setWeekBudget(initialWeekBudget(new Date()));
+      track(EVENTS.APP_RESET);
+      // New anonymous identity so a fresh setup isn't attributed to the old player.
+      posthog.reset();
       // State→null lets the autosave effect remove the save key, and the fresh
       // week budget is written by its own effect. Profile and streak are
       // guarded against null-persist, so their keys never auto-clear — remove
@@ -273,7 +392,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setDevFreePlay,
     streak,
     profile,
-    setCeoName: (name: string) => setProfileState({ ceoName: name }),
+    setCeoName: (name: string) => {
+      track(EVENTS.CEO_NAME_SET, { $set: { ceo_name: name } });
+      setProfileState({ ceoName: name });
+    },
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

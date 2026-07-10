@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
 import { notificationContentFor } from '@/state/notification-content';
 import { useGame } from '@/state/game-store';
 
@@ -40,6 +41,7 @@ async function scheduleReengagementNotification(state: Parameters<typeof notific
       seconds: REENGAGEMENT_DELAY_SECONDS,
     },
   });
+  track(EVENTS.REENGAGEMENT_NOTIFICATION_SCHEDULED, { delay_seconds: REENGAGEMENT_DELAY_SECONDS });
 }
 
 /**
@@ -61,7 +63,10 @@ export function NotificationManager() {
 
     function redirect(notification: Notifications.Notification) {
       const url = notification.request.content.data?.url;
-      if (typeof url === 'string') router.push(url as Parameters<typeof router.push>[0]);
+      if (typeof url === 'string') {
+        track(EVENTS.NOTIFICATION_OPENED, { url });
+        router.push(url as Parameters<typeof router.push>[0]);
+      }
     }
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
@@ -89,7 +94,8 @@ export function NotificationManager() {
       const alreadyRequested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
       if (alreadyRequested) return;
       await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
-      await Notifications.requestPermissionsAsync().catch(() => {});
+      const result = await Notifications.requestPermissionsAsync().catch(() => null);
+      track(EVENTS.NOTIFICATION_PERMISSION_REQUESTED, { granted: result?.granted ?? null });
     })();
 
     return () => {

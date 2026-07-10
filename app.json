@@ -43,7 +43,8 @@
           "image": "./assets/images/splash.png",
           "resizeMode": "cover"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,7 +1,9 @@
 import { Redirect, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EVENTS, track } from '@/analytics/events';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -38,6 +40,10 @@ export default function HelpScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { state } = useGame();
+
+  useEffect(() => {
+    track(EVENTS.HELP_VIEWED);
+  }, []);
 
   if (!state) return <Redirect href="/" />;
 
