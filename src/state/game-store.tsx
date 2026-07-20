@@ -22,6 +22,7 @@ import { standupCardForStreak, standupTierForStreak } from '@/game/events/standu
 import { ROUND_ORDER, type GameAction, type GameState } from '@/game/types';
 import { configurePurchases, reconcileOnLaunch, syncPostHogAttribute } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
+import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
 import {
   canRedeemRevive,
   creditReviveTransaction,
@@ -51,6 +52,7 @@ export const PURCHASED_WEEKS_STORAGE_KEY = 'startup-tycoon/purchased-weeks/v1';
 export const REVIVE_STORAGE_KEY = 'startup-tycoon/revive/v1';
 export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
+export const RUN_HISTORY_STORAGE_KEY = 'startup-tycoon/run-history/v1';
 
 /** The player's own profile — set once, survives every `NEW_GAME` (unlike `GameState`, which is fully replaced). */
 export interface PlayerProfile {
@@ -202,6 +204,18 @@ interface GameContextValue {
   devForceBankruptcy: () => void;
   /** Daily-play streak (PRD F12); null until the initial load resolves. */
   streak: StreakState | null;
+  /**
+   * Every completed run (bankruptcy, acquisition, or IPO), newest first;
+   * null until the initial load resolves. Outlives `NEW_GAME` and revive —
+   * only `resetAll` clears it.
+   */
+  runHistory: RunHistory | null;
+  /**
+   * True when the run that just ended (the current `gameOver` state, if any)
+   * set a new personal best. Set the instant the run is recorded; cleared on
+   * `NEW_GAME` and `resetAll`.
+   */
+  lastRunWasBest: boolean;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -226,6 +240,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [streak, setStreak] = useState<StreakState | null>(null);
   // Null until the load resolves; also doubles as "no profile was ever saved".
   const [profile, setProfileState] = useState<PlayerProfile | null>(null);
+  // Null until the load resolves; also doubles as "no history was ever saved".
+  const [runHistory, setRunHistory] = useState<RunHistory | null>(null);
+  // Whether the run that just ended (the current `gameOver` state, if any) set
+  // a new personal best. Set in the game-over transition below; cleared on
+  // `NEW_GAME` so it never bleeds into the next run's game-over screen.
+  const [lastRunWasBest, setLastRunWasBest] = useState(false);
 
   // Load the autosave (and the daily week budget + streak, refreshed against
   // "now") once on mount.
@@ -304,6 +324,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (!cancelled && raw) setProfileState(JSON.parse(raw) as PlayerProfile);
       } catch (err) {
         console.warn('[game-store] failed to load profile', err);
+      }
+      try {
+        const raw = await AsyncStorage.getItem(RUN_HISTORY_STORAGE_KEY);
+        if (!cancelled) setRunHistory(raw ? (JSON.parse(raw) as RunHistory) : initialRunHistory());
+      } catch (err) {
+        console.warn('[game-store] failed to load run history', err);
+        if (!cancelled) setRunHistory(initialRunHistory());
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -367,6 +394,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save profile', err),
     );
   }, [profile, loading]);
+
+  // Persist the run history whenever it changes.
+  useEffect(() => {
+    if (loading || runHistory === null) return;
+    AsyncStorage.setItem(RUN_HISTORY_STORAGE_KEY, JSON.stringify(runHistory)).catch((err) =>
+      console.warn('[game-store] failed to save run history', err),
+    );
+  }, [runHistory, loading]);
 
   // Morning Standup injection (Task 15): the first time this local day sees
   // a live, uninterrupted run (a game exists, isn't over, and has no other
@@ -438,16 +473,35 @@ export function GameProvider({ children }: { children: ReactNode }) {
         week: state.week,
       });
     }
-    // The run just ended (null → reason). Fires exactly once per run.
+    // The run just ended (null → reason). Fires exactly once per run,
+    // including a second bankruptcy after a revive (which clears `gameOver`
+    // in between, so this is a fresh null→reason transition).
     if (state.gameOver && !prev.gameOver) {
+      const score = Math.round(state.finalScore ?? 0);
       track(EVENTS.GAME_OVER, {
         ...gameProps(state),
         reason: state.gameOver,
-        final_score: Math.round(state.finalScore ?? 0),
+        final_score: score,
         $set: { last_game_over_reason: state.gameOver },
       });
+      const historyBeforeRecording = runHistory ?? initialRunHistory();
+      const newBest = isNewBest(historyBeforeRecording, score);
+      setLastRunWasBest(newBest);
+      if (newBest) {
+        track(EVENTS.NEW_BEST_SCORE, { score, reason: state.gameOver, weeks: state.week });
+      }
+      setRunHistory(
+        recordRun(historyBeforeRecording, {
+          endedOnDateKey: dateKey(new Date()),
+          reason: state.gameOver,
+          weeks: state.week,
+          score,
+          seed: state.createdWithSeed,
+          companyName: state.companyName,
+        }),
+      );
     }
-  }, [state, loading]);
+  }, [state, loading, runHistory]);
 
   const dispatchWithSnapshot = (action: GameAction) => {
     if (action.type === 'TICK') {
@@ -500,6 +554,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch: dispatchWithSnapshot,
     startNewGame: (companyName: string, seed?: number) => {
       setPreviousState(null);
+      setLastRunWasBest(false);
       track(EVENTS.GAME_STARTED, {
         company_name: companyName,
         is_returning_ceo: profile?.ceoName != null,
@@ -516,22 +571,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
     },
     resetAll: () => {
       setPreviousState(null);
+      setLastRunWasBest(false);
       setProfileState(null);
       setStreak(null);
       setWeekBudget(initialWeekBudget(new Date()));
       setPurchasedWeeks(initialPurchasedWeeksPool());
       setRevivePool(initialRevivePool());
+      setRunHistory(initialRunHistory());
       track(EVENTS.APP_RESET);
       // New anonymous identity so a fresh setup isn't attributed to the old player.
       posthog.reset();
       // State→null lets the autosave effect remove the save key, and the fresh
-      // week budget / purchased pool are written by their own effects.
-      // Profile and streak are guarded against null-persist, so their keys
-      // never auto-clear — remove them here.
+      // week budget / purchased pool / run history are written by their own
+      // effects. Profile and streak are guarded against null-persist, so
+      // their keys never auto-clear — remove them here.
       dispatch({ type: 'HYDRATE', state: null });
       Promise.all([
         AsyncStorage.removeItem(PROFILE_STORAGE_KEY),
         AsyncStorage.removeItem(STREAK_STORAGE_KEY),
+        AsyncStorage.removeItem(RUN_HISTORY_STORAGE_KEY),
       ]).catch(() => {});
     },
     weekBudget,
@@ -575,6 +633,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       track(EVENTS.CEO_NAME_SET, { $set: { ceo_name: name } });
       setProfileState({ ceoName: name });
     },
+    runHistory,
+    lastRunWasBest,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

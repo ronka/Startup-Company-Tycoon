@@ -32,6 +32,8 @@ export const EVENTS = {
   TREND_PHASE_CHANGED: 'trend_phase_changed',
   GAME_OVER: 'game_over',
   GAME_OVER_VIEWED: 'game_over_viewed',
+  /** The run that just ended set a new personal-best score (score > 0, strictly greater than the prior best). */
+  NEW_BEST_SCORE: 'new_best_score',
   SAVE_CLEARED: 'save_cleared',
   APP_RESET: 'app_reset',
 

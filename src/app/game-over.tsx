@@ -18,6 +18,7 @@ import {
 } from '@/purchases';
 import { useGame } from '@/state/game-store';
 import { canRedeemRevive } from '@/state/revive';
+import { bestScore } from '@/state/run-history';
 
 const HEADLINE: Record<GameOverReason, string> = {
   bankruptcy: 'Bankrupt',
@@ -33,12 +34,13 @@ const SUBTITLE: Record<GameOverReason, (weeks: number) => string> = {
 };
 
 export default function GameOverScreen() {
-  const { state, revivePool, creditRevivePurchase, redeemRevive } = useGame();
+  const { state, revivePool, creditRevivePurchase, redeemRevive, runHistory, lastRunWasBest } = useGame();
   const router = useRouter();
   const theme = useTheme();
 
   const reason = state?.gameOver ?? null;
   const isBankruptcy = reason === 'bankruptcy';
+  const best = runHistory ? bestScore(runHistory) : null;
   // The bailout is offered only on bankruptcy, and only where real purchases
   // work (iOS custom builds) — see `purchasesAvailable`. A revive already sitting
   // in the pool (a purchase that paid but never got redeemed, e.g. app killed
@@ -62,8 +64,9 @@ export default function GameOverScreen() {
       reason,
       final_score: Math.round(state?.finalScore ?? 0),
       weeks: state?.week,
+      is_new_best: lastRunWasBest,
     });
-  }, [reason, state?.finalScore, state?.week]);
+  }, [reason, state?.finalScore, state?.week, lastRunWasBest]);
 
   // Load the live store price and log the bailout paywall impression.
   useEffect(() => {
@@ -150,6 +153,15 @@ export default function GameOverScreen() {
           {formatMoney(state.finalScore ?? 0)}
         </ThemedText>
         <ThemedText themeColor="textSecondary">Final score</ThemedText>
+        {lastRunWasBest ? (
+          <ThemedText type="smallBold" themeColor="success" style={styles.personalBest}>
+            New personal best!
+          </ThemedText>
+        ) : best !== null && best > 0 ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.personalBest}>
+            Personal best: {formatMoney(best)}
+          </ThemedText>
+        ) : null}
       </View>
 
       <View style={styles.actions}>
@@ -207,6 +219,9 @@ const styles = StyleSheet.create({
   score: {
     textAlign: 'center',
     marginTop: Spacing.three,
+  },
+  personalBest: {
+    textAlign: 'center',
   },
   actions: {
     gap: Spacing.three,
