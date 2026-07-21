@@ -1,9 +1,11 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
 import { AnimatedNumber } from '@/components/game/animated-number';
+import { HINT_KEY_PREFIX } from '@/components/game/first-run-hint';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -28,6 +30,9 @@ export function Hud() {
   // is the drawer navigator — `openDrawer` slides in the settings menu.
   const openMenu = () => {
     track(EVENTS.MENU_OPENED);
+    // Finding the menu on your own retires the "there's a glossary in here"
+    // nudge HQ would otherwise show at week 6.
+    AsyncStorage.setItem(HINT_KEY_PREFIX + 'drawer-glossary', 'true').catch(() => {});
     (navigation as unknown as { openDrawer?: () => void }).openDrawer?.();
   };
 

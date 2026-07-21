@@ -5,7 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purchasesAvailable } from '@/purchases';
 import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
+import { FirstRunHint, useFirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
+import { SpotlightHint } from '@/components/game/spotlight-hint';
 import { ThemedText } from '@/components/themed-text';
 import { WeekInReviewSheet, type RivalShareMove } from '@/components/game/week-in-review-sheet';
 import { WeekTicker } from '@/components/game/week-ticker';
@@ -36,6 +38,9 @@ export function GameChrome() {
   // the DecisionModal is dismissing (present-while-dismiss hangs iOS — see
   // docs/bug-stuck-decision-modal.md).
   const [recapArmedWeek, setRecapArmedWeek] = useState<number | null>(null);
+  // The one-time "this is the whole game" callout over Next Week. Retired by
+  // the first tick, so pressing the button counts as reading it.
+  const spotlight = useFirstRunHint('next-week-spotlight', 'chrome');
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -76,6 +81,10 @@ export function GameChrome() {
   const budgetExhausted =
     !devFreePlay && weekBudget !== null && purchasedWeeks !== null && !canSpendAnyWeek(weekBudget, purchasedWeeks);
   const canAdvance = !state.pendingEvent && !budgetExhausted;
+  // Down to the final free dot, with nothing purchased to fall back on — the
+  // moment the daily budget is worth explaining, before it bites.
+  const onLastFreeWeek =
+    !budgetExhausted && weekBudget?.weeksRemaining === 1 && (purchasedWeeks?.weeksRemaining ?? 0) === 0;
 
   return (
     <>
@@ -90,14 +99,41 @@ export function GameChrome() {
       ) : null}
 
       <View style={[styles.chrome, { paddingBottom: insets.bottom + Spacing.two }]}>
+        {spotlight.visible && canAdvance ? (
+          <SpotlightHint text="This is the whole game → advance a week" onDismiss={spotlight.dismiss} />
+        ) : null}
+
         <View style={styles.footer}>
           <PrimaryButton
             label="Next Week →"
-            onPress={() => dispatch({ type: 'TICK' })}
+            onPress={() => {
+              if (spotlight.visible) spotlight.dismiss();
+              dispatch({ type: 'TICK' });
+            }}
             disabled={!canAdvance}
             style={styles.nextButton}
           />
         </View>
+
+        {onLastFreeWeek ? (
+          <View style={styles.budgetHint}>
+            <FirstRunHint
+              id="week-budget-dots"
+              scope="chrome"
+              text="You get a few free weeks each day — the dots below. They refill tomorrow."
+            />
+          </View>
+        ) : null}
+
+        {budgetExhausted ? (
+          <View style={styles.budgetHint}>
+            <FirstRunHint
+              id="out-of-weeks"
+              scope="chrome"
+              text={`Out of weeks for today. Come back tomorrow — ${state.companyName} will be waiting.`}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.budgetRow}>
           {budgetExhausted ? (
@@ -219,6 +255,10 @@ const styles = StyleSheet.create({
   nextButton: {
     flex: 1,
     paddingVertical: Spacing.two,
+  },
+  budgetHint: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.two,
   },
   budgetRow: {
     flexDirection: 'row',

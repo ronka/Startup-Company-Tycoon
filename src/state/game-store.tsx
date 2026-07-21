@@ -19,7 +19,7 @@ import { EVENTS, gameProps, track } from '@/analytics/events';
 import { posthog } from '@/analytics/posthog';
 import { newGame, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
-import { ROUND_ORDER, type GameAction, type GameState } from '@/game/types';
+import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { configurePurchases, reconcileOnLaunch, syncPostHogAttribute } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
@@ -54,9 +54,22 @@ export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
 export const RUN_HISTORY_STORAGE_KEY = 'startup-tycoon/run-history/v1';
 
+/**
+ * The revision of the intro story this build ships. Bump it when the intro is
+ * revamped enough that existing players should see it again; profiles stamped
+ * with an older version replay the full sequence.
+ */
+export const ONBOARDING_VERSION = 1;
+
 /** The player's own profile — set once, survives every `NEW_GAME` (unlike `GameState`, which is fully replaced). */
 export interface PlayerProfile {
   ceoName: string;
+  /**
+   * Which intro revision this player has completed. Absent (legacy profiles,
+   * or after "Replay intro") means they've never seen the current one, so the
+   * full story sequence plays instead of jumping straight to name entry.
+   */
+  onboardingVersion?: number;
 }
 
 type StoreAction =
@@ -72,7 +85,7 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
     case 'SET_STATE':
       return action.state;
     case 'NEW_GAME':
-      return newGame(action.companyName, action.seed);
+      return newGame(action.companyName, action.seed, action.focus);
     default:
       return state === null ? state : reduce(state, action);
   }
@@ -135,7 +148,8 @@ interface GameContextValue {
   /** True until the initial AsyncStorage load resolves. */
   loading: boolean;
   dispatch: (action: GameAction) => void;
-  startNewGame: (companyName: string, seed?: number) => void;
+  /** `focus` is the onboarding founder type; omitted, the run starts on `core`. */
+  startNewGame: (companyName: string, focus?: FocusId, seed?: number) => void;
   /** Wipe the autosave and clear in-memory state. */
   clearSave: () => void;
   /**
@@ -157,6 +171,10 @@ interface GameContextValue {
   profile: PlayerProfile | null;
   /** Sets the CEO name once and persists it; never asked again after this. */
   setCeoName: (name: string) => void;
+  /** Stamps the profile as having completed the current intro revision, so it isn't replayed. */
+  markOnboardingSeen: () => void;
+  /** Clears the intro stamp so the full story plays again (Settings → Replay intro, QA). */
+  replayOnboarding: () => void;
   /**
    * The daily week budget (PRD F12): null until the initial load resolves.
    * `TICK` is rejected once `weeksRemaining` hits 0, unless
@@ -552,17 +570,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
     previousState,
     loading,
     dispatch: dispatchWithSnapshot,
-    startNewGame: (companyName: string, seed?: number) => {
+    startNewGame: (companyName: string, focus?: FocusId, seed?: number) => {
       setPreviousState(null);
       setLastRunWasBest(false);
       track(EVENTS.GAME_STARTED, {
         company_name: companyName,
         is_returning_ceo: profile?.ceoName != null,
         seed: seed ?? null,
+        focus: focus ?? 'core',
         $set: { company_name: companyName },
         $set_once: { first_game_at: new Date().toISOString() },
       });
-      dispatch({ type: 'NEW_GAME', companyName, seed });
+      dispatch({ type: 'NEW_GAME', companyName, seed, focus });
     },
     clearSave: () => {
       setPreviousState(null);
@@ -631,7 +650,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     profile,
     setCeoName: (name: string) => {
       track(EVENTS.CEO_NAME_SET, { $set: { ceo_name: name } });
-      setProfileState({ ceoName: name });
+      setProfileState((prev) => ({ ...prev, ceoName: name }));
+    },
+    markOnboardingSeen: () => {
+      setProfileState((prev) => ({ ceoName: '', ...prev, onboardingVersion: ONBOARDING_VERSION }));
+    },
+    replayOnboarding: () => {
+      // Drop the stamp rather than zeroing it, so the profile shape stays the
+      // same as a legacy (pre-versioning) one — both mean "hasn't seen it".
+      setProfileState((prev) => {
+        if (!prev) return prev;
+        const { onboardingVersion: _dropped, ...rest } = prev;
+        return rest;
+      });
     },
     runHistory,
     lastRunWasBest,

@@ -1,5 +1,6 @@
 import { Modal, StyleSheet, View } from 'react-native';
 
+import { FirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -54,6 +55,10 @@ export function DecisionModal({
       <View style={styles.backdrop}>
         {card ? (
           <ThemedView type="backgroundElement" style={styles.card}>
+            <FirstRunHint
+              id="decision-cards"
+              text={'Decision cards are your weekly judgment calls. There’s rarely a "right" answer — just trade-offs.'}
+            />
             <ThemedText type="smallBold">{card.title}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.flavor}>
               {card.flavor}

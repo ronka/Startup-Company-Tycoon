@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { useTabView } from '@/analytics/use-tab-view';
+import { FirstRunHint } from '@/components/game/first-run-hint';
 import { ProgressBar } from '@/components/game/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -34,6 +35,8 @@ export default function MarketScreen() {
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="subtitle">Market</ThemedText>
+
+        <FirstRunHint id="market" text="Two rivals want your customers. Quality and hype decide who wins the market." />
 
         <View style={styles.trendSection}>
           <View style={styles.trendHeader}>

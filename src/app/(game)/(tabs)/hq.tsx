@@ -24,6 +24,11 @@ import { STAT_EXPLAINERS } from '@/lib/stat-explainers';
 import { BOTTLENECK_LABEL, FOCUS_LABEL, trendAlignmentFor } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
 
+/** Runway below this many weeks is where a founder should be thinking about raising. */
+const SHORT_RUNWAY_WEEKS = 10;
+/** By this week, a player who still hasn't opened the drawer gets pointed at it. */
+const DRAWER_HINT_WEEK = 6;
+
 export default function HqScreen() {
   const { state, previousState, dispatch } = useGame();
   const theme = useTheme();
@@ -35,7 +40,8 @@ export default function HqScreen() {
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  const { burn, revenue, valuation, insolvent } = deriveWeeklyStats(state);
+  const { burn, revenue, valuation, insolvent, runway } = deriveWeeklyStats(state);
+  const runwayIsShort = Number.isFinite(runway) && runway < SHORT_RUNWAY_WEEKS;
   const previous = previousState ? deriveWeeklyStats(previousState) : null;
   const report = weeklyReportFor(state);
 
@@ -56,7 +62,27 @@ export default function HqScreen() {
           {state.companyName} HQ
         </ThemedText>
 
-        <FirstRunHint id="hq" text="Watch revenue vs. burn." />
+        <FirstRunHint
+          id="hq"
+          scope="hq"
+          text="Top bar: your cash, how many weeks it lasts (runway), customers, and the current week. Cash at $0 for 3 weeks = game over."
+        />
+
+        {runwayIsShort ? (
+          <FirstRunHint
+            id="runway-short"
+            scope="hq"
+            text="Runway is getting short. The Money tab is where founders raise cash — before terms get ugly."
+          />
+        ) : null}
+
+        {state.week >= DRAWER_HINT_WEEK ? (
+          <FirstRunHint
+            id="drawer-glossary"
+            scope="hq"
+            text="Stuck on a term? The ☰ menu has a full glossary with your live numbers."
+          />
+        ) : null}
 
         {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 
@@ -129,6 +155,10 @@ export default function HqScreen() {
         <View style={styles.modalBackdrop}>
           <ThemedView type="backgroundElement" style={styles.modalCard}>
             <ThemedText type="smallBold">Switch focus?</ThemedText>
+            <FirstRunHint
+              id="focus-switch"
+              text={`Switching focus costs ~${FOCUS_TRANSITION_WEEKS} weeks of drag — commit, don't flip-flop.`}
+            />
             <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
               {pendingFocus
                 ? `Switching to ${FOCUS_LABEL[pendingFocus]} costs ${FOCUS_TRANSITION_WEEKS} weeks of reduced dev effort and conversion while the team retools.`

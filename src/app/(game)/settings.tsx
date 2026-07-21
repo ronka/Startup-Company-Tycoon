@@ -36,6 +36,7 @@ export default function SettingsScreen() {
     revivePool,
     grantReviveToken,
     devForceBankruptcy,
+    replayOnboarding,
   } = useGame();
 
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
@@ -76,6 +77,31 @@ export default function SettingsScreen() {
       { cancelable: true },
     );
   }, [resetAll, resetHints, router]);
+
+  /**
+   * Replays the intro story and every contextual hint, then starts a new run.
+   * The current run isn't wiped here — finishing onboarding starts a fresh
+   * game anyway, so warn about that rather than silently discarding it.
+   */
+  const confirmReplayIntro = useCallback(() => {
+    Alert.alert(
+      'Replay intro?',
+      'You’ll go through the intro again and start a brand-new company. Your current run is left behind.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Replay',
+          onPress: () => {
+            track(EVENTS.ONBOARDING_REPLAY_REQUESTED);
+            replayOnboarding();
+            resetHints().catch(() => {});
+            router.replace('/onboarding');
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [replayOnboarding, resetHints, router]);
 
   const showDebugOptions = useCallback(() => {
     track(EVENTS.DEBUG_MENU_OPENED);
@@ -178,6 +204,15 @@ export default function SettingsScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           Reset
         </ThemedText>
+
+        <Pressable onPress={confirmReplayIntro} accessibilityRole="button">
+          <ThemedView type="backgroundElement" style={styles.row}>
+            <ThemedText type="default">Replay intro</ThemedText>
+            <ThemedText type="default" themeColor="textSecondary">
+              ›
+            </ThemedText>
+          </ThemedView>
+        </Pressable>
 
         <Pressable onPress={confirmReset} accessibilityRole="button">
           <ThemedView type="backgroundElement" style={styles.row}>

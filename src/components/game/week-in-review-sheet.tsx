@@ -1,5 +1,6 @@
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 
+import { FirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -47,6 +48,8 @@ export function WeekInReviewSheet({
       <View style={styles.backdrop}>
         <ThemedView type="backgroundElement" style={styles.sheet}>
           <ThemedText type="smallBold">Week {week}</ThemedText>
+
+          <FirstRunHint id="first-week-review" text="Every week ends like this — what changed, and why." />
 
           <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
             <SummaryRow

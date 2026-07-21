@@ -22,6 +22,16 @@ export const EVENTS = {
   ONBOARDING_VIEWED: 'onboarding_viewed',
   ONBOARDING_COMPLETED: 'onboarding_completed',
   CEO_NAME_SET: 'ceo_name_set',
+  /** The intro story sequence was shown (first-ever run only). */
+  ONBOARDING_INTRO_STARTED: 'onboarding_intro_started',
+  /** One intro step came into view — `{ step }` is the step id (hook/name/founder/reflect). */
+  ONBOARDING_STEP_VIEWED: 'onboarding_step_viewed',
+  /** The founder-type answer, which also sets the run's starting `focus`. */
+  ONBOARDING_FOUNDER_TYPE: 'onboarding_founder_type',
+  /** "Skip intro" tapped — `{ at_step }` records where. */
+  ONBOARDING_SKIPPED: 'onboarding_skipped',
+  /** The intro was replayed from Settings. */
+  ONBOARDING_REPLAY_REQUESTED: 'onboarding_replay_requested',
 
   // Game lifecycle
   GAME_STARTED: 'game_started',
@@ -59,6 +69,8 @@ export const EVENTS = {
   NOTIFICATION_OPENED: 'notification_opened',
 
   // First-run hints / debug
+  /** A contextual hint became visible (won its screen's single hint slot). */
+  HINT_SHOWN: 'hint_shown',
   HINT_DISMISSED: 'hint_dismissed',
   DEBUG_MENU_OPENED: 'debug_menu_opened',
   HINTS_RESET: 'hints_reset',

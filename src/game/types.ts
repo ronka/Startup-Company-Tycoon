@@ -232,7 +232,8 @@ export interface GameState {
 
 export type GameAction =
   | { type: 'TICK' }
-  | { type: 'NEW_GAME'; seed?: number; companyName: string }
+  /** `focus` is the founder type chosen during onboarding; omitted, the run starts on `core`. */
+  | { type: 'NEW_GAME'; seed?: number; companyName: string; focus?: FocusId }
   | { type: 'SET_PENDING_HIRES'; role: Role; delta: number }
   | { type: 'SET_MORALE_LEVER'; active: boolean }
   | { type: 'HIRE_CLEVEL'; role: CLevelRole; candidateId: string }
