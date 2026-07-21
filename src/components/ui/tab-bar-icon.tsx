@@ -1,9 +1,10 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { type ColorValue, View } from 'react-native';
 
-type TabName = 'hq' | 'team' | 'money' | 'market';
+export type TabName = 'hq' | 'team' | 'money' | 'market';
 
-const SYMBOL_NAMES: Record<TabName, SymbolViewProps['name']> = {
+/** Exported so anything pointing at a tab (e.g. the intro's screen tour) uses the tab bar's own icon. */
+export const TAB_SYMBOLS: Record<TabName, SymbolViewProps['name']> = {
   hq: { ios: 'building.2.fill', android: 'corporate_fare', web: 'corporate_fare' },
   team: { ios: 'person.2.fill', android: 'groups', web: 'groups' },
   money: { ios: 'dollarsign.circle.fill', android: 'attach_money', web: 'attach_money' },
@@ -19,7 +20,7 @@ const SYMBOL_NAMES: Record<TabName, SymbolViewProps['name']> = {
 export function TabBarIcon({ name, color, size }: { name: TabName; color: ColorValue; size: number }) {
   return (
     <View aria-hidden style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <SymbolView name={SYMBOL_NAMES[name]} size={size} tintColor={color} />
+      <SymbolView name={TAB_SYMBOLS[name]} size={size} tintColor={color} />
     </View>
   );
 }

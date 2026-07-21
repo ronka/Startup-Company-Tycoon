@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -6,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   type TextInputProps,
   View,
@@ -15,16 +15,19 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
+import { Card } from '@/components/game/card';
 import { PrimaryButton } from '@/components/game/primary-button';
+import { SectionHeader } from '@/components/game/section-header';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { TAB_SYMBOLS, type TabName } from '@/components/ui/tab-bar-icon';
+import { Radius, Spacing } from '@/constants/theme';
 import { BANKRUPTCY_FUSE_WEEKS } from '@/game/balance';
 import { DEFAULT_COMPANY_NAME, newGame } from '@/game/engine';
 import type { FocusId } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
+import { FOCUS_LABEL } from '@/lib/strategy-copy';
 import { ONBOARDING_VERSION, useGame } from '@/state/game-store';
 
 const NAME_MAX_LENGTH = 40;
@@ -50,12 +53,44 @@ const PREVIEW_SEED = 1;
  */
 type Step = 'hook' | 'name' | 'founder' | 'reflect' | 'goal' | 'launch';
 
-/** The founder-type question (A3). Each answer *is* the run's starting Focus. */
-const FOUNDER_TYPES: { focus: FocusId; label: string; blurb: string }[] = [
-  { focus: 'core', label: 'Product perfectionist', blurb: 'Ship quality, win on craft' },
-  { focus: 'ai', label: 'AI true believer', blurb: 'Ride the smartest wave in tech' },
-  { focus: 'hardware', label: 'Hardware builder', blurb: 'Real things you can hold' },
-  { focus: 'hype', label: 'Hype machine', blurb: 'Attention first, product later' },
+/**
+ * The founder-type question (A3). Each answer *is* the run's starting Focus.
+ * Icons follow the `{ ios, android, web }` shape the rest of the app uses for
+ * SF Symbols with Material fallbacks (see `StatTile`, `TabBarIcon`).
+ */
+const FOUNDER_TYPES: { focus: FocusId; label: string; blurb: string; icon: SymbolViewProps['name'] }[] = [
+  {
+    focus: 'core',
+    label: 'Product perfectionist',
+    blurb: 'Ship quality, win on craft',
+    icon: { ios: 'hammer.fill', android: 'build', web: 'build' },
+  },
+  {
+    focus: 'ai',
+    label: 'AI true believer',
+    blurb: 'Ride the smartest wave in tech',
+    icon: { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
+  },
+  {
+    focus: 'hardware',
+    label: 'Hardware builder',
+    blurb: 'Real things you can hold',
+    icon: { ios: 'cpu.fill', android: 'memory', web: 'memory' },
+  },
+  {
+    focus: 'hype',
+    label: 'Hype machine',
+    blurb: 'Attention first, product later',
+    icon: { ios: 'megaphone.fill', android: 'campaign', web: 'campaign' },
+  },
+];
+
+/** The four tabs, in bar order, for the `launch` beat's screen tour. */
+const TAB_TOUR: { tab: TabName; label: string; blurb: string }[] = [
+  { tab: 'hq', label: 'HQ', blurb: 'Steer the company, week by week' },
+  { tab: 'team', label: 'Team', blurb: 'Hire the people who build it' },
+  { tab: 'money', label: 'Money', blurb: 'Raise cash before it runs out' },
+  { tab: 'market', label: 'Market', blurb: 'Watch what your rivals are up to' },
 ];
 
 /** A4's mirror-it-back line, one per founder type. `{company}` is substituted. */
@@ -145,6 +180,7 @@ export default function OnboardingScreen() {
     return (
       <StoryStep
         stepKey="hook"
+        eyebrow="Startup Tycoon"
         headline="You just quit your job."
         body="You've got an idea, a little cash, and rent due in a few months. Time to build something people want — before the money runs out."
         primaryLabel="Let's do this"
@@ -161,6 +197,7 @@ export default function OnboardingScreen() {
     return (
       <StoryStep
         stepKey="founder"
+        eyebrow="Pick your bet"
         headline="What kind of founder are you?"
         body="There's no safe answer. Pick the bet you'd actually make — it sets how your company starts.">
         <View style={styles.options}>
@@ -169,15 +206,9 @@ export default function OnboardingScreen() {
               key={option.focus}
               onPress={() => chooseFounderType(option.focus)}
               accessibilityRole="button"
-              accessibilityLabel={`${option.label} — ${option.blurb}`}>
-              <ThemedView type="backgroundElement" style={styles.optionCard}>
-                <ThemedText type="default" style={styles.optionLabel}>
-                  {option.label}
-                </ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {option.blurb}
-                </ThemedText>
-              </ThemedView>
+              accessibilityLabel={`${option.label} — ${option.blurb}`}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <IconCard icon={option.icon} label={option.label} text={option.blurb} chevron />
             </Pressable>
           ))}
         </View>
@@ -186,16 +217,24 @@ export default function OnboardingScreen() {
   }
 
   if (step === 'reflect') {
+    const founder = FOUNDER_TYPES.find((option) => option.focus === focus) ?? FOUNDER_TYPES[0];
     return (
       <StoryStep
         stepKey="reflect"
+        eyebrow="Day one"
         headline={`${company} is live.`}
         body={REFLECTION[focus].replace(/\{company\}/g, company)}
         // First-timers still owe the rules; a returning CEO already knows them
         // and goes straight to their desk.
         primaryLabel={showIntro ? 'So how do I win?' : 'Take me to HQ'}
-        onPrimary={showIntro ? () => setStep('goal') : enterHq}
-      />
+        onPrimary={showIntro ? () => setStep('goal') : enterHq}>
+        <IconCard
+          tone="accent"
+          icon={founder.icon}
+          label={founder.label}
+          text={`Starting focus: ${FOCUS_LABEL[focus]} — you can switch later from HQ, for a price.`}
+        />
+      </StoryStep>
     );
   }
 
@@ -203,20 +242,25 @@ export default function OnboardingScreen() {
     return (
       <StoryStep
         stepKey="goal"
+        eyebrow="The rules"
         headline="How this ends."
         body="Every startup ends. Yours ends one of three ways — and only two of them pay."
         primaryLabel="Got it"
         onPrimary={() => setStep('launch')}>
         <View style={styles.options}>
-          <RuleCard
+          <IconCard
+            icon={{ ios: 'flag.checkered', android: 'flag', web: 'flag' }}
             label="You exit"
             text="Go public, or sell the company. That's the win, and it's the only way you get paid."
           />
-          <RuleCard
+          <IconCard
+            icon={{ ios: 'chart.pie.fill', android: 'pie_chart', web: 'pie_chart' }}
             label="Your score is what you walk away with"
             text="The slice of the company you still own × what it's worth when you exit. Every round you raise buys time and costs you a piece of that slice."
           />
-          <RuleCard
+          <IconCard
+            tone="alert"
+            icon={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }}
             label="Or you run out of money"
             text={`${BANKRUPTCY_FUSE_WEEKS} straight weeks in the red and it's over. Bankruptcy pays nothing.`}
           />
@@ -228,55 +272,114 @@ export default function OnboardingScreen() {
   return (
     <StoryStep
       stepKey="launch"
+      eyebrow="Starting position"
       headline={`Week 1 at ${company}.`}
       body="An empty office, a bank balance, and a clock. Here's where you're starting:"
       primaryLabel="Take me to HQ"
       onPrimary={enterHq}>
-      <ThemedView type="backgroundElement" style={styles.statRow}>
-        <PreviewStat label="Cash" value={formatMoney(previewState.cash)} />
-        <PreviewStat label="Burn / wk" value={formatMoney(preview.burn)} />
-        <PreviewStat label="Runway" value={formatWeeks(preview.runway)} />
-      </ThemedView>
+      <Card style={styles.statRow}>
+        <PreviewStat
+          label="Cash"
+          value={formatMoney(previewState.cash)}
+          icon={{ ios: 'banknote.fill', android: 'payments', web: 'payments' }}
+        />
+        <PreviewStat
+          label="Burn / wk"
+          value={formatMoney(preview.burn)}
+          icon={{ ios: 'flame.fill', android: 'local_fire_department', web: 'local_fire_department' }}
+        />
+        <PreviewStat
+          label="Runway"
+          value={formatWeeks(preview.runway)}
+          icon={{ ios: 'clock.fill', android: 'schedule', web: 'schedule' }}
+        />
+      </Card>
 
-      <ThemedView type="backgroundElement" style={styles.promiseCard}>
-        <ThemedText type="small" style={styles.promiseText}>
-          {/* Plain `Text` for the tab names so they inherit this block's size and
-              line height and only override the weight — a nested `ThemedText`
-              would re-apply its own `lineHeight` and stagger the rows on iOS. */}
-          Four screens to work with, left to right: <Text style={styles.inlineBold}>HQ</Text> to steer,{' '}
-          <Text style={styles.inlineBold}>Team</Text> to hire, <Text style={styles.inlineBold}>Money</Text> to raise,{' '}
-          <Text style={styles.inlineBold}>Market</Text> to watch your rivals. Make the calls, one week at a time — then
-          hit &quot;Next Week&quot; and find out.
+      <View style={styles.tourSection}>
+        <SectionHeader label="Your four screens" />
+        <View style={styles.options}>
+          {TAB_TOUR.map((entry) => (
+            <IconCard key={entry.tab} icon={TAB_SYMBOLS[entry.tab]} label={entry.label} text={entry.blurb} />
+          ))}
+        </View>
+      </View>
+
+      <Card>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.promiseText}>
+          Make the calls, one week at a time — then hit &quot;Next Week&quot; and find out.
         </ThemedText>
-      </ThemedView>
+      </Card>
     </StoryStep>
   );
 }
 
-/** One line of the rules, on the `goal` beat: a bolded claim over its consequence. */
-function RuleCard({ label, text }: { label: string; text: string }) {
+/**
+ * The intro's workhorse row: a tinted icon badge beside a bold claim and its
+ * one-line consequence. Used for the founder options, the rules of the run, and
+ * the screen tour, so all three read as the same family of cards.
+ */
+function IconCard({
+  icon,
+  label,
+  text,
+  tone = 'default',
+  chevron = false,
+}: {
+  icon: SymbolViewProps['name'];
+  label: string;
+  text: string;
+  tone?: 'default' | 'accent' | 'alert';
+  chevron?: boolean;
+}) {
+  const theme = useTheme();
+  const ink = tone === 'alert' ? theme.danger : tone === 'accent' ? theme.accent : theme.text;
+
   return (
-    <ThemedView type="backgroundElement" style={styles.optionCard}>
-      <ThemedText type="default" style={styles.optionLabel}>
-        {label}
-      </ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.promiseText}>
-        {text}
-      </ThemedText>
-    </ThemedView>
+    <Card tone={tone} style={styles.iconCard}>
+      <View
+        style={[
+          styles.iconBadge,
+          {
+            backgroundColor: tone === 'default' ? theme.surfaceRaised : 'transparent',
+            borderColor: tone === 'default' ? theme.border : ink,
+          },
+        ]}>
+        <SymbolView name={icon} size={20} tintColor={ink} />
+      </View>
+      <View style={styles.iconCardText}>
+        <ThemedText type="smallBold" style={[styles.iconCardLabel, { color: ink }]}>
+          {label}
+        </ThemedText>
+        <ThemedText
+          type="small"
+          themeColor={tone === 'alert' ? 'danger' : 'textSecondary'}
+          style={styles.promiseText}>
+          {text}
+        </ThemedText>
+      </View>
+      {chevron ? (
+        <SymbolView
+          name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+          size={14}
+          tintColor={theme.textMuted}
+        />
+      ) : null}
+    </Card>
   );
 }
 
 /** One of the three week-1 numbers on the `launch` beat. */
-function PreviewStat({ label, value }: { label: string; value: string }) {
+function PreviewStat({ label, value, icon }: { label: string; value: string; icon: SymbolViewProps['name'] }) {
+  const theme = useTheme();
   return (
     <View style={styles.previewStat}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {label}
-      </ThemedText>
-      <ThemedText type="default" style={styles.optionLabel}>
-        {value}
-      </ThemedText>
+      <View style={styles.previewStatLabel}>
+        <SymbolView name={icon} size={14} tintColor={theme.textSecondary} />
+        <ThemedText type="small" themeColor="textSecondary">
+          {label}
+        </ThemedText>
+      </View>
+      <ThemedText type="cardValue">{value}</ThemedText>
     </View>
   );
 }
@@ -288,6 +391,7 @@ function PreviewStat({ label, value }: { label: string; value: string }) {
  */
 function StoryStep({
   stepKey,
+  eyebrow,
   headline,
   body,
   primaryLabel,
@@ -296,6 +400,8 @@ function StoryStep({
   children,
 }: {
   stepKey: Step;
+  /** Uppercase label above the headline — the same divider treatment the game screens use. */
+  eyebrow?: string;
   headline: string;
   body: string;
   primaryLabel?: string;
@@ -310,7 +416,10 @@ function StoryStep({
     <View style={[styles.screen, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       <Animated.View key={stepKey} entering={FadeIn.duration(260)} style={styles.screen}>
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.five }]}>
-          <ThemedText type="subtitle">{headline}</ThemedText>
+          <View style={styles.header}>
+            {eyebrow ? <ThemedText type="sectionLabel">{eyebrow}</ThemedText> : null}
+            <ThemedText type="subtitle">{headline}</ThemedText>
+          </View>
           <ThemedText type="default" themeColor="textSecondary" style={styles.body}>
             {body}
           </ThemedText>
@@ -373,6 +482,7 @@ function NameStep({
         keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}>
         <View style={styles.nameHeader}>
+          <ThemedText type="sectionLabel">{isReturningCeo ? 'New run' : 'Founding'}</ThemedText>
           <ThemedText type="subtitle">
             {isReturningCeo ? `Welcome back, ${ceoName}.` : 'Every startup starts with a name.'}
           </ThemedText>
@@ -405,14 +515,12 @@ function Field({ label, style, ...input }: { label: string } & TextInputProps) {
   const theme = useTheme();
   return (
     <View style={styles.field}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {label}
-      </ThemedText>
+      <ThemedText type="sectionLabel">{label}</ThemedText>
       <TextInput
         maxLength={NAME_MAX_LENGTH}
         autoCapitalize="words"
-        placeholderTextColor={theme.textSecondary}
-        style={[styles.input, { backgroundColor: theme.backgroundElement, color: theme.text }, style]}
+        placeholderTextColor={theme.textMuted}
+        style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }, style]}
         {...input}
       />
     </View>
@@ -427,6 +535,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.six,
     gap: Spacing.four,
+  },
+  header: {
+    gap: Spacing.one,
   },
   body: {
     lineHeight: 26,
@@ -443,41 +554,58 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   input: {
-    borderRadius: Spacing.three,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three,
     fontSize: 17,
   },
   options: {
+    gap: Spacing.two,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  iconCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.three,
   },
-  optionCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
+  iconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCardText: {
+    flex: 1,
     gap: Spacing.half,
   },
-  optionLabel: {
-    fontWeight: '700',
-  },
-  promiseCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
+  iconCardLabel: {
+    fontSize: 16,
+    lineHeight: 22,
   },
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
     gap: Spacing.two,
   },
   previewStat: {
+    flex: 1,
     gap: Spacing.half,
+  },
+  previewStatLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  tourSection: {
+    gap: Spacing.two,
   },
   promiseText: {
     lineHeight: 22,
-  },
-  inlineBold: {
-    fontWeight: '700',
   },
   skip: {
     alignSelf: 'center',
