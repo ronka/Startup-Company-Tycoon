@@ -63,6 +63,7 @@ export default function HqScreen() {
     previous && previous.valuation > 0 ? ((valuation - previous.valuation) / previous.valuation) * 100 : null;
   const valuationUp = (valuationChange ?? 0) >= 0;
   const history = state.valuationHistory ?? [];
+  const hasChart = history.length > 1;
   const newsShown = allNewsOpen ? state.newsLog : state.newsLog.slice(0, COMPACT_NEWS_COUNT);
 
   const requestFocus = (focus: FocusId) => {
@@ -116,7 +117,7 @@ export default function HqScreen() {
 
         {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 
-        <Card tone="plain" style={styles.hero}>
+        <Card tone="plain" style={[styles.hero, !hasChart && styles.heroCompact]}>
           <View style={styles.heroTop}>
             <View style={styles.heroNumbers}>
               <ThemedText type="small" themeColor="textSecondary">
@@ -136,10 +137,14 @@ export default function HqScreen() {
             </View>
             <RingGauge percent={state.morale} label="team" caption="Morale" tone={moraleTone(state.morale)} />
           </View>
-          {/* Bleeds to the card's bottom edge, like a chart footer. */}
-          <View style={styles.chart} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
-            {history.length > 1 && chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={72} /> : null}
-          </View>
+          {/* Bleeds to the card's bottom edge, like a chart footer. Kept out of
+              the tree until there's a series to draw, so the card doesn't open
+              with 72px of dead space in weeks 0-1. */}
+          {hasChart ? (
+            <View style={styles.chart} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
+              {chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={72} /> : null}
+            </View>
+          ) : null}
         </Card>
 
         <View style={styles.grid}>
@@ -264,6 +269,10 @@ const styles = StyleSheet.create({
   hero: {
     paddingTop: Spacing.three,
     paddingHorizontal: Spacing.three,
+  },
+  // No chart yet: the card closes up instead of leaving the slot empty.
+  heroCompact: {
+    paddingBottom: Spacing.three,
   },
   heroTop: {
     flexDirection: 'row',
