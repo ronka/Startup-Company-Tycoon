@@ -5,7 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { EVENTS, track } from '@/analytics/events';
 import { useTabView } from '@/analytics/use-tab-view';
 import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
-import { FirstRunHint } from '@/components/game/first-run-hint';
+import { FirstRunHint, HintSlot } from '@/components/game/first-run-hint';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
 import { InsolvencyBanner } from '@/components/game/insolvency-banner';
 import { NewsFeed } from '@/components/game/news-feed';
@@ -62,27 +62,25 @@ export default function HqScreen() {
           {state.companyName} HQ
         </ThemedText>
 
-        <FirstRunHint
-          id="hq"
-          scope="hq"
-          text="Top bar: your cash, how many weeks it lasts (runway), customers, and the current week. Cash at $0 for 3 weeks = game over."
+        {/* At most one shows at a time; earlier entries win the slot. */}
+        <HintSlot
+          hints={[
+            {
+              id: 'hq',
+              text: 'Top bar: your cash, how many weeks it lasts (runway), customers, and the current week. Cash at $0 for 3 weeks = game over.',
+            },
+            {
+              id: 'runway-short',
+              text: 'Runway is getting short. The Money tab is where founders raise cash — before terms get ugly.',
+              when: runwayIsShort,
+            },
+            {
+              id: 'drawer-glossary',
+              text: 'Stuck on a term? The ☰ menu has a full glossary with your live numbers.',
+              when: state.week >= DRAWER_HINT_WEEK,
+            },
+          ]}
         />
-
-        {runwayIsShort ? (
-          <FirstRunHint
-            id="runway-short"
-            scope="hq"
-            text="Runway is getting short. The Money tab is where founders raise cash — before terms get ugly."
-          />
-        ) : null}
-
-        {state.week >= DRAWER_HINT_WEEK ? (
-          <FirstRunHint
-            id="drawer-glossary"
-            scope="hq"
-            text="Stuck on a term? The ☰ menu has a full glossary with your live numbers."
-          />
-        ) : null}
 
         {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 

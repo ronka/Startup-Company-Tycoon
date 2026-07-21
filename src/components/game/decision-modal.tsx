@@ -1,6 +1,6 @@
 import { Modal, StyleSheet, View } from 'react-native';
 
-import { FirstRunHint } from '@/components/game/first-run-hint';
+import { HintBanner, useFirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -21,6 +21,9 @@ function formatDelta(delta: StatDelta): string {
   const sign = delta.amount >= 0 ? '+' : '';
   if (delta.stat === 'hype' || delta.stat === 'marketShare') {
     return `${sign}${Math.round(delta.amount * 100)}% ${STAT_LABEL[delta.stat]}`;
+  }
+  if (delta.stat === 'cash') {
+    return `${sign}${formatMoney(delta.amount)} ${STAT_LABEL[delta.stat]}`;
   }
   return `${sign}${delta.amount} ${STAT_LABEL[delta.stat]}`;
 }
@@ -50,15 +53,26 @@ export function DecisionModal({
   valuation: number;
   onChoose: (choiceIndex: number) => void;
 }) {
+  const hint = useFirstRunHint('decision-cards');
+
+  // Answering the card counts as reading the hint — otherwise it returns on
+  // every card until the player happens to tap ✕.
+  const choose = (index: number) => {
+    if (hint.visible) hint.dismiss();
+    onChoose(index);
+  };
+
   return (
     <Modal visible={card !== null} transparent animationType="fade">
       <View style={styles.backdrop}>
         {card ? (
           <ThemedView type="backgroundElement" style={styles.card}>
-            <FirstRunHint
-              id="decision-cards"
-              text={'Decision cards are your weekly judgment calls. There’s rarely a "right" answer — just trade-offs.'}
-            />
+            {hint.visible ? (
+              <HintBanner
+                text={'Decision cards are your weekly judgment calls. There’s rarely a "right" answer — just trade-offs.'}
+                onDismiss={hint.dismiss}
+              />
+            ) : null}
             <ThemedText type="smallBold">{card.title}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.flavor}>
               {card.flavor}
@@ -69,7 +83,7 @@ export function DecisionModal({
                   <PrimaryButton
                     label={choice.label}
                     variant={index === 0 ? 'primary' : 'secondary'}
-                    onPress={() => onChoose(index)}
+                    onPress={() => choose(index)}
                   />
                   <ThemedText type="small" themeColor="textSecondary">
                     {summarizeEffects(choice.effects, valuation)}

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
@@ -6,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
+import { resetAllHints } from '@/components/game/first-run-hint';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -20,8 +20,6 @@ import { useGame } from '@/state/game-store';
  */
 const UPDATE_VERSION = 7;
 
-/** How many hint keys live under this prefix (see first-run-hint.tsx). */
-const HINT_KEY_PREFIX = 'startup-tycoon/hints/';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -52,12 +50,6 @@ export default function SettingsScreen() {
     };
   }, []);
 
-  const resetHints = useCallback(async () => {
-    const keys = await AsyncStorage.getAllKeys();
-    const hintKeys = keys.filter((k) => k.startsWith(HINT_KEY_PREFIX));
-    if (hintKeys.length) await AsyncStorage.multiRemove(hintKeys);
-  }, []);
-
   const confirmReset = useCallback(() => {
     Alert.alert(
       'Reset app?',
@@ -69,14 +61,14 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: () => {
             resetAll();
-            resetHints().catch(() => {});
+            resetAllHints().catch(() => {});
             router.replace('/onboarding');
           },
         },
       ],
       { cancelable: true },
     );
-  }, [resetAll, resetHints, router]);
+  }, [resetAll, router]);
 
   /**
    * Replays the intro story and every contextual hint, then starts a new run.
@@ -94,14 +86,14 @@ export default function SettingsScreen() {
           onPress: () => {
             track(EVENTS.ONBOARDING_REPLAY_REQUESTED);
             replayOnboarding();
-            resetHints().catch(() => {});
+            resetAllHints().catch(() => {});
             router.replace('/onboarding');
           },
         },
       ],
       { cancelable: true },
     );
-  }, [replayOnboarding, resetHints, router]);
+  }, [replayOnboarding, router]);
 
   const showDebugOptions = useCallback(() => {
     track(EVENTS.DEBUG_MENU_OPENED);
@@ -120,7 +112,7 @@ export default function SettingsScreen() {
           text: 'Reset first-run hints',
           onPress: () => {
             track(EVENTS.HINTS_RESET);
-            resetHints().catch(() => {});
+            resetAllHints().catch(() => {});
           },
         },
         {
@@ -153,7 +145,6 @@ export default function SettingsScreen() {
   }, [
     devFreePlay,
     setDevFreePlay,
-    resetHints,
     router,
     purchasedWeeks,
     grantPurchasedWeeks,

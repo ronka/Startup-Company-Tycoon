@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { purchasesAvailable } from '@/purchases';
 import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
-import { FirstRunHint, useFirstRunHint } from '@/components/game/first-run-hint';
+import { HintSlot, useFirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { SpotlightHint } from '@/components/game/spotlight-hint';
 import { ThemedText } from '@/components/themed-text';
@@ -40,7 +40,7 @@ export function GameChrome() {
   const [recapArmedWeek, setRecapArmedWeek] = useState<number | null>(null);
   // The one-time "this is the whole game" callout over Next Week. Retired by
   // the first tick, so pressing the button counts as reading it.
-  const spotlight = useFirstRunHint('next-week-spotlight', 'chrome');
+  const spotlight = useFirstRunHint('next-week-spotlight');
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -115,25 +115,22 @@ export function GameChrome() {
           />
         </View>
 
-        {onLastFreeWeek ? (
-          <View style={styles.budgetHint}>
-            <FirstRunHint
-              id="week-budget-dots"
-              scope="chrome"
-              text="You get a few free weeks each day — the dots below. They refill tomorrow."
-            />
-          </View>
-        ) : null}
-
-        {budgetExhausted ? (
-          <View style={styles.budgetHint}>
-            <FirstRunHint
-              id="out-of-weeks"
-              scope="chrome"
-              text={`Out of weeks for today. Come back tomorrow — ${state.companyName} will be waiting.`}
-            />
-          </View>
-        ) : null}
+        {/* Held back while the spotlight is up, so the chrome never stacks two callouts. */}
+        <HintSlot
+          style={styles.budgetHint}
+          hints={[
+            {
+              id: 'week-budget-dots',
+              text: 'You get a few free weeks each day — the dots below. They refill tomorrow.',
+              when: onLastFreeWeek && !spotlight.visible,
+            },
+            {
+              id: 'out-of-weeks',
+              text: `Out of weeks for today. Come back tomorrow — ${state.companyName} will be waiting.`,
+              when: budgetExhausted && !spotlight.visible,
+            },
+          ]}
+        />
 
         <View style={styles.budgetRow}>
           {budgetExhausted ? (

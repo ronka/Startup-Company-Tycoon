@@ -59,7 +59,7 @@ export const RUN_HISTORY_STORAGE_KEY = 'startup-tycoon/run-history/v1';
  * revamped enough that existing players should see it again; profiles stamped
  * with an older version replay the full sequence.
  */
-export const ONBOARDING_VERSION = 1;
+export const ONBOARDING_VERSION = 2;
 
 /** The player's own profile — set once, survives every `NEW_GAME` (unlike `GameState`, which is fully replaced). */
 export interface PlayerProfile {
@@ -650,10 +650,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     profile,
     setCeoName: (name: string) => {
       track(EVENTS.CEO_NAME_SET, { $set: { ceo_name: name } });
+      // The only writer that can create a profile from nothing — the CEO name
+      // is the field that makes one exist. Every other write edits in place.
       setProfileState((prev) => ({ ...prev, ceoName: name }));
     },
     markOnboardingSeen: () => {
-      setProfileState((prev) => ({ ceoName: '', ...prev, onboardingVersion: ONBOARDING_VERSION }));
+      // A no-op without a profile, which can't happen from the intro: every
+      // route to the final beat passes the `name` step, and that calls
+      // `setCeoName`. Stamping a placeholder profile here instead would persist
+      // an empty CEO name, so failing closed is the safer of the two.
+      setProfileState((prev) => (prev ? { ...prev, onboardingVersion: ONBOARDING_VERSION } : prev));
     },
     replayOnboarding: () => {
       // Drop the stamp rather than zeroing it, so the profile shape stays the

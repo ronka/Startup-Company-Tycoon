@@ -35,9 +35,9 @@ const STANDUP_CARDS: Record<StandupTier, EventCard> = {
     title: 'Morning Standup',
     flavor: 'Quick sync before the week kicks off — what does the team lean into today?',
     choices: [
-      { label: 'Grab a quick win (+$5,000 cash)', effects: { deltas: [{ stat: 'cash', amount: 5_000 }] } },
-      { label: 'Check in on the team (+5 morale)', effects: { deltas: [{ stat: 'morale', amount: 5 }] } },
-      { label: 'Post a customer story (+0.1 hype)', effects: { deltas: [{ stat: 'hype', amount: 0.1 }] } },
+      { label: 'Grab a quick win', effects: { deltas: [{ stat: 'cash', amount: 5_000 }] } },
+      { label: 'Check in on the team', effects: { deltas: [{ stat: 'morale', amount: 5 }] } },
+      { label: 'Post a customer story', effects: { deltas: [{ stat: 'hype', amount: 0.1 }] } },
     ],
   },
   upgraded: {
@@ -47,9 +47,9 @@ const STANDUP_CARDS: Record<StandupTier, EventCard> = {
     title: 'Morning Standup',
     flavor: 'The team is in a groove — a few days of momentum in a row now.',
     choices: [
-      { label: 'Grab a quick win (+$10,000 cash)', effects: { deltas: [{ stat: 'cash', amount: 10_000 }] } },
-      { label: 'Check in on the team (+10 morale)', effects: { deltas: [{ stat: 'morale', amount: 10 }] } },
-      { label: 'Post a customer story (+0.2 hype)', effects: { deltas: [{ stat: 'hype', amount: 0.2 }] } },
+      { label: 'Grab a quick win', effects: { deltas: [{ stat: 'cash', amount: 10_000 }] } },
+      { label: 'Check in on the team', effects: { deltas: [{ stat: 'morale', amount: 10 }] } },
+      { label: 'Post a customer story', effects: { deltas: [{ stat: 'hype', amount: 0.2 }] } },
     ],
   },
   golden: {
@@ -63,8 +63,8 @@ const STANDUP_CARDS: Record<StandupTier, EventCard> = {
         label: 'Refresh every open leadership search',
         effects: { refreshCandidates: true },
       },
-      { label: 'Grab a quick win (+$20,000 cash)', effects: { deltas: [{ stat: 'cash', amount: 20_000 }] } },
-      { label: 'Check in on the team (+15 morale)', effects: { deltas: [{ stat: 'morale', amount: 15 }] } },
+      { label: 'Grab a quick win', effects: { deltas: [{ stat: 'cash', amount: 20_000 }] } },
+      { label: 'Check in on the team', effects: { deltas: [{ stat: 'morale', amount: 15 }] } },
     ],
   },
   rare: {
@@ -78,8 +78,8 @@ const STANDUP_CARDS: Record<StandupTier, EventCard> = {
         label: 'Bank clean terms for the next raise',
         effects: { setsFlag: CLEAN_RAISE_TERMS_FLAG },
       },
-      { label: 'Grab a quick win (+$25,000 cash)', effects: { deltas: [{ stat: 'cash', amount: 25_000 }] } },
-      { label: 'Check in on the team (+15 morale)', effects: { deltas: [{ stat: 'morale', amount: 15 }] } },
+      { label: 'Grab a quick win', effects: { deltas: [{ stat: 'cash', amount: 25_000 }] } },
+      { label: 'Check in on the team', effects: { deltas: [{ stat: 'morale', amount: 15 }] } },
     ],
   },
 };

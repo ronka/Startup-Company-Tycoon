@@ -1,112 +1,155 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useReducer, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { pickActiveHint, type HintDef } from '@/lib/hints';
 
-export const HINT_KEY_PREFIX = 'startup-tycoon/hints/';
+export type { HintDef };
+
+const KEY_PREFIX = 'startup-tycoon/hints/';
 
 /**
- * One-hint-at-a-time queue. Hints sharing a `scope` (conventionally a screen
- * name) compete for a single slot: the first unseen one to claim it holds it
- * until it's dismissed or unmounts, then the next claims it. A queue, never a
- * stack — a first-time player should never face a wall of tips.
+ * Which hints the player has already retired, as a module-level store.
  *
- * Module-level rather than a context provider, because hints live on tab
- * screens that stay mounted in the background; a scope string is all the
- * coordination they need.
+ * `null` until the one-time load resolves — hints stay hidden until then, so a
+ * seen hint never flashes on app open. Every mutation replaces the Set rather
+ * than mutating it, which is what lets `useSyncExternalStore` see the change.
+ *
+ * This module owns the storage format outright: no other file spells a hint
+ * key. Callers mark, reset, and read through the functions below.
  */
-const holders = new Map<string, string>();
+let seenIds = new Set<string>();
+let loaded = false;
+let loadInFlight = false;
 const listeners = new Set<() => void>();
 
-function notify(): void {
+function emit(): void {
   for (const listener of listeners) listener();
 }
 
-function claimSlot(scope: string, id: string): void {
-  if (holders.has(scope)) return;
-  holders.set(scope, id);
-  notify();
+function load(): void {
+  if (loaded || loadInFlight) return;
+  loadInFlight = true;
+  AsyncStorage.getAllKeys()
+    .then((keys) => keys.filter((key) => key.startsWith(KEY_PREFIX)).map((key) => key.slice(KEY_PREFIX.length)))
+    .catch(() => [] as string[])
+    .then((ids) => {
+      // Merge rather than replace: a hint retired while this read was in
+      // flight (the player opening the ☰ menu) must not come back to life.
+      seenIds = new Set([...ids, ...seenIds]);
+      loaded = true;
+      loadInFlight = false;
+      emit();
+    });
 }
 
-function releaseSlot(scope: string, id: string): void {
-  if (holders.get(scope) !== id) return;
-  holders.delete(scope);
-  notify();
+function subscribe(listener: () => void): () => void {
+  load();
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
-/**
- * The seen-flag + queue logic behind `FirstRunHint`, exposed for hints that
- * need custom chrome (the Next Week spotlight) or an external dismiss trigger.
- * The flag is written on dismiss, not on mount, so a quick tab flick before
- * the player has read it doesn't burn the one showing.
- */
-export function useFirstRunHint(id: string, scope?: string): { visible: boolean; dismiss: () => void } {
-  const [unseen, setUnseen] = useState(false);
-  const [, onSlotChange] = useReducer((n: number) => n + 1, 0);
+/** `null` while the seen-set is still loading, so no hint renders before we know it's unseen. */
+function getSnapshot(): ReadonlySet<string> | null {
+  return loaded ? seenIds : null;
+}
 
+/** Retires a hint for good. Safe to call for a hint that was never shown. */
+export function markHintSeen(id: string): void {
+  if (seenIds.has(id)) return;
+  seenIds = new Set(seenIds).add(id);
+  emit();
+  AsyncStorage.setItem(KEY_PREFIX + id, 'true').catch(() => {});
+}
+
+/** Un-retires every hint, so the whole first-run pass plays again (Settings → Reset / Replay intro). */
+export async function resetAllHints(): Promise<void> {
+  seenIds = new Set();
+  loaded = true;
+  emit();
+  const keys = await AsyncStorage.getAllKeys();
+  const hintKeys = keys.filter((key) => key.startsWith(KEY_PREFIX));
+  if (hintKeys.length) await AsyncStorage.multiRemove(hintKeys);
+}
+
+/** Fires `hint_shown` once per id per mount, so a hint whose condition oscillates doesn't re-report. */
+function useTrackShown(id: string | undefined): void {
+  const reported = useRef<string | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem(HINT_KEY_PREFIX + id)
-      .then((seen) => {
-        if (!cancelled && seen !== 'true') setUnseen(true);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    if (id === undefined || reported.current === id) return;
+    reported.current = id;
+    track(EVENTS.HINT_SHOWN, { id });
   }, [id]);
+}
 
-  useEffect(() => {
-    if (!scope) return;
-    listeners.add(onSlotChange);
-    return () => {
-      listeners.delete(onSlotChange);
-    };
-  }, [scope, onSlotChange]);
-
-  useEffect(() => {
-    if (!scope || !unseen) return;
-    claimSlot(scope, id);
-    return () => releaseSlot(scope, id);
-  }, [scope, unseen, id]);
-
-  const visible = unseen && (scope === undefined || holders.get(scope) === id);
-
-  useEffect(() => {
-    if (visible) track(EVENTS.HINT_SHOWN, { id });
-  }, [visible, id]);
-
-  const dismiss = useCallback(() => {
-    track(EVENTS.HINT_DISMISSED, { id });
-    setUnseen(false);
-    if (scope) releaseSlot(scope, id);
-    AsyncStorage.setItem(HINT_KEY_PREFIX + id, 'true').catch(() => {});
-  }, [id, scope]);
-
-  return { visible, dismiss };
+function dismissHint(id: string): void {
+  track(EVENTS.HINT_DISMISSED, { id });
+  markHintSeen(id);
 }
 
 /**
- * One-line contextual tip shown the first time a screen is visited, then
- * dismissed for good — no modal tutorial, no forced walkthrough (PRD F11).
- * Pass `scope` on screens that own more than one hint so they queue instead
- * of stacking.
+ * The seen-flag logic behind `FirstRunHint`, for hints that need custom chrome
+ * (the Next Week spotlight) or an external dismiss trigger (the decision modal
+ * retires its hint when the card is answered, not only when ✕ is tapped).
+ * The flag is written on dismiss, not on mount, so a quick tab flick before the
+ * player has read it doesn't burn the one showing.
  */
-export function FirstRunHint({ id, text, scope }: { id: string; text: string; scope?: string }) {
-  const { visible, dismiss } = useFirstRunHint(id, scope);
+export function useFirstRunHint(id: string): { visible: boolean; dismiss: () => void } {
+  const seen = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const visible = seen !== null && !seen.has(id);
 
-  if (!visible) return null;
+  useTrackShown(visible ? id : undefined);
 
+  return { visible, dismiss: useCallback(() => dismissHint(id), [id]) };
+}
+
+
+/**
+ * One hint slot, showing at most one tip at a time (PRD F11 — no modal
+ * tutorial, no wall of tips). Given an ordered list, it renders the first
+ * hint that is both unseen and currently eligible; array order *is* priority.
+ *
+ * Re-evaluated every render, so the slot advances the moment the holder is
+ * dismissed and reacts to `when` flipping. A slot is scoped by construction —
+ * hints that shouldn't compete simply live in different `HintSlot`s.
+ */
+export function HintSlot({ hints, style }: { hints: HintDef[]; style?: StyleProp<ViewStyle> }) {
+  const seen = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const active = seen === null ? undefined : pickActiveHint(hints, seen);
+
+  useTrackShown(active?.id);
+
+  if (!active) return null;
+
+  return (
+    <View style={style}>
+      <HintBanner text={active.text} onDismiss={() => dismissHint(active.id)} />
+    </View>
+  );
+}
+
+/** A screen with a single tip. Sugar over a one-entry `HintSlot`. */
+export function FirstRunHint({ id, text }: { id: string; text: string }) {
+  return <HintSlot hints={[{ id, text }]} />;
+}
+
+/**
+ * The hint's chrome without the seen-flag logic, for callers that drive
+ * visibility themselves via `useFirstRunHint`.
+ */
+export function HintBanner({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   return (
     <ThemedView type="backgroundElement" style={styles.hint}>
       <ThemedText type="small" themeColor="textSecondary" style={styles.text}>
         {text}
       </ThemedText>
-      <Pressable onPress={dismiss} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss hint">
+      <Pressable onPress={onDismiss} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss hint">
         <ThemedText type="smallBold" themeColor="textSecondary">
           ✕
         </ThemedText>
