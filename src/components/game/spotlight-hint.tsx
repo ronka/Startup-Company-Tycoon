@@ -3,9 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
-
-const ACCENT = '#3c87f7';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 /**
  * A glowing pill that points at the control below it — used once, to aim a
@@ -20,6 +19,7 @@ const ACCENT = '#3c87f7';
  * tap that acts on the target can also retire the hint.
  */
 export function SpotlightHint({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  const theme = useTheme();
   const pulse = useSharedValue(0);
 
   useEffect(() => {
@@ -34,12 +34,12 @@ export function SpotlightHint({ text, onDismiss }: { text: string; onDismiss: ()
   return (
     <Animated.View entering={FadeIn.duration(400)} style={styles.wrapper}>
       <Pressable onPress={onDismiss} accessibilityRole="button" accessibilityLabel={`${text}. Tap to dismiss.`}>
-        <Animated.View style={[styles.pill, pulseStyle]}>
-          <ThemedText type="smallBold" style={styles.text}>
+        <Animated.View style={[styles.pill, { backgroundColor: theme.accent }, pulseStyle]}>
+          <ThemedText type="smallBold" style={[styles.text, { color: theme.accentInk }]}>
             {text}
           </ThemedText>
         </Animated.View>
-        <View style={styles.caret} />
+        <View style={[styles.caret, { borderTopColor: theme.accent }]} />
       </Pressable>
     </Animated.View>
   );
@@ -52,13 +52,11 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.one,
   },
   pill: {
-    backgroundColor: ACCENT,
-    borderRadius: Spacing.four,
+    borderRadius: Radius.pill,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
   },
   text: {
-    color: '#ffffff',
     textAlign: 'center',
   },
   caret: {
@@ -70,6 +68,5 @@ const styles = StyleSheet.create({
     borderTopWidth: 7,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: ACCENT,
   },
 });

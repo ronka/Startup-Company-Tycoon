@@ -1,8 +1,7 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { PostHogProvider } from 'posthog-react-native';
 import { useEffect, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { posthog } from '@/analytics/posthog';
@@ -15,8 +14,6 @@ import '@/src/global.css';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
@@ -26,8 +23,10 @@ export default function RootLayout() {
       {/* Outermost so the game store and every screen can capture events.
           Touch autocapture is off; screens are tracked manually below. */}
       <PostHogProvider client={posthog} autocapture={false}>
+        {/* The game is dark-only (see `src/constants/theme.ts`), so the
+            navigation theme is pinned rather than read off the OS. */}
         <GluestackUIProvider mode="dark">
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <ThemeProvider value={DarkTheme}>
             <GameProvider>
               <NotificationManager />
               <AppNavigator />

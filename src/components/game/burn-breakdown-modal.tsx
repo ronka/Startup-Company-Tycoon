@@ -1,8 +1,8 @@
-import { Modal, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { BottomSheet } from '@/components/game/bottom-sheet';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { weeklyExpensesFor } from '@/game/balance';
 import type { GameState } from '@/game/types';
@@ -30,65 +30,46 @@ export function BurnBreakdownModal({
   const net = revenue - burn;
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.modalBackdrop}>
-        <ThemedView type="backgroundElement" style={styles.modalCard}>
-          <ThemedText type="smallBold">Where the money goes</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Week {state.week}
-          </ThemedText>
-          {expenses.lines.map((line) => (
-            <View key={line.label}>
-              <View style={styles.expenseRow}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {line.label}
-                </ThemedText>
-                <View style={styles.expenseAmountGroup}>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {Math.round((line.amount / expenses.total) * 100)}%
-                  </ThemedText>
-                  <ThemedText type="small">{formatMoney(line.amount)}</ThemedText>
-                </View>
-              </View>
-              {line.detail ? (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.payrollDetail}>
-                  {line.detail.map((d) => `${d.label} · ${formatMoney(d.amount)}`).join('   ')}
-                </ThemedText>
-              ) : null}
-            </View>
-          ))}
-          <View style={[styles.expenseRow, styles.expenseTotalRow, { borderTopColor: theme.backgroundSelected }]}>
-            <ThemedText type="smallBold">Total burn</ThemedText>
-            <ThemedText type="smallBold">{formatMoney(expenses.total)}</ThemedText>
-          </View>
+    <BottomSheet visible={visible} onClose={onClose} title="Where the money goes">
+      <ThemedText type="small" themeColor="textMuted">
+        Week {state.week}
+      </ThemedText>
+      {expenses.lines.map((line) => (
+        <View key={line.label}>
           <View style={styles.expenseRow}>
-            <ThemedText type="smallBold">Net</ThemedText>
-            <ThemedText type="smallBold" themeColor={net >= 0 ? 'success' : 'danger'}>
-              {formatMoney(net)}
+            <ThemedText type="small" themeColor="textSecondary">
+              {line.label}
             </ThemedText>
+            <View style={styles.expenseAmountGroup}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {Math.round((line.amount / expenses.total) * 100)}%
+              </ThemedText>
+              <ThemedText type="small">{formatMoney(line.amount)}</ThemedText>
+            </View>
           </View>
-          <PrimaryButton variant="secondary" label="Close" onPress={onClose} />
-        </ThemedView>
+          {line.detail ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.payrollDetail}>
+              {line.detail.map((d) => `${d.label} · ${formatMoney(d.amount)}`).join('   ')}
+            </ThemedText>
+          ) : null}
+        </View>
+      ))}
+      <View style={[styles.expenseRow, styles.expenseTotalRow, { borderTopColor: theme.border }]}>
+        <ThemedText type="smallBold">Total burn</ThemedText>
+        <ThemedText type="smallBold">{formatMoney(expenses.total)}</ThemedText>
       </View>
-    </Modal>
+      <View style={styles.expenseRow}>
+        <ThemedText type="smallBold">Net</ThemedText>
+        <ThemedText type="smallBold" themeColor={net >= 0 ? 'success' : 'danger'}>
+          {formatMoney(net)}
+        </ThemedText>
+      </View>
+      <PrimaryButton variant="secondary" label="Close" onPress={onClose} />
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: '#00000099',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    borderRadius: Spacing.three,
-    padding: Spacing.four,
-    gap: Spacing.three,
-  },
   expenseRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

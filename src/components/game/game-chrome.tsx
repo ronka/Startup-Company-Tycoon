@@ -227,7 +227,7 @@ function WeekBudgetDots({
           key={i}
           style={[
             styles.dot,
-            { backgroundColor: i < weeksRemaining ? theme.text : theme.backgroundElement },
+            { backgroundColor: i < weeksRemaining ? theme.text : theme.surfaceRaised },
           ]}
         />
       ))}

@@ -2,22 +2,22 @@ import { Redirect } from 'expo-router';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { useTabView } from '@/analytics/use-tab-view';
+import { Card } from '@/components/game/card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { ProgressBar } from '@/components/game/progress-bar';
+import { SectionHeader } from '@/components/game/section-header';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import type { Era } from '@/game/events/types';
 import type { FocusId } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCount } from '@/lib/format';
-import { FOCUS_LABEL, TREND_LABEL, TREND_PHASE_LABEL, trendAlignmentFor } from '@/lib/strategy-copy';
+import { ERA_LABEL, FOCUS_LABEL, TREND_LABEL, TREND_PHASE_LABEL, trendAlignmentFor } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
 
 const HYPE_MIN = 0.5;
 const HYPE_MAX = 2.5;
 const ERA_ORDER: Era[] = ['scrappy', 'boom', 'reckoning'];
-const ERA_LABEL: Record<Era, string> = { scrappy: 'Scrappy', boom: 'Boom', reckoning: 'Reckoning' };
-const RIVAL_COLORS = ['#f59e0b', '#ef4444'];
 
 export default function MarketScreen() {
   const { state } = useGame();
@@ -27,6 +27,9 @@ export default function MarketScreen() {
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
+  // Rivals are ranked bars, not identities to remember — amber then red, in
+  // fixed order, so they never collide with the accent green that means "you".
+  const rivalColors = [theme.warning, theme.danger];
   const rivalShareTotal = state.rivals.reduce((sum, rival) => sum + rival.marketShare, 0);
   const restOfMarket = Math.max(0, 1 - state.marketShare - rivalShareTotal);
   const hypePercent = ((state.hype - HYPE_MIN) / (HYPE_MAX - HYPE_MIN)) * 100;
@@ -34,15 +37,13 @@ export default function MarketScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ThemedText type="subtitle">Market</ThemedText>
+        <ThemedText type="sheetTitle">Market</ThemedText>
 
         <FirstRunHint id="market" text="Two rivals want your customers. Quality and hype decide who wins the market." />
 
-        <View style={styles.trendSection}>
+        <Card>
           <View style={styles.trendHeader}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Trend
-            </ThemedText>
+            <ThemedText type="sectionLabel">Trend</ThemedText>
             <ThemedText type="smallBold">
               {TREND_LABEL[state.trend.id]} · {TREND_PHASE_LABEL[state.trend.phase]}
             </ThemedText>
@@ -50,38 +51,35 @@ export default function MarketScreen() {
           <ThemedText type="small" themeColor="textSecondary">
             {state.trend.weeksInPhase} wk in phase · {trendAlignmentFor(state.focus, state.trend)}
           </ThemedText>
-        </View>
+        </Card>
 
-        <View style={styles.shareSection}>
-          <ShareRow label="You" percent={state.marketShare * 100} color="#3c87f7" customers={state.customers} />
+        <Card style={styles.shareSection}>
+          <SectionHeader label="Market share" />
+          <ShareRow label="You" percent={state.marketShare * 100} color={theme.accent} customers={state.customers} />
           {state.rivals.map((rival, index) => (
             <ShareRow
               key={rival.name}
               label={rival.name}
               percent={rival.marketShare * 100}
-              color={RIVAL_COLORS[index % RIVAL_COLORS.length]}
+              color={rivalColors[index % rivalColors.length]}
               edge={rival.productQuality - state.productQuality}
               focus={rival.focus}
               customers={Math.round(rival.marketShare * state.marketCustomers)}
             />
           ))}
-          <ShareRow label="Rest of market" percent={restOfMarket * 100} color="#80808080" />
-        </View>
+          <ShareRow label="Rest of market" percent={restOfMarket * 100} color={theme.border} />
+        </Card>
 
-        <View style={styles.hypeSection}>
+        <Card>
           <View style={styles.hypeHeader}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Hype
-            </ThemedText>
+            <ThemedText type="sectionLabel">Hype</ThemedText>
             <ThemedText type="smallBold">{state.hype.toFixed(2)}x</ThemedText>
           </View>
-          <ProgressBar percent={hypePercent} color="#a855f7" />
-        </View>
+          <ProgressBar percent={hypePercent} color={theme.accent} />
+        </Card>
 
-        <View style={styles.eraSection}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Era
-          </ThemedText>
+        <Card>
+          <SectionHeader label="Era" />
           <View style={styles.eraStrip}>
             {ERA_ORDER.map((era) => (
               <View key={era} style={styles.eraStop}>
@@ -89,14 +87,14 @@ export default function MarketScreen() {
                   {ERA_LABEL[era]}
                 </ThemedText>
                 {era === state.era ? (
-                  <ThemedText type="small" style={styles.hereMarker}>
+                  <ThemedText type="small" themeColor="accent">
                     ▲ you are here
                   </ThemedText>
                 ) : null}
               </View>
             ))}
           </View>
-        </View>
+        </Card>
       </ScrollView>
     </View>
   );
@@ -120,6 +118,7 @@ function ShareRow({
   /** Implied customer count: exact for you, `share × marketCustomers` (UI-only) for rivals. */
   customers?: number;
 }) {
+  const theme = useTheme();
   const edgeLabel =
     edge === undefined
       ? null
@@ -132,7 +131,10 @@ function ShareRow({
         <View style={styles.shareLabelLeft}>
           <ThemedText type="small">{label}</ThemedText>
           {focus ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.focusBadge}>
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              style={[styles.focusBadge, { borderColor: theme.border }]}>
               {FOCUS_LABEL[focus]}
             </ThemedText>
           ) : null}
@@ -168,9 +170,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.six,
     gap: Spacing.four,
   },
-  trendSection: {
-    gap: Spacing.half,
-  },
   trendHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -195,21 +194,15 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   focusBadge: {
-    borderWidth: 1,
-    borderColor: '#80808080',
-    borderRadius: Spacing.two,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.pill,
     paddingHorizontal: Spacing.two,
     paddingVertical: 1,
-  },
-  hypeSection: {
-    gap: Spacing.two,
   },
   hypeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  eraSection: {
-    gap: Spacing.two,
+    alignItems: 'center',
   },
   eraStrip: {
     flexDirection: 'row',
@@ -218,8 +211,5 @@ const styles = StyleSheet.create({
   eraStop: {
     alignItems: 'center',
     gap: Spacing.half,
-  },
-  hereMarker: {
-    color: '#3c87f7',
   },
 });

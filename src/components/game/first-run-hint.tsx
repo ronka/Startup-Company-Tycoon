@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'rea
 import { EVENTS, track } from '@/analytics/events';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { pickActiveHint, type HintDef } from '@/lib/hints';
 
 export type { HintDef };
@@ -145,7 +145,7 @@ export function FirstRunHint({ id, text }: { id: string; text: string }) {
  */
 export function HintBanner({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   return (
-    <ThemedView type="backgroundElement" style={styles.hint}>
+    <ThemedView type="surfaceRaised" style={styles.hint}>
       <ThemedText type="small" themeColor="textSecondary" style={styles.text}>
         {text}
       </ThemedText>
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.md,
     padding: Spacing.three,
   },
   text: {

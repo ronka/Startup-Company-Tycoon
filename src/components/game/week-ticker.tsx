@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Card } from '@/components/game/card';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
 
 /**
@@ -27,7 +27,7 @@ export function WeekTicker({
   const isProfitable = revenue >= burn;
   return (
     <Pressable onPress={onDismiss} accessibilityRole="button">
-      <ThemedView type="backgroundElement" style={styles.ticker}>
+      <Card style={styles.ticker}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.text}>
           Week {week} — {cashDelta >= 0 ? '+' : ''}
           {formatMoney(cashDelta)} cash · {isProfitable ? 'profitable' : 'in the red'}
@@ -37,7 +37,7 @@ export function WeekTicker({
             ✕
           </ThemedText>
         </View>
-      </ThemedView>
+      </Card>
     </Pressable>
   );
 }
@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: Spacing.two,
+    borderRadius: Radius.md,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     marginHorizontal: Spacing.four,

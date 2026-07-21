@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Card } from '@/components/game/card';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export function Stepper({
   label,
@@ -23,8 +24,9 @@ export function Stepper({
   onIncrement: () => void;
   onDecrement: () => void;
 }) {
+  const theme = useTheme();
   return (
-    <ThemedView type="backgroundElement" style={styles.row}>
+    <Card style={styles.row}>
       <View style={styles.info}>
         <ThemedText type="smallBold">{label}</ThemedText>
         {contribution ? (
@@ -42,18 +44,28 @@ export function Stepper({
         <Pressable
           accessibilityRole="button"
           onPress={onDecrement}
-          style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}>
+          style={({ pressed }) => [
+            styles.stepButton,
+            { backgroundColor: theme.surfaceRaised },
+            pressed && styles.pressed,
+          ]}
+        >
           <ThemedText style={styles.stepLabel}>−</ThemedText>
         </Pressable>
         <ThemedText style={styles.count}>{value}</ThemedText>
         <Pressable
           accessibilityRole="button"
           onPress={onIncrement}
-          style={({ pressed }) => [styles.stepButton, pressed && styles.pressed]}>
+          style={({ pressed }) => [
+            styles.stepButton,
+            { backgroundColor: theme.surfaceRaised },
+            pressed && styles.pressed,
+          ]}
+        >
           <ThemedText style={styles.stepLabel}>+</ThemedText>
         </Pressable>
       </View>
-    </ThemedView>
+    </Card>
   );
 }
 
@@ -63,8 +75,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.three,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
   },
   info: {
     flex: 1,
@@ -82,7 +92,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3c87f733',
   },
   pressed: {
     opacity: 0.7,
@@ -90,7 +99,6 @@ const styles = StyleSheet.create({
   stepLabel: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#3c87f7',
   },
   count: {
     fontSize: 20,

@@ -1,10 +1,12 @@
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AnimatedNumber } from '@/components/game/animated-number';
+import { Card } from '@/components/game/card';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export function StatTile({
   label,
@@ -15,6 +17,7 @@ export function StatTile({
   hint,
   alert = false,
   explainer,
+  icon,
   onPress,
 }: {
   label: string;
@@ -30,9 +33,12 @@ export function StatTile({
   alert?: boolean;
   /** One-sentence "what feeds it, what it feeds" explainer, revealed on tap. */
   explainer?: string;
+  /** SF Symbol (with Material fallbacks) drawn beside the label. */
+  icon?: SymbolViewProps['name'];
   /** When provided, tapping the tile calls this instead of toggling the explainer. */
   onPress?: () => void;
 }) {
+  const theme = useTheme();
   const [explainerOpen, setExplainerOpen] = useState(false);
   // Compare formatted strings, not raw floats: a runway of 14.63 vs 14.61
   // both read "14 wk", and a "▼ 0 wk" badge would be more confusing than none.
@@ -44,6 +50,7 @@ export function StatTile({
     format(value) !== format(previousValue);
   const delta = hasDelta ? value - (previousValue as number) : 0;
   const deltaIsGood = hasDelta && (delta > 0 ? goodDirection === 'up' : goodDirection === 'down');
+  const labelColor = alert ? theme.danger : theme.textSecondary;
 
   return (
     <Pressable
@@ -51,15 +58,18 @@ export function StatTile({
       accessibilityRole={onPress || explainer ? 'button' : undefined}
       accessibilityLabel={onPress || explainer ? `${label}: tap for details` : undefined}
       style={styles.pressable}>
-      <ThemedView type={alert ? 'dangerBackground' : 'backgroundElement'} style={styles.tile}>
-        <ThemedText type="small" themeColor={alert ? 'danger' : 'textSecondary'}>
-          {label}
-        </ThemedText>
+      <Card tone={alert ? 'alert' : 'default'} style={styles.tile}>
+        <View style={styles.labelRow}>
+          {icon ? <SymbolView name={icon} size={16} tintColor={labelColor} /> : null}
+          <ThemedText type="small" themeColor={alert ? 'danger' : 'textSecondary'}>
+            {label}
+          </ThemedText>
+        </View>
         <AnimatedNumber
           value={value}
           format={format}
           goodDirection={goodDirection}
-          style={styles.value}
+          type="cardValue"
           themeColor={alert ? 'danger' : undefined}
         />
         {hasDelta ? (
@@ -67,7 +77,7 @@ export function StatTile({
             {delta > 0 ? '▲' : '▼'} {format(Math.abs(delta))}
           </ThemedText>
         ) : hint ? (
-          <ThemedText type="small" themeColor={alert ? 'danger' : 'textSecondary'}>
+          <ThemedText type="small" themeColor={alert ? 'danger' : 'textMuted'}>
             {hint}
           </ThemedText>
         ) : null}
@@ -76,7 +86,7 @@ export function StatTile({
             {explainer}
           </ThemedText>
         ) : null}
-      </ThemedView>
+      </Card>
     </Pressable>
   );
 }
@@ -88,14 +98,13 @@ const styles = StyleSheet.create({
     minWidth: 140,
   },
   tile: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-    gap: Spacing.half,
+    gap: Spacing.one,
+    minHeight: 116,
   },
-  value: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '700',
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
   },
   explainer: {
     fontStyle: 'italic',

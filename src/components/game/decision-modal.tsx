@@ -1,13 +1,15 @@
-import { Modal, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { BottomSheet } from '@/components/game/bottom-sheet';
+import { ChoiceButton } from '@/components/game/choice-button';
 import { HintBanner, useFirstRunHint } from '@/components/game/first-run-hint';
-import { PrimaryButton } from '@/components/game/primary-button';
+import { Pill } from '@/components/game/pill';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { acquisitionOfferValuationFor } from '@/game/balance';
 import type { EventCard, EventEffects, EventStat, StatDelta } from '@/game/events/types';
 import { formatMoney } from '@/lib/format';
+import { ERA_LABEL } from '@/lib/strategy-copy';
 
 const STAT_LABEL: Record<EventStat, string> = {
   cash: 'cash',
@@ -62,65 +64,59 @@ export function DecisionModal({
     onChoose(index);
   };
 
+  // The card has to be answered, so the sheet has no ✕ and ignores backdrop taps.
   return (
-    <Modal visible={card !== null} transparent animationType="fade">
-      <View style={styles.backdrop}>
-        {card ? (
-          <ThemedView type="backgroundElement" style={styles.card}>
-            {hint.visible ? (
-              <HintBanner
-                text={'Decision cards are your weekly judgment calls. There’s rarely a "right" answer — just trade-offs.'}
-                onDismiss={hint.dismiss}
+    <BottomSheet visible={card !== null} dismissible={false}>
+      {card ? (
+        <>
+          {hint.visible ? (
+            <HintBanner
+              text={'Decision cards are your weekly judgment calls. There’s rarely a "right" answer — just trade-offs.'}
+              onDismiss={hint.dismiss}
+            />
+          ) : null}
+          <View style={styles.badgeRow}>
+            <Pill
+              label={`${ERA_LABEL[card.era]} · Decision`}
+              tone={endsTheRun(card) ? 'danger' : 'accent'}
+            />
+          </View>
+          <ThemedText type="sheetTitle">{card.title}</ThemedText>
+          <ThemedText type="default" themeColor="textSecondary" style={styles.flavor}>
+            {card.flavor}
+          </ThemedText>
+          <View style={styles.choices}>
+            {card.choices?.map((choice, index) => (
+              <ChoiceButton
+                key={choice.label}
+                label={choice.label}
+                consequence={summarizeEffects(choice.effects, valuation)}
+                // Tone is emphasis and irreversibility, never "this is the right
+                // answer" — a choice that ends the run always reads as caution.
+                tone={choice.effects.acquisitionOffer ? 'caution' : index === 0 ? 'primary' : 'neutral'}
+                onPress={() => choose(index)}
               />
-            ) : null}
-            <ThemedText type="smallBold">{card.title}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.flavor}>
-              {card.flavor}
-            </ThemedText>
-            <View style={styles.choices}>
-              {card.choices?.map((choice, index) => (
-                <View key={choice.label} style={styles.choiceRow}>
-                  <PrimaryButton
-                    label={choice.label}
-                    variant={index === 0 ? 'primary' : 'secondary'}
-                    onPress={() => choose(index)}
-                  />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {summarizeEffects(choice.effects, valuation)}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-          </ThemedView>
-        ) : null}
-      </View>
-    </Modal>
+            ))}
+          </View>
+        </>
+      ) : null}
+    </BottomSheet>
   );
 }
 
+/** True when any choice on the card would end the run (an acquisition offer). */
+function endsTheRun(card: EventCard): boolean {
+  return (card.choices ?? []).some((choice) => choice.effects.acquisitionOffer);
+}
+
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: '#00000099',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: Spacing.three,
-    padding: Spacing.four,
-    gap: Spacing.three,
+  badgeRow: {
+    flexDirection: 'row',
   },
   flavor: {
-    lineHeight: 20,
+    lineHeight: 24,
   },
   choices: {
-    gap: Spacing.three,
-  },
-  choiceRow: {
-    gap: Spacing.one,
-    alignItems: 'stretch',
+    gap: Spacing.two,
   },
 });

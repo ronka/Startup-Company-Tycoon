@@ -30,9 +30,9 @@ export default function GameTabsLayout() {
           <Tabs
             screenOptions={{
               headerShown: false,
-              tabBarActiveTintColor: theme.text,
-              tabBarInactiveTintColor: theme.textSecondary,
-              tabBarStyle: { backgroundColor: theme.background, borderTopColor: theme.backgroundElement },
+              tabBarActiveTintColor: theme.accent,
+              tabBarInactiveTintColor: theme.textMuted,
+              tabBarStyle: { backgroundColor: theme.background, borderTopColor: theme.border },
             }}>
             <Tabs.Screen
               name="hq"

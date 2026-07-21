@@ -2,7 +2,21 @@
 
 import type { Bottleneck } from '@/game/balance';
 import { FOCUS_PROFILES } from '@/game/balance';
-import type { FocusId, Trend, TrendId, TrendPhase } from '@/game/types';
+import type { Era } from '@/game/events/types';
+import type { FocusId, Stage, Trend, TrendId, TrendPhase } from '@/game/types';
+
+export const STAGE_LABEL: Record<Stage, string> = {
+  garage: 'Garage',
+  seed: 'Seed',
+  seriesA: 'Series A',
+  growth: 'Growth',
+};
+
+export const ERA_LABEL: Record<Era, string> = {
+  scrappy: 'Scrappy',
+  boom: 'Boom',
+  reckoning: 'Reckoning',
+};
 
 export const FOCUS_LABEL: Record<FocusId, string> = {
   core: 'Core product',

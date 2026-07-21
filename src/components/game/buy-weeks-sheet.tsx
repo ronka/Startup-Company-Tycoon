@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
+import { BottomSheet } from '@/components/game/bottom-sheet';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
 
@@ -69,53 +69,37 @@ export function BuyWeeksSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <ThemedView type="backgroundElement" style={styles.sheet}>
-          <ThemedText type="smallBold">Buy weeks</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {trigger === 'out_of_weeks'
-              ? "That's the free weeks planned out — grab more to keep going today."
-              : 'Stock up on weeks for whenever you run out.'}
-          </ThemedText>
+    <BottomSheet visible={visible} onClose={onClose} title="Buy weeks">
+      <ThemedText type="small" themeColor="textSecondary">
+        {trigger === 'out_of_weeks'
+          ? "That's the free weeks planned out — grab more to keep going today."
+          : 'Stock up on weeks for whenever you run out.'}
+      </ThemedText>
 
-          <View style={styles.packs}>
-            {packs.map((pack) => (
-              <PrimaryButton
-                key={pack.id}
-                label={`${pack.weeks} weeks — ${pack.priceLabel}`}
-                disabled={pendingPackId !== null}
-                loading={pendingPackId === pack.id}
-                onPress={() => handlePurchase(pack)}
-              />
-            ))}
-          </View>
-
-          {errorCode ? (
-            <ThemedText type="small" themeColor="danger">
-              {errorCode === 'cancelled' ? 'Purchase cancelled.' : "Purchase didn't go through — try again."}
-            </ThemedText>
-          ) : null}
-
-          <PrimaryButton label="Not now" variant="secondary" onPress={onClose} />
-        </ThemedView>
+      <View style={styles.packs}>
+        {packs.map((pack) => (
+          <PrimaryButton
+            key={pack.id}
+            label={`${pack.weeks} weeks — ${pack.priceLabel}`}
+            disabled={pendingPackId !== null}
+            loading={pendingPackId === pack.id}
+            onPress={() => handlePurchase(pack)}
+          />
+        ))}
       </View>
-    </Modal>
+
+      {errorCode ? (
+        <ThemedText type="small" themeColor="danger">
+          {errorCode === 'cancelled' ? 'Purchase cancelled.' : "Purchase didn't go through — try again."}
+        </ThemedText>
+      ) : null}
+
+      <PrimaryButton label="Not now" variant="secondary" onPress={onClose} />
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: '#00000099',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    borderTopLeftRadius: Spacing.four,
-    borderTopRightRadius: Spacing.four,
-    padding: Spacing.four,
-    gap: Spacing.three,
-  },
   packs: {
     gap: Spacing.two,
   },

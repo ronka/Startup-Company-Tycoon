@@ -1,17 +1,20 @@
 import { Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { useTabView } from '@/analytics/use-tab-view';
+import { BottomSheet } from '@/components/game/bottom-sheet';
 import { CandidatePicker, type CandidatePickerHandle } from '@/components/game/candidate-picker';
+import { Card } from '@/components/game/card';
 import { CLevelCard } from '@/components/game/clevel-card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { MoraleBar } from '@/components/game/morale-bar';
+import { RingGauge } from '@/components/game/ring-gauge';
+import { SectionHeader } from '@/components/game/section-header';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { Stepper } from '@/components/game/stepper';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import {
   C_LEVEL_DEPARTURE_MORALE_HIT,
@@ -25,6 +28,7 @@ import {
 import { CLevelRole, ROLES, Role } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
+import { moraleTone } from '@/lib/stat-colors';
 import { teamContributionsFor } from '@/lib/team-contributions';
 import { useGame } from '@/state/game-store';
 
@@ -113,21 +117,22 @@ export default function TeamScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ThemedText type="subtitle">Team</ThemedText>
+        <ThemedText type="sheetTitle">Team</ThemedText>
 
         <FirstRunHint id="team" text="Devs raise product quality — quality wins market share." />
 
-        <View style={styles.moraleBlock}>
-          <View style={styles.moraleHeader}>
+        <Card style={styles.moraleCard}>
+          <RingGauge percent={state.morale} label="team" tone={moraleTone(state.morale)} size={80} />
+          <View style={styles.moraleText}>
+            <SectionHeader label="Morale" />
+            <MoraleBar morale={state.morale} />
             <ThemedText type="small" themeColor="textSecondary">
-              Morale
+              Below 60 the team slows down; below 40 people start leaving.
             </ThemedText>
-            <ThemedText type="smallBold">{Math.round(state.morale)}/100</ThemedText>
           </View>
-          <MoraleBar morale={state.morale} />
-        </View>
+        </Card>
 
-        <ThemedView type="backgroundElement" style={styles.leverCard}>
+        <Card style={styles.leverCard}>
           <View style={styles.leverHeader}>
             <ThemedText type="smallBold">Team offsite &amp; perks</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -139,7 +144,7 @@ export default function TeamScreen() {
             label={state.moraleLeverActive ? 'Turn off' : 'Turn on'}
             onPress={toggleMoraleLever}
           />
-        </ThemedView>
+        </Card>
 
         <View style={styles.steppers}>
           {ROLES.map((role) => (
@@ -160,23 +165,19 @@ export default function TeamScreen() {
           ))}
         </View>
 
-        <ThemedView type="backgroundElement" style={styles.payrollPreview}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Next week&apos;s payroll
-          </ThemedText>
-          <ThemedText style={styles.payrollValue}>{formatMoney(pendingBurn)}</ThemedText>
+        <Card style={styles.payrollPreview}>
+          <ThemedText type="sectionLabel">Next week&apos;s payroll</ThemedText>
+          <ThemedText type="cardValue">{formatMoney(pendingBurn)}</ThemedText>
           {pendingBurn !== currentBurn ? (
             <ThemedText type="small" themeColor="textSecondary">
               {pendingBurn > currentBurn ? '+' : ''}
               {formatMoney(pendingBurn - currentBurn)} vs. this week
             </ThemedText>
           ) : null}
-        </ThemedView>
+        </Card>
 
         <View style={styles.cLevelSection}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Leadership
-          </ThemedText>
+          <SectionHeader label="Leadership" />
           <View style={styles.cLevelGrid}>
             {(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => (
               <CLevelCard
@@ -194,54 +195,39 @@ export default function TeamScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={confirmRole !== null} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <ThemedView type="backgroundElement" style={styles.modalCard}>
-            <ThemedText type="smallBold">Cut deep?</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
-              {confirmRole
-                ? `Firing ${Math.round(LAYOFF_CONFIRM_THRESHOLD * 100)}% or more of ${ROLE_LABEL[confirmRole]} in one week will hit morale hard.`
-                : ''}
-            </ThemedText>
-            <View style={styles.modalActions}>
-              <PrimaryButton
-                variant="secondary"
-                label="Cancel"
-                onPress={() => setConfirmRole(null)}
-                style={styles.modalButton}
-              />
-              <PrimaryButton
-                variant="primary"
-                label="Confirm layoff"
-                onPress={confirmLayoff}
-                style={styles.modalButton}
-              />
-            </View>
-          </ThemedView>
+      <BottomSheet visible={confirmRole !== null} onClose={() => setConfirmRole(null)} title="Cut deep?">
+        <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
+          {confirmRole
+            ? `Firing ${Math.round(LAYOFF_CONFIRM_THRESHOLD * 100)}% or more of ${ROLE_LABEL[confirmRole]} in one week will hit morale hard.`
+            : ''}
+        </ThemedText>
+        <View style={styles.modalActions}>
+          <PrimaryButton
+            variant="secondary"
+            label="Cancel"
+            onPress={() => setConfirmRole(null)}
+            style={styles.modalButton}
+          />
+          <PrimaryButton variant="primary" label="Confirm layoff" onPress={confirmLayoff} style={styles.modalButton} />
         </View>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={confirmFireRole !== null} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <ThemedView type="backgroundElement" style={styles.modalCard}>
-            <ThemedText type="smallBold">Let them go?</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
-              {confirmFireRole
-                ? `Firing your ${C_LEVEL_TITLE[confirmFireRole]} costs the team ${C_LEVEL_DEPARTURE_MORALE_HIT} morale.`
-                : ''}
-            </ThemedText>
-            <View style={styles.modalActions}>
-              <PrimaryButton
-                variant="secondary"
-                label="Cancel"
-                onPress={() => setConfirmFireRole(null)}
-                style={styles.modalButton}
-              />
-              <PrimaryButton variant="primary" label="Confirm" onPress={confirmFire} style={styles.modalButton} />
-            </View>
-          </ThemedView>
+      <BottomSheet visible={confirmFireRole !== null} onClose={() => setConfirmFireRole(null)} title="Let them go?">
+        <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
+          {confirmFireRole
+            ? `Firing your ${C_LEVEL_TITLE[confirmFireRole]} costs the team ${C_LEVEL_DEPARTURE_MORALE_HIT} morale.`
+            : ''}
+        </ThemedText>
+        <View style={styles.modalActions}>
+          <PrimaryButton
+            variant="secondary"
+            label="Cancel"
+            onPress={() => setConfirmFireRole(null)}
+            style={styles.modalButton}
+          />
+          <PrimaryButton variant="primary" label="Confirm" onPress={confirmFire} style={styles.modalButton} />
         </View>
-      </Modal>
+      </BottomSheet>
 
       {(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => (
         <CandidatePicker
@@ -266,17 +252,16 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.six,
     gap: Spacing.four,
   },
-  moraleBlock: {
-    gap: Spacing.two,
-  },
-  moraleHeader: {
+  moraleCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  moraleText: {
+    flex: 1,
+    gap: Spacing.two,
   },
   leverCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-    gap: Spacing.two,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -289,13 +274,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   payrollPreview: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
     gap: Spacing.half,
-  },
-  payrollValue: {
-    fontSize: 24,
-    fontWeight: '700',
   },
   cLevelSection: {
     gap: Spacing.two,
@@ -303,20 +282,6 @@ const styles = StyleSheet.create({
   cLevelGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.three,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: '#00000099',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    borderRadius: Spacing.three,
-    padding: Spacing.four,
     gap: Spacing.three,
   },
   modalBody: {

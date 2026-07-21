@@ -6,20 +6,22 @@ import { EVENTS, track } from '@/analytics/events';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { markHintSeen } from '@/components/game/first-run-hint';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatCount, formatMoney, formatWeeks } from '@/lib/format';
 import { useGame } from '@/state/game-store';
 
 /**
- * Persistent strip rendered above every game tab: cash, runway, and week.
- * Owns the top safe-area inset, so tab screens no longer need to.
+ * Persistent strip rendered above every game tab: cash, runway, customers and
+ * week, each in its own outlined chip. Owns the top safe-area inset, so tab
+ * screens no longer need to.
  */
 export function Hud() {
   const { state } = useGame();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const theme = useTheme();
 
   if (!state) return null;
 
@@ -35,10 +37,20 @@ export function Hud() {
     (navigation as unknown as { openDrawer?: () => void }).openDrawer?.();
   };
 
+  const chipStyle = [
+    styles.chip,
+    {
+      backgroundColor: insolvent ? theme.dangerBackground : theme.surface,
+      borderColor: insolvent ? theme.danger : theme.border,
+    },
+  ];
+
   return (
-    <ThemedView
-      type={insolvent ? 'dangerBackground' : 'backgroundElement'}
-      style={[styles.hud, { paddingTop: insets.top + Spacing.two }]}>
+    <View
+      style={[
+        styles.hud,
+        { backgroundColor: theme.background, borderBottomColor: theme.border, paddingTop: insets.top + Spacing.two },
+      ]}>
       <Pressable
         onPress={openMenu}
         hitSlop={12}
@@ -49,8 +61,8 @@ export function Hud() {
           ☰
         </ThemedText>
       </Pressable>
-      <View style={styles.stat}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
+      <View style={chipStyle}>
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
           Cash
         </ThemedText>
         <AnimatedNumber
@@ -61,8 +73,8 @@ export function Hud() {
           themeColor={insolvent ? 'danger' : undefined}
         />
       </View>
-      <View style={styles.stat}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
+      <View style={chipStyle}>
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
           Runway
         </ThemedText>
         <AnimatedNumber
@@ -73,9 +85,9 @@ export function Hud() {
           themeColor={insolvent ? 'danger' : undefined}
         />
       </View>
-      <View style={styles.stat}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
-          Customers
+      <View style={chipStyle}>
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
+          Users
         </ThemedText>
         <AnimatedNumber
           value={state.customers}
@@ -85,15 +97,15 @@ export function Hud() {
           themeColor={insolvent ? 'danger' : undefined}
         />
       </View>
-      <View style={styles.stat}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
+      <View style={chipStyle}>
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
           Week
         </ThemedText>
         <ThemedText type="smallBold" themeColor={insolvent ? 'danger' : undefined}>
           {state.week}
         </ThemedText>
       </View>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -101,19 +113,26 @@ const styles = StyleSheet.create({
   hud: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    gap: Spacing.two,
     paddingBottom: Spacing.two,
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   menuButton: {
     justifyContent: 'center',
+    paddingRight: Spacing.one,
   },
   menuGlyph: {
     fontSize: 22,
     lineHeight: 26,
   },
-  stat: {
+  chip: {
+    flex: 1,
     alignItems: 'center',
     gap: Spacing.half,
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
