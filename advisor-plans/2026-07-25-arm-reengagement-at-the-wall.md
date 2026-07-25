@@ -537,6 +537,40 @@ ALL must hold:
 - **Dashboard note**: `delay_seconds` on `reengagement_notification_scheduled` changed
   from a constant `72000` to a variable, so any saved PostHog insight filtering on that
   literal value will go empty.
+### Device verification — 2026-07-25, iPhone 17 Pro sim (iOS 26.0), via `npx serve-sim`
+
+Driven on a booted simulator with `serve-sim` (tap/gesture/permissions) against a
+dev-client build on Metro :8199. Commit under test: `e793f3f`.
+
+**Verified working on device:**
+
+- **The permission dialog fires at the wall.** On a genuinely clean install (app
+  uninstalled + reinstalled so the OS authorization is `notDetermined`), starting a new
+  game and spending all 5 free weeks put the player at **week 5** — the exact wall week
+  in the telemetry — and the iOS system dialog appeared right there. Grant/deny buttons
+  shown, `permission-requested` flipped to `true` on that press and not before.
+- **First launch stays silent.** With `has-launched-before` cleared, launching asked
+  nothing — the fallback still defers correctly, so the wall is genuinely the first ask.
+- **The button is pressable at the wall** and relabels to
+  `That's the week — see you tomorrow`. It renders on **one line** at 393pt width — the
+  wrap risk flagged above did not materialise on this device (still worth checking on a
+  narrower phone, e.g. iPhone SE).
+- **`budgetExhausted` hoist caused no regressions**: the `week-budget-dots` hint still
+  fires on the last free dot, `out-of-weeks` fires at the wall, the buy-weeks row still
+  renders, and the button is still disabled while a decision card is up.
+
+**Could not verify:** that the scheduled nudge actually fires at 09:00 (needs a
+day-boundary or time manipulation), and `notification_opened` (needs a delivered push).
+
+**Testing trap worth recording.** An install whose notification permission was already
+*denied* makes this look broken: `requestPermissionsAsync` returns immediately with no
+UI, so the flag flips to `true` while the OS records no decision and no dialog is ever
+seen. That is correct iOS behaviour, not a bug — but it means **the wall ask can only be
+tested on a fresh install**. `xcrun simctl privacy reset notifications` fails with
+`Operation not permitted` on iOS 26, and `serve-sim permissions reset notifications`
+reports success without restoring `notDetermined`. Uninstall + reinstall is the only
+reliable reset.
+
 - **Steps 3–5 are verified by typecheck and lint only.** The permission prompt and the
   scheduled notification cannot be exercised by this repo's test setup (vitest excludes
   components). A device/simulator pass is still needed before shipping.
