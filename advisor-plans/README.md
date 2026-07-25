@@ -17,7 +17,7 @@ directory's landing page and so executors can find it by convention. Don't "fix"
 | Plan | File | Title | Priority | Effort | Depends on | Status |
 |------|------|-------|----------|--------|------------|--------|
 | 001 | [2026-07-25-arm-reengagement-at-the-wall.md](2026-07-25-arm-reengagement-at-the-wall.md) | Arm the re-engagement loop at the daily wall, and make the wall observable | P1 | M | — | DONE (branch `advisor/wall-reengagement-and-closing-panel`; device pass still needed) |
-| 002 | [2026-07-25-day-one-closing-panel.md](2026-07-25-day-one-closing-panel.md) | Close the day with a "tomorrow's agenda" panel instead of a stop sign | P1 | M | 001 | BLOCKED — all 5 steps implemented on `advisor/wall-reengagement-and-closing-panel`, but a STOP condition holds: on the budget-exhausting tick the panel opens at t≈0 and `WeekInReviewSheet` presents into it at t≈350ms (notable weeks), the modal race in `docs/bug-stuck-decision-modal.md`. Needs a guard decision before it ships. |
+| 002 | [2026-07-25-day-one-closing-panel.md](2026-07-25-day-one-closing-panel.md) | Close the day with a "tomorrow's agenda" panel instead of a stop sign | P1 | M | 001 | DONE (branch `advisor/wall-reengagement-and-closing-panel`). The recap/panel modal race found during execution is fixed: the panel now waits for the week's recap to be dismissed, then arms 350ms like `recapArmedWeek`. Simulator pass still needed. |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED
 (with one-line rationale).

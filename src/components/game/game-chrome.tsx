@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,6 +25,13 @@ import { WEEKS_BANK_CAP, dateKey, isWeekBudgetExhausted } from '@/state/week-bud
 
 /** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
 const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
+/**
+ * Same beat as `recapArmedWeek` below, for the same reason: the closing panel
+ * is the last thing in the day, so it presents a frame *after* whatever it is
+ * following (a recap being dismissed, a tick settling) rather than into it.
+ * Present-while-dismiss hangs iOS — see docs/bug-stuck-decision-modal.md.
+ */
+const DAY_COMPLETE_ARM_MS = 350;
 
 /**
  * Persistent chrome shared by every game tab (Task 12): the Next Week
@@ -76,30 +83,45 @@ export function GameChrome() {
       .finally(() => setDayCompleteLoaded(true));
   }, []);
 
+  // Hoisted above the early return because the closing-panel gate below needs
+  // them and hooks can't run conditionally.
+  const weekEntries = state ? state.newsLog.filter((entry) => entry.week === state.week) : [];
+  const notable = isNotableWeek(weekEntries);
+  const agenda = useMemo(() => tomorrowAgendaFor(state), [state]);
+
+  // Every condition that has to hold before the day can be closed out. The
+  // ordering ones are what matter: each names another surface that owns the
+  // screen first, because iOS hangs when one modal presents into a frame
+  // another is presenting or dismissing (docs/bug-stuck-decision-modal.md).
+  const dayCompleteDue =
+    state !== null &&
+    !state.gameOver && // no live run — the chrome renders nothing at all
+    dayCompleteLoaded && // don't flash before we know whether today is spent
+    budgetExhausted &&
+    !state.pendingEvent && // DecisionModal owns the screen
+    buySheetTrigger === null && // never stack on the purchase sheet
+    // The tick that spent the last week still owes the player its recap:
+    // `WeekInReviewSheet` arms 350ms *after* this panel would otherwise open,
+    // and would present straight into it. The recap is the earlier beat, so
+    // the panel waits for it to be dismissed rather than racing it.
+    !(previousState !== null && notable && state.week !== reviewedWeek);
+  const dayCompleteWeek = state?.week ?? null;
+
   useEffect(() => {
-    // No live run to close out the day on. Without this the chrome renders
-    // null while the effect still burns today's key, silently suppressing the
-    // panel for a run started later the same day.
-    if (!state || state.gameOver) return;
-    if (!dayCompleteLoaded) return; // don't flash before we know
-    if (!budgetExhausted) return;
-    if (state.pendingEvent) return; // DecisionModal owns the screen
-    if (buySheetTrigger !== null) return; // never stack on the purchase sheet
-    const today = dateKey(new Date());
-    if (dayCompleteShownFor === today) return;
-    // Latching the day and opening the sheet is exactly what this effect is
-    // for — the alternative (deriving visibility) would mean reading the clock
-    // during render, which this codebase deliberately avoids (see the header
-    // of `week-budget.ts`).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDayCompleteShownFor(today);
-    AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
-    setDayCompleteVisible(true);
-    track(EVENTS.DAY_COMPLETE_SHOWN, {
-      agenda_kind: tomorrowAgendaFor(state)?.kind ?? null,
-      week: state.week,
-    });
-  }, [state, dayCompleteLoaded, budgetExhausted, buySheetTrigger, dayCompleteShownFor]);
+    if (!dayCompleteDue) return;
+    // Armed rather than immediate, and the clock is read here rather than
+    // during render — `week-budget.ts` keeps `Date` out of derivations on
+    // purpose, and the day must be latched at the moment it's actually shown.
+    const timer = setTimeout(() => {
+      const today = dateKey(new Date());
+      if (dayCompleteShownFor === today) return;
+      setDayCompleteShownFor(today);
+      AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
+      setDayCompleteVisible(true);
+      track(EVENTS.DAY_COMPLETE_SHOWN, { agenda_kind: agenda?.kind ?? null, week: dayCompleteWeek });
+    }, DAY_COMPLETE_ARM_MS);
+    return () => clearTimeout(timer);
+  }, [dayCompleteDue, dayCompleteShownFor, agenda, dayCompleteWeek]);
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -114,8 +136,6 @@ export function GameChrome() {
   if (!state || state.gameOver) return null;
 
   const { burn, revenue, valuation, stake } = deriveWeeklyStats(state);
-  const weekEntries = state.newsLog.filter((entry) => entry.week === state.week);
-  const notable = isNotableWeek(weekEntries);
 
   // Show once per tick, after any decision card that tick drew has been
   // answered (pendingEvent clears). previousState only exists once at least
@@ -271,7 +291,7 @@ export function GameChrome() {
         companyName={state.companyName}
         week={state.week}
         stake={stake}
-        agenda={tomorrowAgendaFor(state)}
+        agenda={agenda}
         onBuyWeeks={
           purchasesAvailable
             ? () => {
