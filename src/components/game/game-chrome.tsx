@@ -6,6 +6,7 @@ import { purchasesAvailable } from '@/purchases';
 import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { HintSlot, useFirstRunHint } from '@/components/game/first-run-hint';
+import { requestNotificationPermissionOnce } from '@/components/game/notification-manager';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { SpotlightHint } from '@/components/game/spotlight-hint';
 import { ThemedText } from '@/components/themed-text';
@@ -52,6 +53,27 @@ export function GameChrome() {
     return () => clearTimeout(timer);
   }, [pendingWeek]);
 
+  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
+  // no-op while either is still resolving (null), so play is never blocked
+  // by a slow AsyncStorage read. Derived above the early return below because
+  // the permission effect (a hook) has to sit above it too; it reads none of
+  // `state`, so hoisting it costs nothing.
+  const budgetExhausted =
+    !devFreePlay && weekBudget !== null && purchasedWeeks !== null && !canSpendAnyWeek(weekBudget, purchasedWeeks);
+  const pendingEvent = state?.pendingEvent;
+
+  // The daily wall is the one moment the player has just felt why a nudge is
+  // worth allowing — ask here rather than on a second launch most players never
+  // have. `requestNotificationPermissionOnce` is a no-op after the first call.
+  // Never while a decision card is up: the DecisionModal owns the screen then,
+  // and this repo has a documented iOS hang when one modal presents into a
+  // frame another is dismissing (see docs/bug-stuck-decision-modal.md).
+  useEffect(() => {
+    if (!budgetExhausted) return;
+    if (pendingEvent) return;
+    requestNotificationPermissionOnce('daily_wall').catch(() => {});
+  }, [budgetExhausted, pendingEvent]);
+
   if (!state || state.gameOver) return null;
 
   const { burn, revenue, valuation } = deriveWeeklyStats(state);
@@ -75,11 +97,6 @@ export function GameChrome() {
       }))
     : [];
 
-  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
-  // no-op while either is still resolving (null), so play is never blocked
-  // by a slow AsyncStorage read.
-  const budgetExhausted =
-    !devFreePlay && weekBudget !== null && purchasedWeeks !== null && !canSpendAnyWeek(weekBudget, purchasedWeeks);
   const canAdvance = !state.pendingEvent && !budgetExhausted;
   // Down to the final free dot, with nothing purchased to fall back on — the
   // moment the daily budget is worth explaining, before it bites.
@@ -105,12 +122,18 @@ export function GameChrome() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label="Next Week →"
+            label={budgetExhausted ? 'That’s the week — see you tomorrow' : 'Next Week →'}
             onPress={() => {
               if (spotlight.visible) spotlight.dismiss();
+              // Dispatched even when the daily budget is spent: the store's TICK
+              // gate swallows it and captures WEEK_ADVANCE_BLOCKED, which is the
+              // only signal that tells a hit-the-wall player apart from one who
+              // drifted off before reaching it. Where purchases exist, the press
+              // also opens the week-pack sheet.
               dispatch({ type: 'TICK' });
+              if (budgetExhausted && purchasesAvailable) setBuySheetTrigger('out_of_weeks');
             }}
-            disabled={!canAdvance}
+            disabled={!!state.pendingEvent}
             style={styles.nextButton}
           />
         </View>
