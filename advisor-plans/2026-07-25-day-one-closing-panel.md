@@ -218,6 +218,8 @@ triggering builds without the user confirming first, and this plan never needs o
 
 ### Step 1: Add the pure "tomorrow's agenda" module
 
+Status: done
+
 Create `src/state/day-close.ts`. No React, React Native, or Expo imports — plain
 TypeScript plus imports from `@/game/*` and `@/lib/*` only, so vitest can run it.
 
@@ -275,6 +277,8 @@ Import `canRaiseRound` from `@/game/balance`, `ROUND_ORDER` and `GameState` from
 
 ### Step 2: Test the agenda ladder
 
+Status: done (8 tests)
+
 Create `src/state/__tests__/day-close.test.ts`, modelled structurally on
 `src/state/__tests__/notification-content.test.ts`.
 
@@ -301,6 +305,8 @@ Cover exactly these cases:
 **Verify**: `npx vitest run src/state/__tests__/day-close.test.ts` → all pass, 8 tests.
 
 ### Step 3: Build the closing sheet component
+
+Status: done (typecheck + lint only; components are untested here)
 
 Create `src/components/game/day-complete-sheet.tsx`. Read
 `src/components/game/week-in-review-sheet.tsx` first and match its structure: a
@@ -354,6 +360,8 @@ not style preferences:
 **Verify**: `npx tsc --noEmit` → exit 0 and `npm run lint` → exit 0.
 
 ### Step 4: Show it once per local day when the wall lands
+
+Status: done — adapted to plan 001's landed shape: it ships the ask as `<NotificationPermissionAsk trigger="daily_wall">` (mount-to-ask), not a `useEffect`, so the wall-edge mount was moved behind the sheet's dismissal instead of a raw `requestNotificationPermissionOnce` call. Also added a `!state || state.gameOver` guard as the effect's first line, and an `eslint-disable-next-line react-hooks/set-state-in-effect`.
 
 In `src/components/game/game-chrome.tsx`:
 
@@ -472,6 +480,8 @@ const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
 **Verify**: `npx tsc --noEmit` → exit 0; `npm run lint` → exit 0.
 
 ### Step 5: Instrument the panel
+
+Status: done
 
 In `src/analytics/events.ts`, add two entries to the `EVENTS` catalog under the
 "Retention / streak / notifications" section, each with a one-line doc comment in the

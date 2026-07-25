@@ -16,8 +16,8 @@ directory's landing page and so executors can find it by convention. Don't "fix"
 
 | Plan | File | Title | Priority | Effort | Depends on | Status |
 |------|------|-------|----------|--------|------------|--------|
-| 001 | [2026-07-25-arm-reengagement-at-the-wall.md](2026-07-25-arm-reengagement-at-the-wall.md) | Arm the re-engagement loop at the daily wall, and make the wall observable | P1 | M | — | DONE (branch `advisor/001-arm-reengagement-at-the-wall`; device pass still needed) |
-| 002 | [2026-07-25-day-one-closing-panel.md](2026-07-25-day-one-closing-panel.md) | Close the day with a "tomorrow's agenda" panel instead of a stop sign | P1 | M | 001 | TODO |
+| 001 | [2026-07-25-arm-reengagement-at-the-wall.md](2026-07-25-arm-reengagement-at-the-wall.md) | Arm the re-engagement loop at the daily wall, and make the wall observable | P1 | M | — | DONE (branch `advisor/wall-reengagement-and-closing-panel`; device pass still needed) |
+| 002 | [2026-07-25-day-one-closing-panel.md](2026-07-25-day-one-closing-panel.md) | Close the day with a "tomorrow's agenda" panel instead of a stop sign | P1 | M | 001 | DONE (same branch; sheet/once-per-day behaviour still needs a simulator pass) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED
 (with one-line rationale).
