@@ -27,7 +27,8 @@
         "backgroundColor": "#0B4F91",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ronkaa.startuptycoon"
     },
     "web": {
       "output": "single",
@@ -44,7 +45,24 @@
           "resizeMode": "cover"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-widgets",
+        {
+          "groupIdentifier": "group.com.ronkaa.startuptycoon",
+          "widgets": [
+            {
+              "name": "CompanyWidget",
+              "displayName": "Company",
+              "description": "Your runway, cash and weeks ready to play, at a glance.",
+              "supportedFamilies": [
+                "systemSmall",
+                "systemMedium"
+              ]
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

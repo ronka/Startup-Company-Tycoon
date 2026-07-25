@@ -45,6 +45,7 @@ import {
   type PurchasedWeeksPool,
   type WeekBudget,
 } from '@/state/week-budget';
+import { useWidgetSync } from '@/widgets/sync';
 
 export const STORAGE_KEY = 'startup-tycoon/save/v3';
 export const WEEK_BUDGET_STORAGE_KEY = 'startup-tycoon/week-budget/v1';
@@ -420,6 +421,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save run history', err),
     );
   }, [runHistory, loading]);
+
+  // Mirror the run onto the iOS home screen widget. A no-op everywhere else
+  // (web, Android, Expo Go) — `@/widgets/sync` resolves to a stub off native
+  // and guards on the platform within it, so `expo-widgets` is never loaded
+  // where it doesn't exist. It pushes on `loading → false` and on app
+  // background, deduped and debounced in between; see `src/widgets/sync.native.ts`.
+  useWidgetSync(state, weekBudget, purchasedWeeks, loading);
 
   // Morning Standup injection (Task 15): the first time this local day sees
   // a live, uninterrupted run (a game exists, isn't over, and has no other

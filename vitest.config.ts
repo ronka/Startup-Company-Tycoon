@@ -23,6 +23,9 @@ export default defineConfig({
       'src/state/**/*.test.ts',
       'src/lib/**/*.test.ts',
       'src/purchases/**/*.test.ts',
+      // src/widgets/snapshot.ts is pure too — the native `expo-widgets` calls
+      // are quarantined in src/widgets/sync.ts, which has no tests here.
+      'src/widgets/**/*.test.ts',
     ],
     environment: 'node',
   },
