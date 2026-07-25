@@ -615,17 +615,30 @@ not have rendered the wall at all. Not tied to a specific bundle hash.
   fires on the last free dot, `out-of-weeks` fires at the wall, the buy-weeks row still
   renders, and the button is still disabled while a decision card is up.
 
+**Confirmed in PostHog (project 505800), the payoff of the whole plan:**
+
+| Event | Evidence |
+|---|---|
+| `week_advance_blocked` | **First row ever**, 18:41:37Z — the press at the wall. Zero rows before this plan; the wall is now measurable. |
+| `notification_permission_requested` | `trigger: daily_wall`, `granted: true`. The pre-change row at 17:04Z has no `trigger` and `granted: false`, so the new prop is populating. |
+| `reengagement_notification_scheduled` | `delay_seconds: 41607`, `target_hour: 9` — computed to the next local 09:00 (scheduled 21:26 local ≈ 11h34m out). Earlier rows show the old constant `72000` with no `target_hour`. |
+
+**Re-verified after the refactor** (mount-to-ask `NotificationPermissionAsk` +
+`isWeekBudgetExhausted`): typecheck clean, 371 tests pass, wall renders identically, the
+press still swallows the TICK (week did not advance) while opening the Buy Weeks sheet,
+and the ask correctly no-ops on an install that already granted.
+
 **Could not verify:** that the scheduled nudge actually fires at 09:00 (needs a
 day-boundary or time manipulation), and `notification_opened` (needs a delivered push).
 
-**Testing trap worth recording.** An install whose notification permission was already
-*denied* makes this look broken: `requestPermissionsAsync` returns immediately with no
-UI, so the flag flips to `true` while the OS records no decision and no dialog is ever
-seen. That is correct iOS behaviour, not a bug — but it means **the wall ask can only be
-tested on a fresh install**. `xcrun simctl privacy reset notifications` fails with
-`Operation not permitted` on iOS 26, and `serve-sim permissions reset notifications`
-reports success without restoring `notDetermined`. Uninstall + reinstall is the only
-reliable reset.
+**Testing trap worth recording.** On an install whose authorization was already decided,
+`requestPermissionsAsync` resolves with **no dialog at all** — the flag flips to `true`
+and the ask looks broken when it is merely a no-op. Confirmed against PostHog: the
+21:15 and 21:17 attempts returned `granted: true` with nothing on screen, because
+`serve-sim permissions reset notifications` reports success **without** restoring
+`notDetermined`. `xcrun simctl privacy reset notifications` is no help either — it fails
+with `Operation not permitted` on iOS 26. **Uninstall + reinstall is the only reliable
+reset**, and only after it did the real system dialog appear.
 
 - **Steps 3–5 are verified by typecheck and lint only.** The permission prompt and the
   scheduled notification cannot be exercised by this repo's test setup (vitest excludes
