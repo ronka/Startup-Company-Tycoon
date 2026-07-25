@@ -361,7 +361,16 @@ not style preferences:
 
 ### Step 4: Show it once per local day when the wall lands
 
-Status: done — adapted to plan 001's landed shape: it ships the ask as `<NotificationPermissionAsk trigger="daily_wall">` (mount-to-ask), not a `useEffect`, so the wall-edge mount was moved behind the sheet's dismissal instead of a raw `requestNotificationPermissionOnce` call. Also added a `!state || state.gameOver` guard as the effect's first line, and an `eslint-disable-next-line react-hooks/set-state-in-effect`.
+Status: blocked
+Blocker: STOP condition — `WeekInReviewSheet` can be visible at the same moment as
+`DayCompleteSheet`. On the tick that spends the last week, `budgetExhausted` flips true
+immediately, so this effect opens the panel at t≈0; 350ms later `recapArmedWeek` arms and
+`showReview` (which has no `budgetExhausted` term) presents the recap sheet into the frame
+the panel already occupies — the present-while-presenting race in
+`docs/bug-stuck-decision-modal.md`. Code is implemented and committed; the guard is an
+operator decision per this plan's "do not add timers on your own initiative".
+
+Implementation notes — adapted to plan 001's landed shape: it ships the ask as `<NotificationPermissionAsk trigger="daily_wall">` (mount-to-ask), not a `useEffect`, so the wall-edge mount was moved behind the sheet's dismissal instead of a raw `requestNotificationPermissionOnce` call. Also added a `!state || state.gameOver` guard as the effect's first line, and an `eslint-disable-next-line react-hooks/set-state-in-effect`.
 
 In `src/components/game/game-chrome.tsx`:
 
