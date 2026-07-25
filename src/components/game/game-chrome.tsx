@@ -1,9 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { purchasesAvailable } from '@/purchases';
+import { EVENTS, track } from '@/analytics/events';
 import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
+import { DayCompleteSheet } from '@/components/game/day-complete-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { HintSlot, useFirstRunHint } from '@/components/game/first-run-hint';
 import { NotificationPermissionAsk } from '@/components/game/notification-permission-ask';
@@ -16,8 +19,12 @@ import { Spacing } from '@/constants/theme';
 import { isNotableWeek } from '@/game/digest';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
+import { tomorrowAgendaFor } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
-import { WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/week-budget';
+import { WEEKS_BANK_CAP, dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
+
+/** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
+const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
 
 /**
  * Persistent chrome shared by every game tab (Task 12): the Next Week
@@ -42,6 +49,57 @@ export function GameChrome() {
   // The one-time "this is the whole game" callout over Next Week. Retired by
   // the first tick, so pressing the button counts as reading it.
   const spotlight = useFirstRunHint('next-week-spotlight');
+  // Which local calendar day the closing panel has already been shown for.
+  // Persisted (see the load effect below) because the player who just hit the
+  // wall is precisely the player about to kill the app — in-memory state alone
+  // would re-show the panel on the next cold start, same day.
+  const [dayCompleteShownFor, setDayCompleteShownFor] = useState<string | null>(null);
+  const [dayCompleteLoaded, setDayCompleteLoaded] = useState(false);
+  const [dayCompleteVisible, setDayCompleteVisible] = useState(false);
+  // Set when the closing panel is dismissed, which is what mounts the
+  // permission ask below — the player has just read what's waiting tomorrow,
+  // the strongest context there is for allowing a nudge, and asking here also
+  // guarantees the iOS system dialog can never race the sheet's own
+  // presentation.
+  const [askedAtWall, setAskedAtWall] = useState(false);
+
+  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
+  // no-op while either is still resolving (null), so play is never blocked
+  // by a slow AsyncStorage read. Derived above the early return below because
+  // the closing-panel effects key off it and hooks can't run conditionally.
+  const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DAY_COMPLETE_KEY)
+      .then((value) => setDayCompleteShownFor(value))
+      .catch(() => {})
+      .finally(() => setDayCompleteLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    // No live run to close out the day on. Without this the chrome renders
+    // null while the effect still burns today's key, silently suppressing the
+    // panel for a run started later the same day.
+    if (!state || state.gameOver) return;
+    if (!dayCompleteLoaded) return; // don't flash before we know
+    if (!budgetExhausted) return;
+    if (state.pendingEvent) return; // DecisionModal owns the screen
+    if (buySheetTrigger !== null) return; // never stack on the purchase sheet
+    const today = dateKey(new Date());
+    if (dayCompleteShownFor === today) return;
+    // Latching the day and opening the sheet is exactly what this effect is
+    // for — the alternative (deriving visibility) would mean reading the clock
+    // during render, which this codebase deliberately avoids (see the header
+    // of `week-budget.ts`).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDayCompleteShownFor(today);
+    AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
+    setDayCompleteVisible(true);
+    track(EVENTS.DAY_COMPLETE_SHOWN, {
+      agenda_kind: tomorrowAgendaFor(state)?.kind ?? null,
+      week: state.week,
+    });
+  }, [state, dayCompleteLoaded, budgetExhausted, buySheetTrigger, dayCompleteShownFor]);
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -55,7 +113,7 @@ export function GameChrome() {
 
   if (!state || state.gameOver) return null;
 
-  const { burn, revenue, valuation } = deriveWeeklyStats(state);
+  const { burn, revenue, valuation, stake } = deriveWeeklyStats(state);
   const weekEntries = state.newsLog.filter((entry) => entry.week === state.week);
   const notable = isNotableWeek(weekEntries);
 
@@ -76,10 +134,6 @@ export function GameChrome() {
       }))
     : [];
 
-  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
-  // no-op while either is still resolving (null), so play is never blocked
-  // by a slow AsyncStorage read.
-  const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
   // Only pitch "advance a week" while advancing is actually possible. The Next
   // Week button deliberately stays pressable at the wall (see its handler), so
   // this gates the spotlight alone.
@@ -108,12 +162,13 @@ export function GameChrome() {
 
         {/* The daily wall is the one moment the player has just felt why a nudge
             is worth allowing — ask here rather than on a second launch most
-            players never have. Mounting is the ask; the early return above
-            already guarantees a live run. Never while a decision card is up:
-            the DecisionModal owns the screen then, and this repo has a
-            documented iOS hang when one modal presents into a frame another is
-            dismissing (see docs/bug-stuck-decision-modal.md). */}
-        {budgetExhausted && !state.pendingEvent ? <NotificationPermissionAsk trigger="daily_wall" /> : null}
+            players never have. Mounting is the ask, and the condition is now
+            "the closing panel has been read and dismissed" rather than the raw
+            wall edge: the panel has just named what's waiting tomorrow, and
+            waiting for its dismissal keeps the iOS system dialog out of the
+            frame the sheet is presenting into (this repo has a documented hang
+            when modals overlap — see docs/bug-stuck-decision-modal.md). */}
+        {askedAtWall ? <NotificationPermissionAsk trigger="daily_wall" /> : null}
 
         <View style={styles.footer}>
           <PrimaryButton
@@ -209,6 +264,28 @@ export function GameChrome() {
         rivalShares={rivalShares}
         entries={weekEntries}
         onDismiss={() => setReviewedWeek(state.week)}
+      />
+
+      <DayCompleteSheet
+        visible={dayCompleteVisible}
+        companyName={state.companyName}
+        week={state.week}
+        stake={stake}
+        agenda={tomorrowAgendaFor(state)}
+        onBuyWeeks={
+          purchasesAvailable
+            ? () => {
+                setDayCompleteVisible(false);
+                track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'buy_weeks' });
+                setBuySheetTrigger('out_of_weeks');
+              }
+            : undefined
+        }
+        onDismiss={() => {
+          setDayCompleteVisible(false);
+          track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'dismiss' });
+          setAskedAtWall(true);
+        }}
       />
 
       {purchasesAvailable ? (

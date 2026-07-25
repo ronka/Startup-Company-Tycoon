@@ -73,6 +73,10 @@ export const EVENTS = {
   NOTIFICATION_PERMISSION_REQUESTED: 'notification_permission_requested',
   REENGAGEMENT_NOTIFICATION_SCHEDULED: 'reengagement_notification_scheduled',
   NOTIFICATION_OPENED: 'notification_opened',
+  /** The end-of-day panel was shown — `{ agenda_kind }` is the hook it offered. */
+  DAY_COMPLETE_SHOWN: 'day_complete_shown',
+  /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks'. */
+  DAY_COMPLETE_DISMISSED: 'day_complete_dismissed',
 
   // First-run hints / debug
   /** A contextual hint became visible (won its screen's single hint slot). */
