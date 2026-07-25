@@ -9,6 +9,7 @@ import {
   grantPurchasedWeeks,
   initialPurchasedWeeksPool,
   initialWeekBudget,
+  isWeekBudgetExhausted,
   refreshWeekBudget,
   spendWeek,
   spendWeekFromPools,
@@ -182,5 +183,28 @@ describe('creditTransaction / creditTransactions', () => {
     ]);
     expect(again.weeksRemaining).toBe(100);
     expect(again.grantedTransactionIds.sort()).toEqual(['tx1', 'tx2', 'tx3']);
+  });
+});
+
+describe('isWeekBudgetExhausted', () => {
+  const spent: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 0 };
+  const empty: PurchasedWeeksPool = initialPurchasedWeeksPool();
+
+  it('is true only once both pools are spent', () => {
+    expect(isWeekBudgetExhausted(spent, empty, false)).toBe(true);
+    expect(isWeekBudgetExhausted({ ...spent, weeksRemaining: 1 }, empty, false)).toBe(false);
+    expect(isWeekBudgetExhausted(spent, grantPurchasedWeeks(empty, 1), false)).toBe(false);
+  });
+
+  it('is never exhausted while a pool is still loading from storage', () => {
+    // Deliberate: a slow AsyncStorage read must not read as "out of weeks" and
+    // block play on launch.
+    expect(isWeekBudgetExhausted(null, empty, false)).toBe(false);
+    expect(isWeekBudgetExhausted(spent, null, false)).toBe(false);
+    expect(isWeekBudgetExhausted(null, null, false)).toBe(false);
+  });
+
+  it('is bypassed entirely by dev free play', () => {
+    expect(isWeekBudgetExhausted(spent, empty, true)).toBe(false);
   });
 });

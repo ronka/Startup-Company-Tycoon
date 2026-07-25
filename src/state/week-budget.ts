@@ -113,6 +113,27 @@ export function canSpendAnyWeek(budget: WeekBudget, purchased: PurchasedWeeksPoo
 }
 
 /**
+ * The daily wall: both pools spent, and not bypassed by dev free play. The
+ * single definition shared by the store's `TICK` gate and the chrome that
+ * renders the wall — they have to agree, because the chrome opens the
+ * week-pack sheet on the same press whose `TICK` the store swallows to emit
+ * `WEEK_ADVANCE_BLOCKED`. If the two predicates drifted you would get a sheet
+ * with no event, or an event with no sheet.
+ *
+ * A `null` pool means AsyncStorage hasn't resolved yet and is deliberately
+ * *not* exhausted, so a slow read never blocks play.
+ */
+export function isWeekBudgetExhausted(
+  budget: WeekBudget | null,
+  purchased: PurchasedWeeksPool | null,
+  devFreePlay: boolean,
+): boolean {
+  if (devFreePlay) return false;
+  if (budget === null || purchased === null) return false;
+  return !canSpendAnyWeek(budget, purchased);
+}
+
+/**
  * Spend one week, free budget first and the purchased pool only once the
  * free budget is exhausted — a purchase should never feel like it "ate" the
  * daily free allotment. No-op if both pools are already empty; callers

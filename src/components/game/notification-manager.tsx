@@ -6,19 +6,15 @@ import { AppState, Platform } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { notificationContentFor } from '@/state/notification-content';
+import { requestNotificationPermissionOnce } from '@/state/notification-permission';
 import { REENGAGEMENT_HOUR, secondsUntilNextLocalHour } from '@/state/notification-schedule';
 import { useGame } from '@/state/game-store';
 
 /** A fixed identifier means scheduling a new one always cancels the last — never more than one pending. */
 const NOTIFICATION_ID = 'startup-tycoon-daily-nudge';
 const HAS_LAUNCHED_BEFORE_KEY = 'startup-tycoon/notifications/has-launched-before';
-const PERMISSION_REQUESTED_KEY = 'startup-tycoon/notifications/permission-requested';
 
 const IS_WEB = Platform.OS === 'web';
-
-/** Guards the OS's one-shot permission dialog against two callers in the same
- * launch — see `requestNotificationPermissionOnce`. */
-let permissionAskStarted = false;
 
 if (!IS_WEB) {
   Notifications.setNotificationHandler({
@@ -57,33 +53,6 @@ async function scheduleReengagementNotification(state: Parameters<typeof notific
 }
 
 /**
- * Request notification permission once, ever. Safe to call from anywhere and
- * any number of times: the `PERMISSION_REQUESTED_KEY` flag makes every call
- * after the first a no-op, so callers never need to track whether the OS
- * prompt has already been spent. iOS only ever shows the system dialog once
- * per install — that single shot is why this is centralized here.
- *
- * `trigger` records *which* moment spent the shot, so the grant rate of the
- * daily-wall ask can be compared against the second-launch fallback's.
- */
-export async function requestNotificationPermissionOnce(trigger: string): Promise<void> {
-  if (IS_WEB) return;
-  // Synchronous latch, checked before the first `await`: the AsyncStorage read
-  // below is async, so on a second launch that opens straight into an exhausted
-  // budget both callers (the wall and the fallback) would see "not requested"
-  // and each log a row. iOS shows no second dialog, but the duplicate rows would
-  // wreck the grant-rate-by-`trigger` comparison this prop exists for. Never
-  // reset — the OS shot is spent for this launch either way.
-  if (permissionAskStarted) return;
-  permissionAskStarted = true;
-  const alreadyRequested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
-  if (alreadyRequested) return;
-  await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
-  const result = await Notifications.requestPermissionsAsync().catch(() => null);
-  track(EVENTS.NOTIFICATION_PERMISSION_REQUESTED, { granted: result?.granted ?? null, trigger });
-}
-
-/**
  * Invisible, app-wide manager for Task 16's local re-engagement push:
  * requests permission (deferred to the session after the very first
  * launch, per PRD), reschedules a single state-aware nudge whenever the app
@@ -118,10 +87,11 @@ export function NotificationManager() {
   }, []);
 
   // *Fallback* opt-in path, for players who somehow never hit the daily wall —
-  // the primary ask now fires at the wall itself (see `game-chrome.tsx`), where
-  // the player has just felt the reason for it. Most players never reach this
-  // one: it needs a second launch, and the first-ever launch only records that a
-  // session happened so the prompt can never appear on first run.
+  // the primary ask now fires at the wall itself (`NotificationPermissionAsk`,
+  // mounted by `game-chrome.tsx`), where the player has just felt the reason for
+  // it. Most players never reach this one: it needs a second launch, and the
+  // first-ever launch only records that a session happened so the prompt can
+  // never appear on first run.
   useEffect(() => {
     if (IS_WEB) return;
     let cancelled = false;

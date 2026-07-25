@@ -33,13 +33,13 @@ import {
   type RevivePool,
 } from '@/state/revive';
 import {
-  canSpendAnyWeek,
   creditTransaction,
   creditTransactions,
   dateKey,
   grantPurchasedWeeks,
   initialPurchasedWeeksPool,
   initialWeekBudget,
+  isWeekBudgetExhausted,
   refreshWeekBudget,
   spendWeekFromPools,
   type PurchasedWeeksPool,
@@ -537,12 +537,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // Store-layer-only rate limit (PRD F12) — the engine never sees this.
       // Purchased weeks (IAP week-packs) top up the free budget rather than
       // replacing it: spend order is free-first via `spendWeekFromPools`.
-      if (
-        !devFreePlay &&
-        weekBudget &&
-        purchasedWeeks &&
-        !canSpendAnyWeek(weekBudget, purchasedWeeks)
-      ) {
+      if (isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay)) {
         // The player hit the daily wall — a key retention/monetization signal.
         track(EVENTS.WEEK_ADVANCE_BLOCKED, gameProps(state));
         return;

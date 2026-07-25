@@ -6,7 +6,7 @@ import { purchasesAvailable } from '@/purchases';
 import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { HintSlot, useFirstRunHint } from '@/components/game/first-run-hint';
-import { requestNotificationPermissionOnce } from '@/components/game/notification-manager';
+import { NotificationPermissionAsk } from '@/components/game/notification-permission-ask';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { SpotlightHint } from '@/components/game/spotlight-hint';
 import { ThemedText } from '@/components/themed-text';
@@ -17,7 +17,7 @@ import { isNotableWeek } from '@/game/digest';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { useGame } from '@/state/game-store';
-import { WEEKS_BANK_CAP, canSpendAnyWeek } from '@/state/week-budget';
+import { WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/week-budget';
 
 /**
  * Persistent chrome shared by every game tab (Task 12): the Next Week
@@ -53,32 +53,6 @@ export function GameChrome() {
     return () => clearTimeout(timer);
   }, [pendingWeek]);
 
-  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
-  // no-op while either is still resolving (null), so play is never blocked
-  // by a slow AsyncStorage read. Derived above the early return below because
-  // the permission effect (a hook) has to sit above it too; it reads none of
-  // `state`, so hoisting it costs nothing.
-  const budgetExhausted =
-    !devFreePlay && weekBudget !== null && purchasedWeeks !== null && !canSpendAnyWeek(weekBudget, purchasedWeeks);
-  const pendingEvent = state?.pendingEvent;
-  // Mirrors the early return below. `budgetExhausted` reads nothing about the
-  // run, so without this the ask would also fire when this component renders
-  // nothing at all — over a bankruptcy screen, or before the save has loaded.
-  const runActive = state !== null && !state.gameOver;
-
-  // The daily wall is the one moment the player has just felt why a nudge is
-  // worth allowing — ask here rather than on a second launch most players never
-  // have. `requestNotificationPermissionOnce` is a no-op after the first call.
-  // Never while a decision card is up: the DecisionModal owns the screen then,
-  // and this repo has a documented iOS hang when one modal presents into a
-  // frame another is dismissing (see docs/bug-stuck-decision-modal.md).
-  useEffect(() => {
-    if (!runActive) return; // no wall on screen — the run ended or is still loading
-    if (!budgetExhausted) return;
-    if (pendingEvent) return;
-    requestNotificationPermissionOnce('daily_wall').catch(() => {});
-  }, [budgetExhausted, pendingEvent, runActive]);
-
   if (!state || state.gameOver) return null;
 
   const { burn, revenue, valuation } = deriveWeeklyStats(state);
@@ -102,7 +76,14 @@ export function GameChrome() {
       }))
     : [];
 
-  const canAdvance = !state.pendingEvent && !budgetExhausted;
+  // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
+  // no-op while either is still resolving (null), so play is never blocked
+  // by a slow AsyncStorage read.
+  const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
+  // Only pitch "advance a week" while advancing is actually possible. The Next
+  // Week button deliberately stays pressable at the wall (see its handler), so
+  // this gates the spotlight alone.
+  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted;
   // Down to the final free dot, with nothing purchased to fall back on — the
   // moment the daily budget is worth explaining, before it bites.
   const onLastFreeWeek =
@@ -121,9 +102,18 @@ export function GameChrome() {
       ) : null}
 
       <View style={[styles.chrome, { paddingBottom: insets.bottom + Spacing.two }]}>
-        {spotlight.visible && canAdvance ? (
+        {showSpotlight ? (
           <SpotlightHint text="This is the whole game → advance a week" onDismiss={spotlight.dismiss} />
         ) : null}
+
+        {/* The daily wall is the one moment the player has just felt why a nudge
+            is worth allowing — ask here rather than on a second launch most
+            players never have. Mounting is the ask; the early return above
+            already guarantees a live run. Never while a decision card is up:
+            the DecisionModal owns the screen then, and this repo has a
+            documented iOS hang when one modal presents into a frame another is
+            dismissing (see docs/bug-stuck-decision-modal.md). */}
+        {budgetExhausted && !state.pendingEvent ? <NotificationPermissionAsk trigger="daily_wall" /> : null}
 
         <View style={styles.footer}>
           <PrimaryButton

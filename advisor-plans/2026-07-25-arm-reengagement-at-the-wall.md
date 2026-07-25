@@ -21,6 +21,53 @@
 - **Category**: direction
 - **Planned at**: commit `0f0d6c4`, 2026-07-25
 
+### Open issue from code review, 2026-07-25 — `trigger` is not an experiment
+
+The feature itself works: an install-day player who reaches the wall is asked
+there, which is the whole point of the plan and by far the largest cohort
+(30 of 61 advancers stopped at exactly week 5). **This note is about the
+analytics claim, not a defect.** Severity: low — documentation accuracy plus a
+simplification opportunity.
+
+The `NOTIFICATION_PERMISSION_REQUESTED` docstring in `src/analytics/events.ts`
+says `trigger` exists to "judge whether asking at the wall beats the
+second-launch fallback." It cannot do that, for two stacked reasons.
+
+**1. The buckets overlap the wrong way.** The fallback fires on mount of every
+launch after the first. The wall ask needs `budgetExhausted`, which needs the
+async pool load (`game-store.tsx:246-299`, both start `null`) *and* a spent
+budget — and `refreshWeekBudget` hands a returning player a fresh allotment. So
+`daily_wall` collects install-day wall-hitters; `second_launch` collects anyone
+who came back at all.
+
+**2. Even disjoint buckets would not be comparable.** Assignment is determined
+by player behaviour, not by us. "Hit the wall" vs "never hit the wall" are
+different kinds of player before the ask ever happens, so any grant-rate gap is
+confounded by population rather than by moment. Gating the fallback tidies the
+overlap without fixing this.
+
+A real moment-vs-moment test needs randomised assignment: coin-flip each install
+at first launch into "ask at the wall" or "ask at second launch", persist the
+arm, compare within arms. Nothing short of that answers the question.
+
+Options, in the order they are likely worth doing:
+
+1. **Ship as-is and drop the comparison language** from the `events.ts`
+   docstring, keeping `trigger` as a descriptive debugging label. The feature's
+   value (moving "installs that can receive a nudge" up from 13%) does not
+   depend on proving the comparison.
+2. **Delete the fallback entirely.** Simplest code by far: the
+   `permissionAskStarted` latch, `HAS_LAUNCHED_BEFORE_KEY`, the `trigger` param
+   and an 18-line effect all go. Costs the small cohort who relaunch without
+   ever hitting the wall (~2-3 players at current volume).
+3. **Build the randomised version**, if the comparison is genuinely worth the
+   complexity. Treat as new work, not cleanup.
+
+Deferred alongside this: unit tests for `requestNotificationPermissionOnce`. The
+module-level latch would force `vi.resetModules()` plus AsyncStorage and
+expo-notifications mocks; option 2 removes the latch and leaves a plain async
+function that tests cleanly.
+
 ## Why this matters
 
 This game is designed as a multi-day campaign: the store layer grants 5 game-weeks
