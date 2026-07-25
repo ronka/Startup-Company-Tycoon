@@ -6,12 +6,11 @@ import { AppState, Platform } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { notificationContentFor } from '@/state/notification-content';
+import { REENGAGEMENT_HOUR, secondsUntilNextLocalHour } from '@/state/notification-schedule';
 import { useGame } from '@/state/game-store';
 
 /** A fixed identifier means scheduling a new one always cancels the last — never more than one pending. */
 const NOTIFICATION_ID = 'startup-tycoon-daily-nudge';
-/** How far out the re-engagement nudge fires once scheduled. */
-const REENGAGEMENT_DELAY_SECONDS = 20 * 60 * 60;
 const HAS_LAUNCHED_BEFORE_KEY = 'startup-tycoon/notifications/has-launched-before';
 const PERMISSION_REQUESTED_KEY = 'startup-tycoon/notifications/permission-requested';
 
@@ -33,15 +32,43 @@ async function scheduleReengagementNotification(state: Parameters<typeof notific
   await Notifications.cancelScheduledNotificationAsync(NOTIFICATION_ID).catch(() => {});
   const content = notificationContentFor(state);
   if (!content) return; // no active run to point back at — nothing to schedule
+  // An absolute local-morning target, not a fixed offset from now: this runs on
+  // *every* backgrounding, and a relative delay meant a player who opened the
+  // app twice in an evening pushed their nudge past the next-day slot it was
+  // meant to land in. Re-deriving the same 09:00 instant makes rescheduling
+  // genuinely idempotent.
+  const seconds = secondsUntilNextLocalHour(new Date(), REENGAGEMENT_HOUR);
   await Notifications.scheduleNotificationAsync({
     identifier: NOTIFICATION_ID,
     content: { title: content.title, body: content.body, data: { url: '/hq' } },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: REENGAGEMENT_DELAY_SECONDS,
+      seconds,
     },
   });
-  track(EVENTS.REENGAGEMENT_NOTIFICATION_SCHEDULED, { delay_seconds: REENGAGEMENT_DELAY_SECONDS });
+  track(EVENTS.REENGAGEMENT_NOTIFICATION_SCHEDULED, {
+    delay_seconds: seconds,
+    target_hour: REENGAGEMENT_HOUR,
+  });
+}
+
+/**
+ * Request notification permission once, ever. Safe to call from anywhere and
+ * any number of times: the `PERMISSION_REQUESTED_KEY` flag makes every call
+ * after the first a no-op, so callers never need to track whether the OS
+ * prompt has already been spent. iOS only ever shows the system dialog once
+ * per install — that single shot is why this is centralized here.
+ *
+ * `trigger` records *which* moment spent the shot, so the grant rate of the
+ * daily-wall ask can be compared against the second-launch fallback's.
+ */
+export async function requestNotificationPermissionOnce(trigger: string): Promise<void> {
+  if (IS_WEB) return;
+  const alreadyRequested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
+  if (alreadyRequested) return;
+  await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
+  const result = await Notifications.requestPermissionsAsync().catch(() => null);
+  track(EVENTS.NOTIFICATION_PERMISSION_REQUESTED, { granted: result?.granted ?? null, trigger });
 }
 
 /**
@@ -78,8 +105,11 @@ export function NotificationManager() {
     return () => subscription.remove();
   }, []);
 
-  // First-ever launch only records that a session happened; the opt-in
-  // prompt itself waits for the *next* one, so it never appears on first launch.
+  // *Fallback* opt-in path, for players who somehow never hit the daily wall —
+  // the primary ask now fires at the wall itself (see `game-chrome.tsx`), where
+  // the player has just felt the reason for it. Most players never reach this
+  // one: it needs a second launch, and the first-ever launch only records that a
+  // session happened so the prompt can never appear on first run.
   useEffect(() => {
     if (IS_WEB) return;
     let cancelled = false;
@@ -91,11 +121,7 @@ export function NotificationManager() {
         return;
       }
       if (cancelled) return;
-      const alreadyRequested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
-      if (alreadyRequested) return;
-      await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
-      const result = await Notifications.requestPermissionsAsync().catch(() => null);
-      track(EVENTS.NOTIFICATION_PERMISSION_REQUESTED, { granted: result?.granted ?? null });
+      await requestNotificationPermissionOnce('second_launch');
     })();
 
     return () => {
