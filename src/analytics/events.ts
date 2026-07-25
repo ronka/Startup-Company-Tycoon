@@ -64,6 +64,12 @@ export const EVENTS = {
   // Retention / streak / notifications
   DAILY_STREAK_CREDITED: 'daily_streak_credited',
   DAILY_STANDUP_SHOWN: 'daily_standup_shown',
+  /**
+   * The OS permission dialog was spent — once per install, so `trigger`
+   * (`daily_wall` | `second_launch`) records which moment spent it. Break the
+   * `granted` rate down by `trigger` to judge whether asking at the wall beats
+   * the second-launch fallback.
+   */
   NOTIFICATION_PERMISSION_REQUESTED: 'notification_permission_requested',
   REENGAGEMENT_NOTIFICATION_SCHEDULED: 'reengagement_notification_scheduled',
   NOTIFICATION_OPENED: 'notification_opened',
