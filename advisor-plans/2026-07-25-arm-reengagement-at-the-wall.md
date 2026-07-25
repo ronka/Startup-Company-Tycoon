@@ -540,7 +540,16 @@ ALL must hold:
 ### Device verification — 2026-07-25, iPhone 17 Pro sim (iOS 26.0), via `npx serve-sim`
 
 Driven on a booted simulator with `serve-sim` (tap/gesture/permissions) against a
-dev-client build on Metro :8199. Commit under test: `e793f3f`.
+dev-client build on Metro :8199. Under test: the code live in the simulator at 21:26,
+which predates the working-tree refactor's breaking state — a non-compiling bundle could
+not have rendered the wall at all. Not tied to a specific bundle hash.
+
+> **The `[x]` done-criteria above were true at commit `e793f3f`.** An uncommitted
+> refactor landed on top afterwards (moving the permission ask into
+> `src/state/notification-permission.ts` and the wall predicate into
+> `isWeekBudgetExhausted`); it does not currently typecheck, and it edits
+> `game-store.tsx` and `week-budget.ts`, both fenced off as out of scope by this plan.
+> Not evaluated here — it is not part of this plan's work.
 
 **Verified working on device:**
 
