@@ -16,6 +16,10 @@ const PERMISSION_REQUESTED_KEY = 'startup-tycoon/notifications/permission-reques
 
 const IS_WEB = Platform.OS === 'web';
 
+/** Guards the OS's one-shot permission dialog against two callers in the same
+ * launch — see `requestNotificationPermissionOnce`. */
+let permissionAskStarted = false;
+
 if (!IS_WEB) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -64,6 +68,14 @@ async function scheduleReengagementNotification(state: Parameters<typeof notific
  */
 export async function requestNotificationPermissionOnce(trigger: string): Promise<void> {
   if (IS_WEB) return;
+  // Synchronous latch, checked before the first `await`: the AsyncStorage read
+  // below is async, so on a second launch that opens straight into an exhausted
+  // budget both callers (the wall and the fallback) would see "not requested"
+  // and each log a row. iOS shows no second dialog, but the duplicate rows would
+  // wreck the grant-rate-by-`trigger` comparison this prop exists for. Never
+  // reset — the OS shot is spent for this launch either way.
+  if (permissionAskStarted) return;
+  permissionAskStarted = true;
   const alreadyRequested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
   if (alreadyRequested) return;
   await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');

@@ -61,6 +61,10 @@ export function GameChrome() {
   const budgetExhausted =
     !devFreePlay && weekBudget !== null && purchasedWeeks !== null && !canSpendAnyWeek(weekBudget, purchasedWeeks);
   const pendingEvent = state?.pendingEvent;
+  // Mirrors the early return below. `budgetExhausted` reads nothing about the
+  // run, so without this the ask would also fire when this component renders
+  // nothing at all — over a bankruptcy screen, or before the save has loaded.
+  const runActive = state !== null && !state.gameOver;
 
   // The daily wall is the one moment the player has just felt why a nudge is
   // worth allowing — ask here rather than on a second launch most players never
@@ -69,10 +73,11 @@ export function GameChrome() {
   // and this repo has a documented iOS hang when one modal presents into a
   // frame another is dismissing (see docs/bug-stuck-decision-modal.md).
   useEffect(() => {
+    if (!runActive) return; // no wall on screen — the run ended or is still loading
     if (!budgetExhausted) return;
     if (pendingEvent) return;
     requestNotificationPermissionOnce('daily_wall').catch(() => {});
-  }, [budgetExhausted, pendingEvent]);
+  }, [budgetExhausted, pendingEvent, runActive]);
 
   if (!state || state.gameOver) return null;
 

@@ -504,6 +504,22 @@ ALL must hold:
   dispatcher (the chrome button) outside the engine's own types/tests, and
   `spendWeekFromPools` is called from exactly one place in the store —
   `dispatchWithSnapshot`, behind the gate. Enabling the button cannot double-spend.
+- **Two guards added beyond the plan's literal text, both authorized by its own
+  "guard its body instead" instruction, both protecting the single-shot iOS dialog:**
+  1. `runActive` (`state !== null && !state.gameOver`) in the chrome effect. Because
+     `budgetExhausted` reads nothing about the run, the ask would otherwise fire on
+     paths where `GameChrome` renders `null` — over a bankruptcy/exit screen if the run
+     ended on the last free week of the day, or before the save has loaded. Both are
+     live: `GameChrome` mounts unconditionally in `(game)/(tabs)/_layout.tsx:68`, with
+     no `loading` gate.
+  2. A module-scope synchronous `permissionAskStarted` latch in
+     `requestNotificationPermissionOnce`. With two callers, the `await` on the
+     AsyncStorage read is a race window: on a second launch that opens straight into an
+     exhausted budget, both the `daily_wall` and `second_launch` effects would see "not
+     requested" and each log a `notification_permission_requested` row. iOS shows no
+     second dialog, so there's no user-visible damage — but the duplicate rows with
+     different `trigger` values would wreck the grant-rate comparison this whole plan
+     exists to enable. Not unit-testable here (vitest excludes components).
 - **Timing caveat on the wall ask (flagged, not fixed).** `weekBudget` and
   `purchasedWeeks` both start `null` (`game-store.tsx:246-247`) and resolve
   asynchronously, so `budgetExhausted` is false on mount and flips true a few hundred ms
@@ -518,6 +534,9 @@ ALL must hold:
   bold, so the ~34-char exhausted label will likely wrap to two lines on narrow devices
   and change the footer height. Cosmetic, and `primary-button.tsx` is out of scope —
   confirm on device.
+- **Dashboard note**: `delay_seconds` on `reengagement_notification_scheduled` changed
+  from a constant `72000` to a variable, so any saved PostHog insight filtering on that
+  literal value will go empty.
 - **Steps 3–5 are verified by typecheck and lint only.** The permission prompt and the
   scheduled notification cannot be exercised by this repo's test setup (vitest excludes
   components). A device/simulator pass is still needed before shipping.
