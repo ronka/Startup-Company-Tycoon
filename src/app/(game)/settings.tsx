@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
@@ -11,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useGame } from '@/state/game-store';
+import { forceReviewForDev, resetReviewGateForDev, storeListingUrl } from '@/state/store-review';
 
 /**
  * OTA update counter, bumped by `scripts/increment-update-version.js` before
@@ -38,6 +39,21 @@ export default function SettingsScreen() {
   } = useGame();
 
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
+
+  // Read once — it comes from static app config, not from device state. Null on
+  // web and on any build where `ios.appStoreUrl` is missing, in which case the row
+  // below hides rather than offering a dead link.
+  const listingUrl = storeListingUrl();
+
+  // Deliberately opens the App Store listing instead of calling `requestReview()`:
+  // Apple's guidance is not to drive the native sheet from a button, and this is
+  // the one rating path that still works in TestFlight, where the native sheet
+  // reports itself unavailable.
+  const openStoreListing = useCallback(() => {
+    if (!listingUrl) return;
+    track(EVENTS.REVIEW_LINK_OPENED, { source: 'settings' });
+    Linking.openURL(listingUrl).catch(() => {});
+  }, [listingUrl]);
 
   // Triple-tap the version row within 500ms to reveal the hidden debug menu.
   const tapCountRef = useRef(0);
@@ -123,6 +139,21 @@ export default function SettingsScreen() {
           text: `Grant revive token (have ${revivePool?.tokensRemaining ?? 0})`,
           onPress: () => grantReviveToken(),
         },
+        // The review flow gives no callback and is unavailable in TestFlight, so a
+        // dev build driving it by hand is the only way to see it at all. "Force"
+        // bypasses the budget; "Reset" clears it so the real triggers can be re-run.
+        {
+          text: 'Force review prompt',
+          onPress: () => {
+            forceReviewForDev().catch(() => {});
+          },
+        },
+        {
+          text: 'Reset review gate',
+          onPress: () => {
+            resetReviewGateForDev().catch(() => {});
+          },
+        },
         {
           text: 'Force bankruptcy (test bailout)',
           style: 'destructive',
@@ -191,6 +222,17 @@ export default function SettingsScreen() {
             </ThemedText>
           </ThemedView>
         </Pressable>
+
+        {listingUrl ? (
+          <Pressable onPress={openStoreListing} accessibilityRole="button">
+            <ThemedView type="backgroundElement" style={styles.row}>
+              <ThemedText type="default">Rate this game</ThemedText>
+              <ThemedText type="default" themeColor="textSecondary">
+                ›
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ) : null}
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           Reset
