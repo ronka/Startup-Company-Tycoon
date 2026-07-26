@@ -93,6 +93,25 @@ export const EVENTS = {
   PURCHASE_FAILED: 'purchase_failed',
   /** A revive token was consumed to un-end a bankrupt run (bought or dev-granted). */
   REVIVE_REDEEMED: 'revive_redeemed',
+
+  // App Store review
+  /**
+   * The native review sheet was requested — `{ trigger, ask_number }`. Whether it
+   * actually *appeared* is unknowable: iOS returns no callback and throttles
+   * silently, so this counts intent, not impressions. The only outcome signal is
+   * the ratings count in App Store Connect; compare it against this event's volume
+   * broken down by `trigger`.
+   */
+  REVIEW_PROMPT_REQUESTED: 'review_prompt_requested',
+  /**
+   * A trigger fired but the gate declined — `{ trigger, reason }`. Emitted at most
+   * once per reason per launch (see `store-review.ts`), because with no OS callback
+   * a silent gate is indistinguishable from a broken one, and `cap_reached` would
+   * otherwise fire on every funding round for the rest of an install's life.
+   */
+  REVIEW_PROMPT_SUPPRESSED: 'review_prompt_suppressed',
+  /** The Settings "Rate this game" row was tapped — opens the store listing, not the native sheet. */
+  REVIEW_LINK_OPENED: 'review_link_opened',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

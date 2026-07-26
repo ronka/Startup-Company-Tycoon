@@ -18,6 +18,7 @@
     "ios": {
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.ronkaa.startuptycoon",
+      "appStoreUrl": "https://apps.apple.com/app/id6787488376",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

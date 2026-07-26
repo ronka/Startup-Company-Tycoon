@@ -17,8 +17,25 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
+import { dateKey } from '@/state/week-budget';
 
 const PERMISSION_REQUESTED_KEY = 'startup-tycoon/notifications/permission-requested';
+/**
+ * The local calendar day (`dateKey`) the one shot was spent on. Written alongside
+ * `PERMISSION_REQUESTED_KEY` purely so the store-review ask can tell "the dialog
+ * already happened, on an earlier day" from "the dialog is about to happen in this
+ * very beat" — the two share the closing panel's dismissal, and stacking two OS
+ * dialogs there is what hangs iOS. See `notificationAskSettled` in `review-ask.ts`.
+ */
+const PERMISSION_REQUESTED_DAY_KEY = 'startup-tycoon/notifications/permission-requested-day';
+
+/**
+ * Stands in for the spent-on day of installs that requested permission before
+ * `PERMISSION_REQUESTED_DAY_KEY` existed. Any real `dateKey` sorts after it, so
+ * those installs read as "settled long ago" rather than being blocked forever by a
+ * missing key they never had the chance to write.
+ */
+const LEGACY_SPENT_DAY = '1970-01-01';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -55,7 +72,40 @@ export async function requestNotificationPermissionOnce(trigger: PermissionTrigg
   permissionAskStarted = true;
   const alreadyRequested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
   if (alreadyRequested) return;
+  // Day first, *then* the requested flag, and neither swallows its error. The flag
+  // is the source of truth for "the shot is spent"; if the day write fails and the
+  // flag were already set, the store-review gate would read this install as
+  // "spent long ago" and could stack its dialog onto this very beat. Writing in
+  // this order means a failure leaves the ask un-spent and simply retried.
+  await AsyncStorage.setItem(PERMISSION_REQUESTED_DAY_KEY, dateKey(new Date()));
   await AsyncStorage.setItem(PERMISSION_REQUESTED_KEY, 'true');
   const result = await Notifications.requestPermissionsAsync().catch(() => null);
   track(EVENTS.NOTIFICATION_PERMISSION_REQUESTED, { granted: result?.granted ?? null, trigger });
+}
+
+/**
+ * The local calendar day the OS permission shot was spent on, or `null` if it never
+ * has been. Read by the store-review gate, which must not stack its own system
+ * dialog onto the beat this one owns — see `notificationAskSettled`.
+ *
+ * The reconciliation matters: an install that requested permission before the day
+ * key shipped has `PERMISSION_REQUESTED_KEY` set and no day, which is "spent, long
+ * ago" — not "never spent". Returning `null` there would block the review ask on
+ * exactly the oldest, most-engaged installs.
+ */
+export async function notificationAskSpentOnDateKey(): Promise<string | null> {
+  if (IS_WEB) return null;
+  try {
+    // `PERMISSION_REQUESTED_KEY` is checked first and is authoritative: a day key
+    // without it means an interrupted write, not a spent shot, and must read as
+    // "never" so the review gate stays closed. Only once the shot is confirmed
+    // spent does the day refine *when* — falling back to the legacy sentinel for
+    // installs that predate the day key.
+    const requested = (await AsyncStorage.getItem(PERMISSION_REQUESTED_KEY)) === 'true';
+    if (!requested) return null;
+    const day = await AsyncStorage.getItem(PERMISSION_REQUESTED_DAY_KEY);
+    return day ?? LEGACY_SPENT_DAY;
+  } catch {
+    return null;
+  }
 }
