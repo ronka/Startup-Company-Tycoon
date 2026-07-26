@@ -20,9 +20,11 @@ import { posthog } from '@/analytics/posthog';
 import { newGame, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
+import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { configurePurchases, reconcileOnLaunch, syncPostHogAttribute } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
+import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import {
   canRedeemRevive,
   creditReviveTransaction,
@@ -98,6 +100,48 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
  * TICK is handled separately (rate-limit + post-tick diff); this covers every
  * other player decision from one place.
  */
+/**
+ * Delay before the funding-round review ask, matching the chrome's own arming
+ * delays: a raise can land in the same frame a decision card or recap is
+ * presenting, and iOS hangs when one modal presents into another's transition
+ * (docs/bug-stuck-decision-modal.md).
+ */
+const FUNDING_REVIEW_ARM_MS = 350;
+
+/**
+ * A Series A or B raise is the app's best-populated success beat — most runs that
+ * survive the early weeks reach one, unlike a finished run or a long streak.
+ *
+ * `state` here is the **pre-action** snapshot (see `dispatchWithSnapshot`), so
+ * `ROUND_ORDER[state.roundsRaised]` names the round being raised right now. Matched
+ * by name rather than by a `roundsRaised >= n` count so inserting a round into
+ * `ROUND_ORDER` can't silently re-point this at the wrong one. Seed is excluded: it
+ * arrives too early to read as an achievement.
+ */
+function armFundingRoundReviewAsk(state: GameState): void {
+  const round = ROUND_ORDER[state.roundsRaised];
+  if (round !== 'seriesA' && round !== 'seriesB') return;
+  // A raise taken *out of* insolvency is a rescue, not a victory lap — the
+  // insolvency banner is still on the HQ tab and the run is still in trouble.
+  // Pre-action state again: the raise lands cash, but the player's read of the
+  // moment was formed by the state they were in when they tapped.
+  if (deriveWeeklyStats(state).insolvent) {
+    reportReviewSuppressed('funding_round', 'insolvent');
+    return;
+  }
+  // Reading `pendingEvent` off the pre-action snapshot is sound here specifically
+  // because `RAISE_ROUND` never draws a card: what's pending before the raise is
+  // what's pending after it. Any future action that both raises and draws would
+  // need a live read instead.
+  if (state.pendingEvent) {
+    reportReviewSuppressed('funding_round', 'modal_busy');
+    return;
+  }
+  setTimeout(() => {
+    requestReviewOnce('funding_round');
+  }, FUNDING_REVIEW_ARM_MS);
+}
+
 function captureAction(action: GameAction, state: GameState): void {
   const base = gameProps(state);
   switch (action.type) {
@@ -556,6 +600,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // Every other game action carries its params + the pre-action run context.
     // (Outcomes like stage/era changes are emitted separately by the diff effect.)
     if (state) captureAction(action, state);
+    if (action.type === 'RAISE_ROUND' && state) armFundingRoundReviewAsk(state);
     dispatch(action);
   };
 

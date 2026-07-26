@@ -19,6 +19,15 @@ import {
 import { useGame } from '@/state/game-store';
 import { canRedeemRevive } from '@/state/revive';
 import { bestScore } from '@/state/run-history';
+import { notePurchaseFailed, requestReviewOnce } from '@/state/store-review';
+
+/**
+ * How long the personal-best review ask waits after this screen mounts. Longer
+ * than the chrome's 350ms arming delays because this beat is a read, not a
+ * transition: the score wants to land and be seen before anything is asked of the
+ * player. Also keeps the sheet well clear of the modal presentation itself.
+ */
+const REVIEW_ARM_MS = 1200;
 
 const HEADLINE: Record<GameOverReason, string> = {
   bankruptcy: 'Bankrupt',
@@ -67,6 +76,24 @@ export default function GameOverScreen() {
       is_new_best: lastRunWasBest,
     });
   }, [reason, state?.finalScore, state?.week, lastRunWasBest]);
+
+  // The strongest "this player is happy" state the app can observe: a run that
+  // survived *and* set a personal best — the same beat the "New personal best!"
+  // line below celebrates. Never on bankruptcy, and never while the bailout pitch
+  // is on screen, which would put an ask for a favour next to an ask for money.
+  //
+  // Armed rather than immediate, and the timer is cleared on unmount: this screen
+  // is a modal, `startFresh` runs `dismissAll()` + `push('/onboarding')`, and a
+  // stray timer firing the system sheet mid-navigation is exactly this repo's
+  // documented modal-hang class (docs/bug-stuck-decision-modal.md).
+  const reviewDue = reason !== null && reason !== 'bankruptcy' && lastRunWasBest;
+  useEffect(() => {
+    if (!reviewDue) return;
+    const timer = setTimeout(() => {
+      requestReviewOnce('run_ended_best');
+    }, REVIEW_ARM_MS);
+    return () => clearTimeout(timer);
+  }, [reviewDue]);
 
   // Load the live store price and log the bailout paywall impression.
   useEffect(() => {
@@ -130,12 +157,14 @@ export default function GameOverScreen() {
           finishRevive();
         } else {
           track(EVENTS.PURCHASE_FAILED, { pack_id: 'revive', error_code: result.code });
+          notePurchaseFailed();
           setErrorCode(result.code);
         }
       })
       .catch(() => {
         setPending(false);
         track(EVENTS.PURCHASE_FAILED, { pack_id: 'revive', error_code: 'unknown' });
+        notePurchaseFailed();
         setErrorCode('unknown');
       });
   };

@@ -21,6 +21,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { tomorrowAgendaFor } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
+import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
+import { notificationAskSettled } from '@/state/review-ask';
+import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import { WEEKS_BANK_CAP, dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
 
 /** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
@@ -34,6 +37,13 @@ const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
 const DAY_COMPLETE_ARM_MS = 350;
 
 /**
+ * Streak length at which coming back counts as a genuine "I like this" signal
+ * worth spending a review ask on. Two is barely a habit; three is a player who
+ * chose to return twice.
+ */
+const REVIEW_STREAK_DAYS = 3;
+
+/**
  * Persistent chrome shared by every game tab (Task 12): the Next Week
  * control, the pending-decision modal, and the post-tick
  * recap (a full Week in Review sheet on notable weeks, a compact dismissible
@@ -42,8 +52,17 @@ const DAY_COMPLETE_ARM_MS = 350;
  * tabs that stay mounted in the background.
  */
 export function GameChrome() {
-  const { state, previousState, dispatch, weekBudget, purchasedWeeks, creditPurchase, devFreePlay, setDevFreePlay } =
-    useGame();
+  const {
+    state,
+    previousState,
+    dispatch,
+    weekBudget,
+    purchasedWeeks,
+    creditPurchase,
+    devFreePlay,
+    setDevFreePlay,
+    streak,
+  } = useGame();
   const insets = useSafeAreaInsets();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
@@ -135,7 +154,7 @@ export function GameChrome() {
 
   if (!state || state.gameOver) return null;
 
-  const { burn, revenue, valuation, stake } = deriveWeeklyStats(state);
+  const { burn, revenue, valuation, stake, insolvent } = deriveWeeklyStats(state);
 
   // Show once per tick, after any decision card that tick drew has been
   // answered (pendingEvent clears). previousState only exists once at least
@@ -305,6 +324,7 @@ export function GameChrome() {
           setDayCompleteVisible(false);
           track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'dismiss' });
           setAskedAtWall(true);
+          maybeAskForReviewAtWall(streak?.streakDays ?? 0, insolvent);
         }}
       />
 
@@ -318,6 +338,40 @@ export function GameChrome() {
       ) : null}
     </>
   );
+}
+
+/**
+ * The review ask that rides the closing panel's dismissal — a player on a streak,
+ * having just read what's waiting tomorrow.
+ *
+ * It shares that beat with `NotificationPermissionAsk` above, and only one of them
+ * may take it: two OS dialogs presenting into the same frame is what hangs iOS
+ * (docs/bug-stuck-decision-modal.md). The notification ask wins outright — it is
+ * one-shot-per-install and it feeds the re-engagement loop — so this one runs only
+ * once that shot was spent on an *earlier* day. On the very first wall day, when
+ * the notification dialog is about to appear right here, the stored day is null and
+ * `notificationAskSettled` correctly reads false.
+ *
+ * Async and fire-and-forget: the panel is already dismissing, and nothing about
+ * closing it should wait on a storage read.
+ */
+function maybeAskForReviewAtWall(streakDays: number, insolvent: boolean): void {
+  if (streakDays < REVIEW_STREAK_DAYS) return;
+  // A streak kept up while the company is bleeding out isn't the good mood it
+  // looks like from the streak counter alone.
+  if (insolvent) {
+    reportReviewSuppressed('day_streak', 'insolvent');
+    return;
+  }
+  notificationAskSpentOnDateKey()
+    .then((spentOn) => {
+      if (!notificationAskSettled(spentOn, dateKey(new Date()))) {
+        reportReviewSuppressed('day_streak', 'notification_ask_same_day');
+        return;
+      }
+      requestReviewOnce('day_streak');
+    })
+    .catch(() => {});
 }
 
 /**

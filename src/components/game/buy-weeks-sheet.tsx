@@ -7,6 +7,7 @@ import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
+import { notePurchaseFailed } from '@/state/store-review';
 
 export type BuyWeeksTrigger = 'out_of_weeks' | 'hud';
 
@@ -58,12 +59,14 @@ export function BuyWeeksSheet({
           onClose();
         } else {
           track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code });
+          notePurchaseFailed();
           setErrorCode(result.code);
         }
       })
       .catch(() => {
         setPendingPackId(null);
         track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: 'unknown' });
+        notePurchaseFailed();
         setErrorCode('unknown');
       });
   };
