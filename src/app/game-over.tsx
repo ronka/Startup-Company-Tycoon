@@ -10,6 +10,8 @@ import { randomReviveReason } from '@/game/revive-reasons';
 import type { GameOverReason } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
+import { buildShareText } from '@/lib/share-card';
+import { shareRunText } from '@/lib/share-run';
 import {
   purchasesClient,
   purchasesAvailable,
@@ -62,6 +64,7 @@ export default function GameOverScreen() {
   const [windfallReason] = useState(() => randomReviveReason());
   const [revivePrice, setRevivePrice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [errorCode, setErrorCode] = useState<PurchaseErrorCode | null>(null);
   // Set the instant we redeem, so the `!gameOver` re-render doesn't bounce to
   // `/` before `dismissAll` unwinds this modal.
@@ -127,6 +130,31 @@ export default function GameOverScreen() {
     // modal first, then push onboarding onto the clean root stack.
     router.dismissAll();
     router.push('/onboarding');
+  };
+
+  const handleShare = () => {
+    // The guard above proves `gameOver` is set, but that narrowing doesn't
+    // survive into a callback — pin it to a local.
+    const endedWith = state.gameOver as GameOverReason;
+    setSharing(true);
+    const message = buildShareText({
+      companyName: state.companyName,
+      reason: endedWith,
+      week: state.week,
+      score: state.finalScore ?? 0,
+      valuationHistory: state.valuationHistory,
+    });
+    shareRunText(message)
+      .then((outcome) => {
+        track(EVENTS.RUN_SHARED, {
+          reason: endedWith,
+          weeks: state.week,
+          final_score: Math.round(state.finalScore ?? 0),
+          is_new_best: lastRunWasBest,
+          outcome,
+        });
+      })
+      .finally(() => setSharing(false));
   };
 
   const finishRevive = () => {
@@ -221,6 +249,14 @@ export default function GameOverScreen() {
           label="New Game"
           variant={canBailout ? 'secondary' : 'primary'}
           onPress={startFresh}
+          disabled={pending}
+        />
+
+        <PrimaryButton
+          label="Share result"
+          variant="ghost"
+          onPress={handleShare}
+          loading={sharing}
           disabled={pending}
         />
       </View>

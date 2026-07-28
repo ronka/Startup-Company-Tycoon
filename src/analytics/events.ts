@@ -44,6 +44,12 @@ export const EVENTS = {
   GAME_OVER_VIEWED: 'game_over_viewed',
   /** The run that just ended set a new personal-best score (score > 0, strictly greater than the prior best). */
   NEW_BEST_SCORE: 'new_best_score',
+  /**
+   * The share sheet was opened from the game-over screen. `outcome` is how it
+   * closed (`shared` / `dismissed` / `failed`), so the dismissal rate is
+   * visible rather than every tap counting as a share.
+   */
+  RUN_SHARED: 'run_shared',
   SAVE_CLEARED: 'save_cleared',
   APP_RESET: 'app_reset',
 

@@ -11,13 +11,36 @@ export function PrimaryButton({
   disabled,
   loading,
   ...rest
-}: PressableProps & { label: string; variant?: 'primary' | 'secondary'; loading?: boolean }) {
+}: PressableProps & {
+  label: string;
+  /** `ghost` has no fill and no visible border — for tertiary actions that shouldn't compete with the CTA. */
+  variant?: 'primary' | 'secondary' | 'ghost';
+  loading?: boolean;
+}) {
   const theme = useTheme();
   const isPrimary = variant === 'primary';
+  const isGhost = variant === 'ghost';
   const isDisabled = !!disabled || !!loading;
 
-  const background = isDisabled ? theme.surface : isPrimary ? theme.accent : theme.surfaceRaised;
-  const labelColor = isDisabled ? theme.textMuted : isPrimary ? theme.accentInk : theme.text;
+  // Ghost keeps the shared hairline border so every variant occupies the same
+  // height in a stack, but paints it transparent. Its disabled state is the
+  // muted label alone — the `theme.surface` fill would give it the body the
+  // variant is defined by not having.
+  const background = isGhost
+    ? 'transparent'
+    : isDisabled
+      ? theme.surface
+      : isPrimary
+        ? theme.accent
+        : theme.surfaceRaised;
+  const borderColor = isGhost ? 'transparent' : isDisabled ? theme.border : background;
+  const labelColor = isDisabled
+    ? theme.textMuted
+    : isGhost
+      ? theme.accent
+      : isPrimary
+        ? theme.accentInk
+        : theme.text;
 
   return (
     <Pressable
@@ -26,7 +49,7 @@ export function PrimaryButton({
       disabled={isDisabled}
       style={(state) => [
         styles.button,
-        { backgroundColor: background, borderColor: isDisabled ? theme.border : background },
+        { backgroundColor: background, borderColor },
         state.pressed && !isDisabled && styles.pressed,
         typeof style === 'function' ? style(state) : style,
       ]}
