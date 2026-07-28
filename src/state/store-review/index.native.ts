@@ -20,6 +20,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
@@ -34,17 +35,26 @@ import {
 const REVIEW_ASK_KEY = 'startup-tycoon/store-review/asks';
 
 /**
- * `expo-store-review` is loaded lazily, and this is not a micro-optimization.
- * Its entry point calls `requireNativeModule('ExpoStoreReview')` at module scope,
- * which **throws at import time** on any binary that doesn't contain the native
- * module. A static import here would therefore be reachable from `game-store.tsx`
- * on app launch — so shipping this JS as an OTA update to the current production
- * build, which predates the module, would crash every install on open.
+ * `expo-store-review` must never be required on a binary that doesn't contain the
+ * `ExpoStoreReview` native module: its entry point calls `requireNativeModule` at
+ * module scope, and that throw is **not catchable**. Metro's `guardedLoadModule`
+ * intercepts anything a module throws while initializing and hands it to
+ * `global.ErrorUtils.reportFatalError()` instead of rethrowing — a redbox in dev,
+ * a fatal exception in release — so the caller's `try`/`catch` never runs. Wrapping
+ * the `import()` is not a guard; it only looks like one.
  *
- * Loading it inside the async paths instead means an un-rebuilt binary quietly
- * reports "review unavailable" rather than dying. The rebuild is still required for
- * the feature to work; this only decides how it fails until then.
+ * So we ask `expo-modules-core` (which every Expo binary has) whether the native
+ * module exists *before* touching the package. `requireOptionalNativeModule`
+ * returns null rather than throwing, which is the whole point.
+ *
+ * This matters because `game-store.tsx` reaches this module, and the shipped
+ * production build predates `expo-store-review` — `ios/Podfile.lock` has no entry
+ * for it. Without the probe, an OTA update carrying this JS would kill every
+ * install at its next Series A raise. The probe only decides how it fails; the
+ * feature still needs a native rebuild to actually work.
  */
+const NATIVE_MODULE_NAME = 'ExpoStoreReview';
+
 type StoreReviewModule = typeof import('expo-store-review');
 let storeReviewModule: StoreReviewModule | null = null;
 let storeReviewUnavailable = false;
@@ -52,10 +62,16 @@ let storeReviewUnavailable = false;
 async function loadStoreReview(): Promise<StoreReviewModule | null> {
   if (storeReviewModule) return storeReviewModule;
   if (storeReviewUnavailable) return null;
+  if (!requireOptionalNativeModule(NATIVE_MODULE_NAME)) {
+    storeReviewUnavailable = true;
+    return null;
+  }
   try {
     storeReviewModule = await import('expo-store-review');
     return storeReviewModule;
   } catch {
+    // Unreachable in the missing-native-module case the probe above covers, kept
+    // for anything else that could fail while loading the chunk.
     storeReviewUnavailable = true;
     return null;
   }
