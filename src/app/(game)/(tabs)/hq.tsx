@@ -259,7 +259,6 @@ export default function HqScreen() {
 
       <LogoPickerSheet
         visible={logoPickerOpen}
-        name={state.companyName}
         logo={state.companyLogo}
         onCommit={(logo) => dispatch({ type: 'SET_COMPANY_LOGO', logo })}
         onClose={() => setLogoPickerOpen(false)}

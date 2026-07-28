@@ -540,7 +540,6 @@ function NameStep({
 
       <LogoPickerSheet
         visible={logoPickerOpen}
-        name={companyName}
         logo={logo}
         onCommit={onChangeLogo}
         onClose={() => setLogoPickerOpen(false)}

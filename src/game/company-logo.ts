@@ -36,9 +36,13 @@ export const COMPANY_LOGO_SUGGESTIONS: readonly string[] = [
   '☕',
 ];
 
-/** Pick a starting logo. `random` is injectable for deterministic tests. */
-export function randomCompanyLogo(random: () => number = Math.random): string {
-  return COMPANY_LOGO_SUGGESTIONS[Math.floor(random() * COMPANY_LOGO_SUGGESTIONS.length)];
+/**
+ * Pick a suggestion, never `current` — so the picker's "Random" button always
+ * visibly changes something. `random` is injectable for deterministic tests.
+ */
+export function randomCompanyLogo(current?: string, random: () => number = Math.random): string {
+  const options = COMPANY_LOGO_SUGGESTIONS.filter((emoji) => emoji !== current);
+  return options[Math.floor(random() * options.length)];
 }
 
 /**

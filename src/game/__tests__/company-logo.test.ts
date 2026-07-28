@@ -58,8 +58,15 @@ describe('sanitizeCompanyLogo', () => {
 
 describe('randomCompanyLogo', () => {
   it('picks from the suggestion list', () => {
-    expect(randomCompanyLogo(() => 0)).toBe(COMPANY_LOGO_SUGGESTIONS[0]);
-    expect(COMPANY_LOGO_SUGGESTIONS).toContain(randomCompanyLogo(() => 0.99));
+    expect(randomCompanyLogo(undefined, () => 0)).toBe(COMPANY_LOGO_SUGGESTIONS[0]);
+    expect(COMPANY_LOGO_SUGGESTIONS).toContain(randomCompanyLogo(undefined, () => 0.99));
+  });
+
+  it('never returns the emoji already showing', () => {
+    // Lowest and highest draws both land elsewhere, so no roll can repeat it.
+    const current = COMPANY_LOGO_SUGGESTIONS[0];
+    expect(randomCompanyLogo(current, () => 0)).not.toBe(current);
+    expect(randomCompanyLogo(current, () => 0.99)).not.toBe(current);
   });
 
   it('only suggests emoji the sanitizer accepts', () => {

@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput } from 'react-native';
 
 import { BottomSheet } from '@/components/game/bottom-sheet';
-import { CompanyLogoTile } from '@/components/game/company-logo-tile';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
-import { sanitizeCompanyLogo } from '@/game/company-logo';
+import { randomCompanyLogo, sanitizeCompanyLogo } from '@/game/company-logo';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -22,13 +21,11 @@ import { useTheme } from '@/hooks/use-theme';
  */
 export function LogoPickerSheet({
   visible,
-  name,
   logo,
   onCommit,
   onClose,
 }: {
   visible: boolean;
-  name: string;
   logo?: string;
   /** Fired once as the sheet closes. `null` means "no logo — use initials". */
   onCommit: (logo: string | null) => void;
@@ -51,10 +48,7 @@ export function LogoPickerSheet({
 
   return (
     <BottomSheet visible={visible} onClose={close} title="Company logo" avoidKeyboard>
-      <View style={styles.preview}>
-        <CompanyLogoTile name={name} logo={draft} size={72} />
-      </View>
-
+      {/* The field itself is the preview — it holds exactly one emoji, at logo size. */}
       <TextInput
         value={draft}
         // Anything that isn't an emoji — a letter, a paste — clears the field
@@ -76,16 +70,13 @@ export function LogoPickerSheet({
         Tap 🙂 on your keyboard and pick an emoji. Each one replaces the last.
       </ThemedText>
 
-      <PrimaryButton label="Use initials" variant="ghost" onPress={() => setDraft('')} />
+      <PrimaryButton label="Random" variant="ghost" onPress={() => setDraft(randomCompanyLogo(draft))} />
       <PrimaryButton label="Done" onPress={close} />
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  preview: {
-    alignItems: 'center',
-  },
   input: {
     borderRadius: Radius.md,
     borderWidth: StyleSheet.hairlineWidth,
