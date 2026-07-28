@@ -19,7 +19,7 @@ import { forceReviewForDev, resetReviewGateForDev, storeListingUrl } from '@/sta
  * gives a unique build+update stamp (e.g. `1.0.0-3`) so we can tell exactly
  * which JS bundle a device is running.
  */
-const UPDATE_VERSION = 9;
+const UPDATE_VERSION = 10;
 
 
 export default function SettingsScreen() {
