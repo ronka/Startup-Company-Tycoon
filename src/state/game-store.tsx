@@ -22,7 +22,13 @@ import { newGame, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
-import { configurePurchases, reconcileOnLaunch, syncPostHogAttribute } from '@/purchases';
+import {
+  configurePurchases,
+  reconcileOnLaunch,
+  restorePurchases as restorePurchasesFromStore,
+  syncPostHogAttribute,
+  type RestoreOutcome,
+} from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
@@ -267,6 +273,16 @@ interface GameContextValue {
    */
   creditRevivePurchase: (transactionId: string) => void;
   /**
+   * The player-initiated "Restore Purchases" pass required by App Review
+   * (Guideline 3.1.1), backing the control on every screen that sells
+   * something. Asks the store what this Apple ID has bought, credits anything
+   * the ledgers haven't seen — weeks and revive tokens alike, each into its own
+   * pool in one atomic write — and reports what landed so the UI can say
+   * exactly what the player got back. Idempotent: already-credited
+   * transactions are skipped, so repeated taps never double-grant.
+   */
+  restorePurchases: () => Promise<RestoreOutcome>;
+  /**
    * Redeem one revive token: consume it and dispatch the `REVIVE` engine action
    * (restore cash, clear the fuse, un-end the run) with the given windfall
    * `reason` flavor. No-op if no token is available or no run is active.
@@ -304,6 +320,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [saveLoaded, setSaveLoaded] = useState(false);
   const [weekBudget, setWeekBudget] = useState<WeekBudget | null>(null);
   const [purchasedWeeks, setPurchasedWeeks] = useState<PurchasedWeeksPool | null>(null);
+  // Synchronous mirror of `purchasedWeeks`, for the same reason as
+  // `revivePoolRef` below: `restorePurchases` has to read the *current*
+  // granted-tx ledger before its store round-trip, and reading committed React
+  // state would let a purchase completing in the same beat go unseen — the
+  // restore would then re-report those weeks as "newly restored" even though
+  // `creditTransactions` correctly refuses to grant them twice.
+  const purchasedWeeksRef = useRef<PurchasedWeeksPool | null>(null);
   const [revivePool, setRevivePool] = useState<RevivePool | null>(null);
   // A synchronous mirror of `revivePool` so a purchase-success handler that
   // credits a token and then immediately redeems it (same tick, before React
@@ -444,8 +467,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     );
   }, [weekBudget, loading]);
 
-  // Persist the purchased-weeks pool whenever it changes.
+  // Persist the purchased-weeks pool whenever it changes, and keep the ref
+  // mirror in sync with each committed value.
   useEffect(() => {
+    purchasedWeeksRef.current = purchasedWeeks;
     if (loading || purchasedWeeks === null) return;
     AsyncStorage.setItem(PURCHASED_WEEKS_STORAGE_KEY, JSON.stringify(purchasedWeeks)).catch((err) =>
       console.warn('[game-store] failed to save purchased weeks', err),
@@ -657,6 +682,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setRevivePool(next);
   };
 
+  // The purchased-weeks counterpart to `applyRevivePool`, so a credit is
+  // visible to the very next read in the same handler — which is exactly what
+  // a "buy, then restore" sequence does.
+  const applyPurchasedWeeks = (updater: (prev: PurchasedWeeksPool) => PurchasedWeeksPool) => {
+    const next = updater(purchasedWeeksRef.current ?? initialPurchasedWeeksPool());
+    purchasedWeeksRef.current = next;
+    setPurchasedWeeks(next);
+  };
+
   const value: GameContextValue = {
     state,
     previousState,
@@ -708,15 +742,43 @@ export function GameProvider({ children }: { children: ReactNode }) {
     weekBudget,
     purchasedWeeks,
     grantPurchasedWeeks: (amount: number) => {
-      setPurchasedWeeks((prev) => grantPurchasedWeeks(prev ?? initialPurchasedWeeksPool(), amount));
+      applyPurchasedWeeks((prev) => grantPurchasedWeeks(prev, amount));
     },
     creditPurchase: (weeksGranted: number, transactionId: string) => {
-      setPurchasedWeeks((prev) => creditTransaction(prev ?? initialPurchasedWeeksPool(), transactionId, weeksGranted));
+      applyPurchasedWeeks((prev) => creditTransaction(prev, transactionId, weeksGranted));
     },
     revivePool,
     grantReviveToken: () => applyRevivePool(grantReviveToken),
     creditRevivePurchase: (transactionId: string) =>
       applyRevivePool((prev) => creditReviveTransaction(prev, transactionId)),
+    restorePurchases: async (): Promise<RestoreOutcome> => {
+      // Read the ledgers through the synchronous mirrors, so a purchase that
+      // completed moments ago is already accounted for and can't be reported
+      // back to the player as if the restore had recovered it.
+      const weeksPool = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
+      const revives = revivePoolRef.current ?? initialRevivePool();
+      const result = await restorePurchasesFromStore(
+        new Set(weeksPool.grantedTransactionIds),
+        new Set(revives.grantedTransactionIds),
+      );
+      if (result.status === 'error') return { status: 'error' };
+
+      const { newlyGrantedWeeks, newlyGrantedRevives } = result.reconciliation;
+      // Same atomic credit-plus-ledger primitives the launch pass uses, so a
+      // restore is just another idempotent reconciliation — never a second
+      // grant path with its own rules.
+      if (newlyGrantedWeeks.length > 0) {
+        applyPurchasedWeeks((prev) => creditTransactions(prev, newlyGrantedWeeks));
+      }
+      if (newlyGrantedRevives.length > 0) {
+        applyRevivePool((prev) => creditReviveTransactions(prev, newlyGrantedRevives));
+      }
+
+      const weeks = newlyGrantedWeeks.reduce((sum, tx) => sum + tx.weeks, 0);
+      const revivesRestored = newlyGrantedRevives.length;
+      if (weeks === 0 && revivesRestored === 0) return { status: 'nothing' };
+      return { status: 'restored', weeks, revives: revivesRestored };
+    },
     redeemRevive: (reason: string) => {
       if (!state) return;
       // Read the synchronous mirror, so a credit in this same handler (the

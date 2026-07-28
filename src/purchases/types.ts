@@ -38,6 +38,18 @@ export type PurchaseResult =
     }
   | { status: 'error'; code: PurchaseErrorCode };
 
+/**
+ * What a player-initiated restore actually gave back, summarised for the UI.
+ * `nothing` is a success, not a failure — consumables usually leave nothing to
+ * recover (see `revenuecat.ts`'s `restorePurchases`), and telling a player
+ * their restore "failed" when the store answered fine is both wrong and the
+ * kind of thing that reads as a broken purchase flow in App Review.
+ */
+export type RestoreOutcome =
+  | { status: 'restored'; weeks: number; revives: number }
+  | { status: 'nothing' }
+  | { status: 'error' };
+
 export interface PurchasesClient {
   getPacks(): Promise<WeekPack[]>;
   purchasePack(packId: string): Promise<PurchaseResult>;

@@ -3,7 +3,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { BottomSheet } from '@/components/game/bottom-sheet';
+import { LegalLinksRow } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
+import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
@@ -97,7 +99,23 @@ export function BuyWeeksSheet({
         </ThemedText>
       ) : null}
 
+      {/*
+        Spells out exactly what the money buys before the player spends it, which
+        App Review expects of any purchase screen: a one-time charge (not a
+        subscription), weeks that never expire, and the fact that they're only
+        consumed once the free daily allowance is gone — which is also just true
+        (`spendWeekFromPools` spends free weeks first).
+      */}
+      <ThemedText type="small" themeColor="textMuted" style={styles.fineprint}>
+        One-time purchase, not a subscription. Weeks never expire and are only used once your free daily
+        weeks run out.
+      </ThemedText>
+
       <PrimaryButton label="Not now" variant="secondary" onPress={onClose} />
+
+      <RestorePurchasesButton source="buy_weeks_sheet" onRestored={onClose} />
+
+      <LegalLinksRow source="buy_weeks_sheet" />
     </BottomSheet>
   );
 }
@@ -105,5 +123,8 @@ export function BuyWeeksSheet({
 const styles = StyleSheet.create({
   packs: {
     gap: Spacing.two,
+  },
+  fineprint: {
+    textAlign: 'center',
   },
 });

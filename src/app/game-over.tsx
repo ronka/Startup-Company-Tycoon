@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
+import { LegalLinksRow } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
+import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { randomReviveReason } from '@/game/revive-reasons';
@@ -242,6 +244,21 @@ export default function GameOverScreen() {
                 {errorCode === 'cancelled' ? 'Purchase cancelled.' : "Purchase didn't go through — try again."}
               </ThemedText>
             ) : null}
+            {/*
+              This screen is a paywall too, so it carries the same restore control
+              and terms links the week-pack sheet does. Hidden once a token is
+              already in hand — there is nothing left to restore at that point,
+              and the CTA above is already "claim it".
+            */}
+            {hasToken ? null : (
+              <>
+                <ThemedText type="small" themeColor="textMuted" style={styles.fineprint}>
+                  One-time purchase, not a subscription.
+                </ThemedText>
+                <RestorePurchasesButton source="game_over" />
+                <LegalLinksRow source="game_over" />
+              </>
+            )}
           </View>
         ) : null}
 
@@ -298,6 +315,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   error: {
+    textAlign: 'center',
+  },
+  fineprint: {
     textAlign: 'center',
   },
 });

@@ -10,7 +10,16 @@ export {
   purchasesAvailable,
   purchasesClient,
   reconcileOnLaunch,
+  restorePurchases,
   syncPostHogAttribute,
 } from './fallback';
 export { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
-export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, Reward, WeekPack } from './types';
+export type { LaunchReconciliation, RestoreResult } from './reconciliation';
+export type {
+  PurchaseErrorCode,
+  PurchaseResult,
+  PurchasesClient,
+  RestoreOutcome,
+  Reward,
+  WeekPack,
+} from './types';

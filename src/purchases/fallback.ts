@@ -1,4 +1,4 @@
-import type { LaunchReconciliation } from './reconciliation';
+import type { LaunchReconciliation, RestoreResult } from './reconciliation';
 import { stubPurchasesClient } from './stub';
 import type { PurchasesClient } from './types';
 
@@ -24,6 +24,19 @@ export async function reconcileOnLaunch(
   _grantedReviveTransactionIds: ReadonlySet<string>,
 ): Promise<LaunchReconciliation> {
   return { newlyGrantedWeeks: [], newlyGrantedRevives: [] };
+}
+
+/**
+ * No store to talk to here, so a restore trivially succeeds owing nothing.
+ * `ok` rather than `error`: the UI only ever offers restore where
+ * `purchasesAvailable` is true, and a caller that reached this on the
+ * no-native-SDK path has genuinely lost no purchase.
+ */
+export async function restorePurchases(
+  _grantedWeekTransactionIds: ReadonlySet<string>,
+  _grantedReviveTransactionIds: ReadonlySet<string>,
+): Promise<RestoreResult> {
+  return { status: 'ok', reconciliation: { newlyGrantedWeeks: [], newlyGrantedRevives: [] } };
 }
 
 export async function syncPostHogAttribute(_distinctId: string): Promise<void> {}

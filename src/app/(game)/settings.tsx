@@ -6,12 +6,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
 import { resetAllHints } from '@/components/game/first-run-hint';
+import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { LEGAL_LINK_LABELS, openLegalLink, type LegalLink } from '@/lib/open-legal-link';
+import { purchasesAvailable } from '@/purchases';
 import { useGame } from '@/state/game-store';
 import { forceReviewForDev, resetReviewGateForDev, storeListingUrl } from '@/state/store-review';
+
+/**
+ * The legal/support rows App Review requires to be reachable inside the app:
+ * the privacy policy (Guideline 5.1.1(i), which asks for it "within the app in
+ * an easily accessible manner"), a way to contact support (Guideline 1.5), and
+ * the terms a purchase is made under. Settings is the conventional home for all
+ * three, and the one place a reviewer will look for them.
+ */
+const LEGAL_LINKS: LegalLink[] = ['privacy', 'terms', 'support'];
 
 /**
  * OTA update counter, bumped by `scripts/increment-update-version.js` before
@@ -252,6 +264,39 @@ export default function SettingsScreen() {
             </ThemedView>
           </Pressable>
         ) : null}
+
+        {purchasesAvailable ? (
+          <>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+              Purchases
+            </ThemedText>
+            {/*
+              Apple expects a restore control in Settings as well as on the
+              paywalls themselves — it's the first place a reviewer checks, and
+              its absence is one of the most common Guideline 3.1.1 rejections.
+            */}
+            <RestorePurchasesButton source="settings" variant="secondary" />
+          </>
+        ) : null}
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          Legal & Support
+        </ThemedText>
+
+        {LEGAL_LINKS.map((link) => (
+          <Pressable
+            key={link}
+            onPress={() => openLegalLink(link, 'settings')}
+            accessibilityRole="link"
+            accessibilityLabel={LEGAL_LINK_LABELS[link]}>
+            <ThemedView type="backgroundElement" style={styles.row}>
+              <ThemedText type="default">{LEGAL_LINK_LABELS[link]}</ThemedText>
+              <ThemedText type="default" themeColor="textSecondary">
+                ›
+              </ThemedText>
+            </ThemedView>
+          </Pressable>
+        ))}
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           Reset

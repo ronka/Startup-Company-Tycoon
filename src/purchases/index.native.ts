@@ -2,9 +2,16 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import * as fallback from './fallback';
-import type { LaunchReconciliation } from './reconciliation';
+import type { LaunchReconciliation, RestoreResult } from './reconciliation';
 import { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
-import type { PurchaseErrorCode, PurchaseResult, PurchasesClient, Reward, WeekPack } from './types';
+import type {
+  PurchaseErrorCode,
+  PurchaseResult,
+  PurchasesClient,
+  RestoreOutcome,
+  Reward,
+  WeekPack,
+} from './types';
 
 /**
  * `react-native-purchases` is a native module: absent from Expo Go (only
@@ -30,6 +37,11 @@ export const reconcileOnLaunch: (
   grantedWeekTransactionIds: ReadonlySet<string>,
   grantedReviveTransactionIds: ReadonlySet<string>,
 ) => Promise<LaunchReconciliation> = impl.reconcileOnLaunch;
+export const restorePurchases: (
+  grantedWeekTransactionIds: ReadonlySet<string>,
+  grantedReviveTransactionIds: ReadonlySet<string>,
+) => Promise<RestoreResult> = impl.restorePurchases;
 export const syncPostHogAttribute: (distinctId: string) => Promise<void> = impl.syncPostHogAttribute;
 export { REVIVE_PRICE_LABEL, WEEK_PACKS };
-export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, Reward, WeekPack };
+export type { LaunchReconciliation, RestoreResult };
+export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, RestoreOutcome, Reward, WeekPack };

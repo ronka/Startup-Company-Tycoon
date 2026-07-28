@@ -19,6 +19,7 @@ import {
   reconcilePurchases,
   reconcileRevivePurchases,
   type LaunchReconciliation,
+  type RestoreResult,
 } from './reconciliation';
 import { WEEK_PACKS } from './stub';
 import type { PurchaseResult, PurchasesClient, WeekPack } from './types';
@@ -62,6 +63,46 @@ export async function reconcileOnLaunch(
   } catch (err) {
     console.warn('[purchases] launch reconciliation failed', err);
     return { newlyGrantedWeeks: [], newlyGrantedRevives: [] };
+  }
+}
+
+/**
+ * The player-initiated restore behind the "Restore Purchases" control that
+ * App Review expects wherever an app sells something (Guideline 3.1.1).
+ *
+ * `Purchases.restorePurchases()` — not `getCustomerInfo()` — is the call that
+ * actually matters here: it refreshes the StoreKit receipt and re-associates
+ * its transactions with the current (anonymous) RevenueCat identity, which is
+ * what makes anything recoverable after a reinstall at all. The diff that
+ * follows is the exact same idempotent reconciliation the launch pass runs, so
+ * restoring can only ever credit transactions the ledger hasn't already seen —
+ * tapping it repeatedly is harmless and never double-grants.
+ *
+ * Worth being clear-eyed about the ceiling: week packs and revives are
+ * *consumables*, and Apple drops finished consumables from the receipt. So a
+ * genuine "restore" mostly recovers purchases this install never finished
+ * crediting (paid, then killed mid-flow), not a purchase history from a
+ * previous install. That's expected, and it's why the UI has to report
+ * "nothing to restore" as a normal, non-error outcome rather than a failure.
+ */
+export async function restorePurchases(
+  grantedWeekTransactionIds: ReadonlySet<string>,
+  grantedReviveTransactionIds: ReadonlySet<string>,
+): Promise<RestoreResult> {
+  if (!configured) return { status: 'error' };
+  try {
+    const customerInfo = await Purchases.restorePurchases();
+    const txns = customerInfo.nonSubscriptionTransactions;
+    return {
+      status: 'ok',
+      reconciliation: {
+        newlyGrantedWeeks: reconcilePurchases(txns, grantedWeekTransactionIds, weeksForProduct).newlyGranted,
+        newlyGrantedRevives: reconcileRevivePurchases(txns, grantedReviveTransactionIds, isReviveProduct).newlyGranted,
+      },
+    };
+  } catch (err) {
+    console.warn('[purchases] restore failed', err);
+    return { status: 'error' };
   }
 }
 

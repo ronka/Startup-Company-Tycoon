@@ -104,6 +104,21 @@ export const EVENTS = {
   PURCHASE_FAILED: 'purchase_failed',
   /** A revive token was consumed to un-end a bankrupt run (bought or dev-granted). */
   REVIVE_REDEEMED: 'revive_redeemed',
+  /** "Restore purchases" was tapped — `{ source }` is which surface it was tapped from. */
+  PURCHASE_RESTORE_STARTED: 'purchase_restore_started',
+  /**
+   * A restore finished — `{ source, outcome, weeks, revives }`. `outcome` is
+   * `restored` or `nothing`; both are successes. A high `nothing` rate is
+   * expected (consumables rarely leave anything to recover) and is not a
+   * failure signal — watch `purchase_restore_failed` for that.
+   */
+  PURCHASE_RESTORE_COMPLETED: 'purchase_restore_completed',
+  /** The store couldn't be reached for a restore — `{ source }`. */
+  PURCHASE_RESTORE_FAILED: 'purchase_restore_failed',
+
+  // Legal / support
+  /** A privacy, terms, or support link was opened — `{ link, source }`. */
+  LEGAL_LINK_OPENED: 'legal_link_opened',
 
   // App Store review
   /**

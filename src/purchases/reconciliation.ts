@@ -77,3 +77,16 @@ export interface LaunchReconciliation {
   newlyGrantedWeeks: GrantedTransaction[];
   newlyGrantedRevives: string[];
 }
+
+/**
+ * The result of an explicit, player-initiated "Restore Purchases" pass — the
+ * control App Review looks for on any screen that sells something (Guideline
+ * 3.1.1). Same reconciliation the launch pass runs, but the outcome has to
+ * distinguish a store round-trip that *failed* from one that succeeded owing
+ * nothing: the UI says very different things ("couldn't reach the App Store,
+ * try again" vs "nothing to restore"), and an empty `LaunchReconciliation`
+ * alone can't tell those apart.
+ */
+export type RestoreResult =
+  | { status: 'ok'; reconciliation: LaunchReconciliation }
+  | { status: 'error' };
