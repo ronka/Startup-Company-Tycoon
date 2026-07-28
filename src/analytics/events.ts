@@ -16,6 +16,7 @@ export const EVENTS = {
   TAB_VIEWED: 'tab_viewed',
   MENU_OPENED: 'menu_opened',
   HELP_VIEWED: 'help_viewed',
+  HISTORY_VIEWED: 'history_viewed',
   SETTINGS_VIEWED: 'settings_viewed',
 
   // Onboarding / identity

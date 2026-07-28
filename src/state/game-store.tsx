@@ -17,6 +17,7 @@ import {
 
 import { EVENTS, gameProps, track } from '@/analytics/events';
 import { posthog } from '@/analytics/posthog';
+import { totalHeadcount } from '@/game/balance';
 import { newGame, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
@@ -577,6 +578,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (newBest) {
         track(EVENTS.NEW_BEST_SCORE, { score, reason: state.gameOver, weeks: state.week });
       }
+      // An acquisition exits *above* the live valuation (the acquirer's premium,
+      // see `acquisitionOfferValuationFor`), so recording the live number would
+      // contradict the score shown beside it on the history screen. Score is
+      // equity × exit valuation, so invert it for the two exit outcomes; a
+      // bankruptcy scores a flat 0 and has no exit price, so record what the
+      // company was actually worth when it died.
+      const exitValuation =
+        state.gameOver !== 'bankruptcy' && state.founderEquity > 0
+          ? Math.round(score / state.founderEquity)
+          : Math.round(deriveWeeklyStats(state).valuation);
       setRunHistory(
         recordRun(historyBeforeRecording, {
           endedOnDateKey: dateKey(new Date()),
@@ -585,6 +596,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
           score,
           seed: state.createdWithSeed,
           companyName: state.companyName,
+          exitValuation,
+          founderEquity: state.founderEquity,
+          customers: Math.round(state.customers),
+          employees:
+            totalHeadcount(state.headcount) +
+            Object.values(state.cLevels).filter((slot) => slot.hired).length,
+          era: state.era,
+          focus: state.focus,
         }),
       );
     }

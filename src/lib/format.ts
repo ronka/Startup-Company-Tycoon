@@ -17,6 +17,26 @@ export function formatWeeks(weeks: number): string {
   return `${Math.max(0, Math.floor(weeks))} wk`;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A `dateKey` (local 'YYYY-MM-DD', see `src/state/week-budget.ts`) → "Jul 26",
+ * or "Jul 26, 2025" once the year differs from `now`.
+ *
+ * Parsed by hand rather than through `new Date(key)`: the Date constructor
+ * reads a bare ISO date as UTC midnight, which renders as the *previous* day
+ * everywhere west of Greenwich — turning a run finished tonight into yesterday's.
+ * Unparseable input is returned untouched rather than shown as "NaN".
+ */
+export function formatDateKey(key: string, now: Date = new Date()): string {
+  const [year, month, day] = key.split('-').map(Number);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return key;
+  const name = MONTHS[month - 1];
+  if (!name) return key;
+  const label = `${name} ${day}`;
+  return year === now.getFullYear() ? label : `${label}, ${year}`;
+}
+
 /** Compact whole-number count: 1_200 → "1.2K", 400 → "400". */
 export function formatCount(n: number): string {
   const sign = n < 0 ? '-' : '';
