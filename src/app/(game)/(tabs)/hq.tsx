@@ -12,6 +12,7 @@ import { CompanyHeader } from '@/components/game/company-header';
 import { FirstRunHint, HintSlot } from '@/components/game/first-run-hint';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
 import { InsolvencyBanner } from '@/components/game/insolvency-banner';
+import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
 import { NewsFeed } from '@/components/game/news-feed';
 import { Pill, PillRow } from '@/components/game/pill';
 import { PrimaryButton } from '@/components/game/primary-button';
@@ -46,6 +47,7 @@ export default function HqScreen() {
   const [pendingFocus, setPendingFocus] = useState<FocusId | null>(null);
   const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
   const [allNewsOpen, setAllNewsOpen] = useState(false);
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
   const [chartWidth, setChartWidth] = useState(0);
   const focusPickerRef = useRef<FocusPickerHandle>(null);
   useTabView('hq');
@@ -76,6 +78,11 @@ export default function HqScreen() {
     setPendingFocus(null);
   };
 
+  const openLogoPicker = () => {
+    track(EVENTS.COMPANY_LOGO_PICKER_OPENED, { surface: 'hq', had_logo: state.companyLogo != null });
+    setLogoPickerOpen(true);
+  };
+
   const openFocusPicker = () => {
     track(EVENTS.FOCUS_PICKER_OPENED, { focus: state.focus });
     focusPickerRef.current?.present();
@@ -84,7 +91,13 @@ export default function HqScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <CompanyHeader name={state.companyName} stage={state.stage} focus={state.focus} />
+        <CompanyHeader
+          name={state.companyName}
+          stage={state.stage}
+          focus={state.focus}
+          logo={state.companyLogo}
+          onPressLogo={openLogoPicker}
+        />
 
         <PillRow>
           {/* Week 0 is still year one, so the year is floor-then-+1, not ceil. */}
@@ -243,6 +256,14 @@ export default function HqScreen() {
       </BottomSheet>
 
       <BurnBreakdownModal state={state} visible={burnBreakdownOpen} onClose={() => setBurnBreakdownOpen(false)} />
+
+      <LogoPickerSheet
+        visible={logoPickerOpen}
+        name={state.companyName}
+        logo={state.companyLogo}
+        onCommit={(logo) => dispatch({ type: 'SET_COMPANY_LOGO', logo })}
+        onClose={() => setLogoPickerOpen(false)}
+      />
 
       <FocusPicker
         ref={focusPickerRef}

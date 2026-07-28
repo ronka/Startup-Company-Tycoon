@@ -65,6 +65,10 @@ export const EVENTS = {
   RUN_ENDED_IPO: 'run_ended_ipo',
   FOCUS_CHANGED: 'focus_changed',
   FOCUS_PICKER_OPENED: 'focus_picker_opened',
+  /** The company's emoji logo was changed on a live run. `logo` is null when cleared back to initials. Founding picks ride `game_started` instead — there's no run to attach them to yet. */
+  COMPANY_LOGO_CHANGED: 'company_logo_changed',
+  /** The logo picker was opened. `surface` is where from: `hq` (live run) or `founding` (onboarding). */
+  COMPANY_LOGO_PICKER_OPENED: 'company_logo_picker_opened',
   BURN_BREAKDOWN_OPENED: 'burn_breakdown_opened',
   EVENT_DECISION_MADE: 'event_decision_made',
 

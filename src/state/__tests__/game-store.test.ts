@@ -58,4 +58,12 @@ describe('storeReducer — NEW_GAME dispatch path', () => {
     expect(next?.companyName).toBe('Widgets Inc');
     expect(next?.week).toBe(0);
   });
+
+  // The store duplicates the engine's NEW_GAME case, so a param added to
+  // `newGame` can silently drop on the real dispatch path while engine tests pass.
+  it('carries the founding logo through', () => {
+    const next = storeReducer(null, { type: 'NEW_GAME', companyName: 'Widgets Inc', seed: 42, logo: '🚀' });
+
+    expect(next?.companyLogo).toBe('🚀');
+  });
 });

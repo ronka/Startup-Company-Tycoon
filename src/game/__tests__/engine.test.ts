@@ -86,6 +86,24 @@ describe('newGame', () => {
     expect(s.cLevels.cto.hired).toBeNull();
     expect(s.cLevels.cto.candidates).toHaveLength(6);
   });
+
+  it('carries the founding logo, and leaves it unset when none is picked', () => {
+    expect(newGame('Acme', 1, 'core', '🚀').companyLogo).toBe('🚀');
+    expect(newGame('Acme', 1).companyLogo).toBeUndefined();
+  });
+});
+
+describe('company logo', () => {
+  it('sets and clears the logo without touching the rest of the run', () => {
+    const start = newGame('Acme', 1, 'core', '🚀');
+
+    const changed = reduce(start, { type: 'SET_COMPANY_LOGO', logo: '🦄' });
+    expect(changed.companyLogo).toBe('🦄');
+    expect(changed.week).toBe(start.week);
+    expect(changed.cash).toBe(start.cash);
+
+    expect(reduce(changed, { type: 'SET_COMPANY_LOGO', logo: null }).companyLogo).toBeUndefined();
+  });
 });
 
 describe('product quality', () => {

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,12 +17,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
 import { Card } from '@/components/game/card';
+import { CompanyLogoTile } from '@/components/game/company-logo-tile';
+import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { SectionHeader } from '@/components/game/section-header';
 import { ThemedText } from '@/components/themed-text';
 import { TAB_SYMBOLS, type TabName } from '@/components/ui/tab-bar-icon';
 import { Radius, Spacing } from '@/constants/theme';
 import { BANKRUPTCY_FUSE_WEEKS } from '@/game/balance';
+import { randomCompanyLogo } from '@/game/company-logo';
 import { DEFAULT_COMPANY_NAME, newGame } from '@/game/engine';
 import type { FocusId } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
@@ -116,6 +120,9 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState<Step>(showIntro ? 'hook' : 'name');
   const [ceoName, setCeoNameInput] = useState('');
   const [companyName, setCompanyName] = useState('');
+  // Seeded with a random emoji so the founding tile is never blank; the player
+  // can swap it, or clear it back to initials, from the tile itself.
+  const [logo, setLogo] = useState<string | undefined>(() => randomCompanyLogo());
   const [focus, setFocus] = useState<FocusId>('core');
 
   const trimmedCeoName = ceoName.trim();
@@ -156,7 +163,7 @@ export default function OnboardingScreen() {
   const enterHq = () => {
     track(EVENTS.ONBOARDING_COMPLETED, { is_returning_ceo: isReturningCeo, focus });
     markOnboardingSeen();
-    startNewGame(company, focus);
+    startNewGame(company, focus, undefined, logo);
     router.replace('/hq');
   };
 
@@ -165,6 +172,9 @@ export default function OnboardingScreen() {
       <NameStep
         isReturningCeo={isReturningCeo}
         ceoName={profile?.ceoName}
+        companyName={company}
+        logo={logo}
+        onChangeLogo={(next) => setLogo(next ?? undefined)}
         canConfirm={
           isReturningCeo ? trimmedCompanyName.length > 0 : trimmedCeoName.length > 0 && trimmedCompanyName.length > 0
         }
@@ -451,25 +461,41 @@ function StoryStep({
 function NameStep({
   isReturningCeo,
   ceoName,
+  companyName,
+  logo,
   canConfirm,
   confirmLabel,
   onChangeCeoName,
   onChangeCompanyName,
+  onChangeLogo,
   onConfirm,
 }: {
   isReturningCeo: boolean;
   ceoName: string | undefined;
+  /** Already falls back to `DEFAULT_COMPANY_NAME`, so the logo tile always has initials to show. */
+  companyName: string;
+  logo: string | undefined;
   canConfirm: boolean;
   confirmLabel: string;
   onChangeCeoName: (text: string) => void;
   onChangeCompanyName: (text: string) => void;
+  onChangeLogo: (logo: string | null) => void;
   onConfirm: () => void;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
 
   const confirm = () => {
     if (canConfirm) onConfirm();
+  };
+
+  const openLogoPicker = () => {
+    track(EVENTS.COMPANY_LOGO_PICKER_OPENED, { surface: 'founding', had_logo: logo != null });
+    // The name field is autofocused inside a KeyboardAvoidingView — handing the
+    // keyboard straight to the sheet's own input races the modal transition.
+    Keyboard.dismiss();
+    setLogoPickerOpen(true);
   };
 
   return (
@@ -495,17 +521,30 @@ function NameStep({
           <Field label="Your name" placeholder="CEO name" onChangeText={onChangeCeoName} autoFocus returnKeyType="next" />
         ) : null}
 
-        <Field
-          label="Company name"
-          placeholder="Company name"
-          onChangeText={onChangeCompanyName}
-          autoFocus={isReturningCeo}
-          returnKeyType="done"
-          onSubmitEditing={confirm}
-        />
+        <View style={styles.companyRow}>
+          <CompanyLogoTile name={companyName} logo={logo} onPress={openLogoPicker} />
+          <View style={styles.companyField}>
+            <Field
+              label="Company name"
+              placeholder="Company name"
+              onChangeText={onChangeCompanyName}
+              autoFocus={isReturningCeo}
+              returnKeyType="done"
+              onSubmitEditing={confirm}
+            />
+          </View>
+        </View>
 
         <PrimaryButton label={confirmLabel} onPress={confirm} disabled={!canConfirm} />
       </ScrollView>
+
+      <LogoPickerSheet
+        visible={logoPickerOpen}
+        name={companyName}
+        logo={logo}
+        onCommit={onChangeLogo}
+        onClose={() => setLogoPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -552,6 +591,14 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: Spacing.two,
+  },
+  companyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.two,
+  },
+  companyField: {
+    flex: 1,
   },
   input: {
     borderRadius: Radius.md,

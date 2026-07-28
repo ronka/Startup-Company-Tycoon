@@ -145,6 +145,13 @@ export interface GameState {
   createdWithSeed: number;
   /** The company name chosen at onboarding; drives the HQ header. */
   companyName: string;
+  /**
+   * The company's emoji logo, shown in the HQ header tile. Optional on purpose:
+   * saves written before the feature existed have no value at all, and clearing
+   * the logo is a supported choice — either way `undefined` means "fall back to
+   * the company's initials". Never bump the save key for it.
+   */
+  companyLogo?: string;
   rng: RngState;
 
   // Clock
@@ -232,8 +239,10 @@ export interface GameState {
 
 export type GameAction =
   | { type: 'TICK' }
-  /** `focus` is the founder type chosen during onboarding; omitted, the run starts on `core`. */
-  | { type: 'NEW_GAME'; seed?: number; companyName: string; focus?: FocusId }
+  /** `focus` is the founder type chosen during onboarding; omitted, the run starts on `core`. `logo` is the emoji picked alongside the name. */
+  | { type: 'NEW_GAME'; seed?: number; companyName: string; focus?: FocusId; logo?: string }
+  /** Cosmetic only. `null` clears the logo, putting the header tile back on initials. */
+  | { type: 'SET_COMPANY_LOGO'; logo: string | null }
   | { type: 'SET_PENDING_HIRES'; role: Role; delta: number }
   | { type: 'SET_MORALE_LEVER'; active: boolean }
   | { type: 'HIRE_CLEVEL'; role: CLevelRole; candidateId: string }

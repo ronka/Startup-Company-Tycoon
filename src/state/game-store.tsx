@@ -89,7 +89,7 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
     case 'SET_STATE':
       return action.state;
     case 'NEW_GAME':
-      return newGame(action.companyName, action.seed, action.focus);
+      return newGame(action.companyName, action.seed, action.focus, action.logo);
     default:
       return state === null ? state : reduce(state, action);
   }
@@ -175,6 +175,9 @@ function captureAction(action: GameAction, state: GameState): void {
     case 'SET_FOCUS':
       track(EVENTS.FOCUS_CHANGED, { ...base, focus: action.focus, previous_focus: state.focus });
       break;
+    case 'SET_COMPANY_LOGO':
+      track(EVENTS.COMPANY_LOGO_CHANGED, { ...base, logo: action.logo, had_logo: state.companyLogo != null });
+      break;
     default:
       break;
   }
@@ -202,8 +205,8 @@ interface GameContextValue {
    */
   saveLoaded: boolean;
   dispatch: (action: GameAction) => void;
-  /** `focus` is the onboarding founder type; omitted, the run starts on `core`. */
-  startNewGame: (companyName: string, focus?: FocusId, seed?: number) => void;
+  /** `focus` is the onboarding founder type; omitted, the run starts on `core`. `logo` is the emoji picked at founding. */
+  startNewGame: (companyName: string, focus?: FocusId, seed?: number, logo?: string) => void;
   /** Wipe the autosave and clear in-memory state. */
   clearSave: () => void;
   /**
@@ -660,7 +663,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     loading,
     saveLoaded,
     dispatch: dispatchWithSnapshot,
-    startNewGame: (companyName: string, focus?: FocusId, seed?: number) => {
+    startNewGame: (companyName: string, focus?: FocusId, seed?: number, logo?: string) => {
       setPreviousState(null);
       setLastRunWasBest(false);
       track(EVENTS.GAME_STARTED, {
@@ -668,10 +671,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         is_returning_ceo: profile?.ceoName != null,
         seed: seed ?? null,
         focus: focus ?? 'core',
+        logo: logo ?? null,
         $set: { company_name: companyName },
         $set_once: { first_game_at: new Date().toISOString() },
       });
-      dispatch({ type: 'NEW_GAME', companyName, seed, focus });
+      dispatch({ type: 'NEW_GAME', companyName, seed, focus, logo });
     },
     clearSave: () => {
       setPreviousState(null);

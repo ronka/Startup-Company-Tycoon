@@ -141,8 +141,15 @@ export const DEFAULT_COMPANY_NAME = 'Newco';
  * Create a fresh run. Defaults to a time-based seed for real play.
  * `focus` is the founder type picked during onboarding — set at creation, so
  * it carries no switching penalty (`focusChangedWeek` stays at week 0).
+ * `logo` is the emoji picked alongside the name; omitted, the header falls back
+ * to the company's initials.
  */
-export function newGame(companyName: string, seed: number = Date.now(), focus: FocusId = 'core'): GameState {
+export function newGame(
+  companyName: string,
+  seed: number = Date.now(),
+  focus: FocusId = 'core',
+  logo?: string,
+): GameState {
   let rng = createRng(seed);
   const cLevels = {} as CLevels;
   for (const role of C_LEVEL_ROLES) {
@@ -168,6 +175,7 @@ export function newGame(companyName: string, seed: number = Date.now(), focus: F
   return {
     createdWithSeed: seed,
     companyName,
+    companyLogo: logo,
     rng,
     week: 0,
     cash: STARTING_CASH,
@@ -585,9 +593,11 @@ function drawEventIfDue(state: GameState): GameState {
 export function reduce(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'NEW_GAME':
-      return newGame(action.companyName, action.seed, action.focus);
+      return newGame(action.companyName, action.seed, action.focus, action.logo);
     case 'TICK':
       return tick(state);
+    case 'SET_COMPANY_LOGO':
+      return { ...state, companyLogo: action.logo ?? undefined };
     case 'SET_PENDING_HIRES': {
       const cap = maxHireableHeadcount(action.role, state.cash);
       const next = clamp(state.pendingHeadcount[action.role] + action.delta, 0, cap);

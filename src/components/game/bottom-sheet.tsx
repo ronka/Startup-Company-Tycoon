@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,23 +17,63 @@ import { useTheme } from '@/hooks/use-theme';
  *
  * `dismissible` is off for sheets the player must answer (decision cards):
  * backdrop taps and the ✕ are both suppressed.
+ *
+ * `avoidKeyboard` is opt-in because the sheet is pinned to the bottom: only the
+ * sheets holding a text input need to be lifted, and wrapping the rest costs
+ * them a layout pass for nothing.
  */
 export function BottomSheet({
   visible,
   onClose,
   title,
   dismissible = true,
+  avoidKeyboard = false,
   children,
 }: {
   visible: boolean;
   onClose?: () => void;
   title?: string;
   dismissible?: boolean;
+  avoidKeyboard?: boolean;
   children: ReactNode;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const canDismiss = dismissible && !!onClose;
+
+  const sheet = (
+    <>
+      <Pressable
+        style={styles.backdrop}
+        onPress={canDismiss ? onClose : undefined}
+        accessibilityRole={canDismiss ? 'button' : undefined}
+        accessibilityLabel={canDismiss ? 'Close' : undefined}
+      />
+      <View
+        style={[
+          styles.sheet,
+          { backgroundColor: theme.surface, borderColor: theme.border, paddingBottom: insets.bottom + Spacing.four },
+        ]}>
+        <View style={[styles.grabber, { backgroundColor: theme.border }]} />
+        {canDismiss ? (
+          <Pressable
+            onPress={onClose}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            style={styles.close}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.closeGlyph}>
+              ✕
+            </ThemedText>
+          </Pressable>
+        ) : null}
+        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} bounces={false}>
+          {title ? <ThemedText type="sheetTitle">{title}</ThemedText> : null}
+          {children}
+        </ScrollView>
+      </View>
+    </>
+  );
 
   return (
     <Modal
@@ -41,40 +81,13 @@ export function BottomSheet({
       transparent
       animationType="slide"
       onRequestClose={canDismiss ? onClose : undefined}>
-      <View style={styles.root}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={canDismiss ? onClose : undefined}
-          accessibilityRole={canDismiss ? 'button' : undefined}
-          accessibilityLabel={canDismiss ? 'Close' : undefined}
-        />
-        <View
-          style={[
-            styles.sheet,
-            { backgroundColor: theme.surface, borderColor: theme.border, paddingBottom: insets.bottom + Spacing.four },
-          ]}>
-          <View style={[styles.grabber, { backgroundColor: theme.border }]} />
-          {canDismiss ? (
-            <Pressable
-              onPress={onClose}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              style={styles.close}>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.closeGlyph}>
-                ✕
-              </ThemedText>
-            </Pressable>
-          ) : null}
-          <ScrollView
-            contentContainerStyle={styles.body}
-            showsVerticalScrollIndicator={false}
-            bounces={false}>
-            {title ? <ThemedText type="sheetTitle">{title}</ThemedText> : null}
-            {children}
-          </ScrollView>
-        </View>
-      </View>
+      {avoidKeyboard ? (
+        <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          {sheet}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.root}>{sheet}</View>
+      )}
     </Modal>
   );
 }
