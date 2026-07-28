@@ -190,8 +190,16 @@ interface GameContextValue {
    * UI-only — never touches the pure engine's GameState shape.
    */
   previousState: GameState | null;
-  /** True until the initial AsyncStorage load resolves. */
+  /** True until the whole initial load resolves — including the launch purchase reconciliation. */
   loading: boolean;
+  /**
+   * True as soon as the autosave read settles (found, missing, or failed) —
+   * strictly earlier than `loading`, which also waits on a RevenueCat network
+   * round trip. This is the signal for "we now know whether a run exists", so
+   * launch routing (`src/app/index.tsx`) and the splash gate can act on the
+   * save without being held behind the store call.
+   */
+  saveLoaded: boolean;
   dispatch: (action: GameAction) => void;
   /** `focus` is the onboarding founder type; omitted, the run starts on `core`. */
   startNewGame: (companyName: string, focus?: FocusId, seed?: number) => void;
@@ -287,6 +295,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(storeReducer, null);
   const [previousState, setPreviousState] = useState<GameState | null>(null);
   const [loading, setLoading] = useState(true);
+  // Resolves ahead of `loading`, as soon as the autosave read settles — see the
+  // context type above and the mount effect below.
+  const [saveLoaded, setSaveLoaded] = useState(false);
   const [weekBudget, setWeekBudget] = useState<WeekBudget | null>(null);
   const [purchasedWeeks, setPurchasedWeeks] = useState<PurchasedWeeksPool | null>(null);
   const [revivePool, setRevivePool] = useState<RevivePool | null>(null);
@@ -322,6 +333,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.warn('[game-store] failed to load save', err);
+      } finally {
+        // Flipped here rather than with `loading` below: launch routing only
+        // needs to know whether a run exists, and everything after this point
+        // (week budget, purchases, streak, ...) would make it wait on a
+        // network call before the player sees their game.
+        if (!cancelled) setSaveLoaded(true);
       }
       try {
         const raw = await AsyncStorage.getItem(WEEK_BUDGET_STORAGE_KEY);
@@ -581,6 +598,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // Store-layer-only rate limit (PRD F12) — the engine never sees this.
       // Purchased weeks (IAP week-packs) top up the free budget rather than
       // replacing it: spend order is free-first via `spendWeekFromPools`.
+      // Launch now routes straight into the run off `saveLoaded`, which lands a
+      // frame or two ahead of the pools finishing their own reads. Ticking in
+      // that window would advance the week without spending anything, so hold
+      // the tap instead of handing out a free week.
+      if (!devFreePlay && (weekBudget === null || purchasedWeeks === null)) return;
       if (isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay)) {
         // The player hit the daily wall — a key retention/monetization signal.
         track(EVENTS.WEEK_ADVANCE_BLOCKED, gameProps(state));
@@ -617,6 +639,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     state,
     previousState,
     loading,
+    saveLoaded,
     dispatch: dispatchWithSnapshot,
     startNewGame: (companyName: string, focus?: FocusId, seed?: number) => {
       setPreviousState(null);

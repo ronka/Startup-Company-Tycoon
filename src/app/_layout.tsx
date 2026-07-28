@@ -8,16 +8,12 @@ import { posthog } from '@/analytics/posthog';
 import { useScreenTracking } from '@/analytics/use-screen-tracking';
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import { NotificationManager } from '@/components/game/notification-manager';
-import { GameProvider } from '@/state/game-store';
+import { GameProvider, useGame } from '@/state/game-store';
 import '@/src/global.css';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       {/* Outermost so the game store and every screen can capture events.
@@ -28,6 +24,7 @@ export default function RootLayout() {
         <GluestackUIProvider mode="dark">
           <ThemeProvider value={DarkTheme}>
             <GameProvider>
+              <SplashGate />
               <NotificationManager />
               <AppNavigator />
             </GameProvider>
@@ -36,6 +33,28 @@ export default function RootLayout() {
       </PostHogProvider>
     </GestureHandlerRootView>
   );
+}
+
+/**
+ * Holds the native splash until the autosave has been read, so the launch
+ * routing in `app/index.tsx` can redirect a returning player to their game
+ * without the start menu flashing underneath. Lives inside `GameProvider`
+ * because it reads the store; renders nothing.
+ */
+function SplashGate(): ReactNode {
+  const { saveLoaded } = useGame();
+
+  useEffect(() => {
+    if (!saveLoaded) return;
+    // A frame later, so the redirected screen has committed and the splash
+    // doesn't lift onto an empty background.
+    const frame = requestAnimationFrame(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [saveLoaded]);
+
+  return null;
 }
 
 /** Hosts the route stack and emits a `$screen` event on every route change. */

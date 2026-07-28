@@ -87,6 +87,32 @@ export default function SettingsScreen() {
   }, [resetAll, router]);
 
   /**
+   * Abandons the current run and starts a fresh company. The app resumes
+   * straight into the saved run on launch (see `app/index.tsx`), so the start
+   * menu's "New Game" is out of reach mid-run — this is the way back to it.
+   * The save isn't wiped here; finishing onboarding replaces it anyway, and
+   * backing out of onboarding should leave the run intact.
+   */
+  const confirmNewGame = useCallback(() => {
+    Alert.alert(
+      'Start a new game?',
+      'Your current run ends here and a brand-new company starts. This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start',
+          style: 'destructive',
+          onPress: () => {
+            track(EVENTS.NEW_GAME_TAPPED, { has_run_in_progress: true, source: 'settings' });
+            router.replace('/onboarding');
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [router]);
+
+  /**
    * Replays the intro story and every contextual hint, then starts a new run.
    * The current run isn't wiped here — finishing onboarding starts a fresh
    * game anyway, so warn about that rather than silently discarding it.
@@ -162,13 +188,6 @@ export default function SettingsScreen() {
             router.back();
           },
         },
-        {
-          text: 'Start new game',
-          style: 'destructive',
-          onPress: () => {
-            router.push('/onboarding');
-          },
-        },
         { text: 'Cancel', style: 'cancel' },
       ],
       { cancelable: true },
@@ -237,6 +256,17 @@ export default function SettingsScreen() {
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           Reset
         </ThemedText>
+
+        <Pressable onPress={confirmNewGame} accessibilityRole="button">
+          <ThemedView type="backgroundElement" style={styles.row}>
+            <ThemedText type="default" themeColor="danger">
+              New game
+            </ThemedText>
+            <ThemedText type="default" themeColor="textSecondary">
+              ›
+            </ThemedText>
+          </ThemedView>
+        </Pressable>
 
         <Pressable onPress={confirmReplayIntro} accessibilityRole="button">
           <ThemedView type="backgroundElement" style={styles.row}>
