@@ -777,16 +777,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setProfileState(null);
       setStreak(null);
       setWeekBudget(initialWeekBudget(new Date()));
-      setPurchasedWeeks(initialPurchasedWeeksPool());
-      setRevivePool(initialRevivePool());
       setRunHistory(initialRunHistory());
+      // Deliberately *not* reset: the purchased-weeks and revive pools. Both
+      // are paid entitlements ("a durable entitlement, not a daily allowance",
+      // see `week-budget.ts`), so wiping them here would destroy something the
+      // player bought. It would also re-grant it: each pool carries the
+      // `grantedTransactionIds` ledger that is the only thing stopping a
+      // reconciliation pass from crediting a purchase twice, and this reset
+      // leaves the RevenueCat identity untouched (nothing calls `logOut`) — so
+      // clearing the ledger let the next launch pass re-credit the player's
+      // entire purchase history for free.
       track(EVENTS.APP_RESET);
       // New anonymous identity so a fresh setup isn't attributed to the old player.
       posthog.reset();
       // State→null lets the autosave effect remove the save key, and the fresh
-      // week budget / purchased pool / run history are written by their own
-      // effects. Profile and streak are guarded against null-persist, so
-      // their keys never auto-clear — remove them here.
+      // week budget / run history are written by their own effects. Profile
+      // and streak are guarded against null-persist, so their keys never
+      // auto-clear — remove them here.
       dispatch({ type: 'HYDRATE', state: null });
       Promise.all([
         AsyncStorage.removeItem(PROFILE_STORAGE_KEY),
