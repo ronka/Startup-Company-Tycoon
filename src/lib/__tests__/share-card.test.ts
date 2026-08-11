@@ -51,7 +51,7 @@ describe('sparkline', () => {
 describe('buildShareText', () => {
   it('renders a winning run', () => {
     expect(buildShareText(runOf())).toBe(
-      ['Startup Company Tycoon — Acorn Labs', '', '▁▂▂▄▃▅▇█  IPO, week 68', '$312M founder take'].join('\n'),
+      ['Startup Empire Tycoon — Acorn Labs', '', '▁▂▂▄▃▅▇█  IPO, week 68', '$312M founder take'].join('\n'),
     );
   });
 
@@ -66,7 +66,7 @@ describe('buildShareText', () => {
           valuationHistory: [3, 4, 5, 3, 2, 1, 1, 1],
         }),
       ),
-    ).toBe(['Startup Company Tycoon — Nimbus AI', '', '▅▆█▅▃▁▁▁  Bankrupt, week 31', '$0'].join('\n'));
+    ).toBe(['Startup Empire Tycoon — Nimbus AI', '', '▅▆█▅▃▁▁▁  Bankrupt, week 31', '$0'].join('\n'));
   });
 
   it('labels an acquisition', () => {
@@ -76,7 +76,7 @@ describe('buildShareText', () => {
   it('drops the sparkline line when the run ended too early to have one', () => {
     const text = buildShareText(runOf({ week: 1, valuationHistory: [] }));
     expect(text).toBe(
-      ['Startup Company Tycoon — Acorn Labs', '', 'IPO, week 1', '$312M founder take'].join('\n'),
+      ['Startup Empire Tycoon — Acorn Labs', '', 'IPO, week 1', '$312M founder take'].join('\n'),
     );
   });
 

@@ -332,7 +332,7 @@ function row(state: GameState): string {
 let state = newGame(DEFAULT_COMPANY_NAME, seed);
 let peakRevenue = 0;
 
-console.log(`Startup Tycoon — headless sim (strategy: ${strategy}, seed ${seed})`);
+console.log(`Startup Empire Tycoon — headless sim (strategy: ${strategy}, seed ${seed})`);
 console.log('week |         cash |      burn |   revenue |  valuation | customers |       era');
 console.log('-----+--------------+-----------+-----------+------------+-----------+-----------');
 

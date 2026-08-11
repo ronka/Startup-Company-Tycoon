@@ -61,7 +61,7 @@ const CompanyWidgetLayout = (props: WidgetSnapshot, environment: WidgetEnvironme
     return (
       <VStack alignment="leading" spacing={4} modifiers={[...shell, padding({ all: 12 })]}>
         <Text modifiers={[font({ size: 15, weight: 'bold' }), foregroundStyle(TEXT)]}>
-          Startup Tycoon
+          Startup Empire Tycoon
         </Text>
         <Text modifiers={[font({ size: 13 }), foregroundStyle(TEXT_SECONDARY)]}>
           Start your company

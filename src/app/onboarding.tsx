@@ -190,7 +190,7 @@ export default function OnboardingScreen() {
     return (
       <StoryStep
         stepKey="hook"
-        eyebrow="Startup Tycoon"
+        eyebrow="Startup Empire Tycoon"
         headline="You just quit your job."
         body="You've got an idea, a little cash, and rent due in a few months. Time to build something people want — before the money runs out."
         primaryLabel="Let's do this"

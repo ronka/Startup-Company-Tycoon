@@ -63,7 +63,7 @@ export default function StartMenu() {
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <View style={styles.hero}>
         <ThemedText type="title" style={styles.title}>
-          Startup{'\n'}Tycoon
+          Startup{'\n'}Empire{'\n'}Tycoon
         </ThemedText>
         <ThemedText themeColor="textSecondary" style={styles.tagline}>
           Found a company. Make the weekly calls. Reach the exit before the cash runs out.

@@ -12,7 +12,7 @@ import type { GameOverReason } from '@/game/types';
 import { formatMoney } from './format';
 
 /** Matches `expo.name` in app.json — the share text is the only place it's user-visible outside the store. */
-const APP_NAME = 'Startup Company Tycoon';
+const APP_NAME = 'Startup Empire Tycoon';
 
 const OUTCOME: Record<GameOverReason, string> = {
   bankruptcy: 'Bankrupt',
@@ -90,7 +90,7 @@ export interface ShareCardInput {
  * The shareable summary of a finished run:
  *
  * ```
- * Startup Company Tycoon — Acorn Labs
+ * Startup Empire Tycoon — Acorn Labs
  *
  * ▁▂▂▄▃▅▇█  IPO, week 68
  * $312M founder take

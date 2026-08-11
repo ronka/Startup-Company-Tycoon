@@ -24,7 +24,7 @@ export default function GameDrawerLayout() {
         drawerInactiveTintColor: theme.textSecondary,
         drawerActiveBackgroundColor: theme.backgroundElement,
       }}>
-      <Drawer.Screen name="(tabs)" options={{ drawerLabel: 'Startup Tycoon' }} />
+      <Drawer.Screen name="(tabs)" options={{ drawerLabel: 'Startup Empire Tycoon' }} />
       <Drawer.Screen name="history" options={{ drawerLabel: 'History' }} />
       <Drawer.Screen name="help" options={{ drawerLabel: 'Help' }} />
       <Drawer.Screen name="settings" options={{ drawerLabel: 'Settings' }} />

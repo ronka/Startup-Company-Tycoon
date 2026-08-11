@@ -40,7 +40,7 @@ export function notificationContentFor(state: GameState | null): NotificationCon
   }
 
   return {
-    title: 'Startup Tycoon',
+    title: 'Startup Empire Tycoon',
     body: `Week ${state.week} — come back and check on the team.`,
   };
 }

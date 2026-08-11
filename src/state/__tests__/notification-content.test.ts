@@ -49,7 +49,7 @@ describe('notificationContentFor', () => {
   it('falls back to a plain nudge when nothing is urgent', () => {
     const s: GameState = { ...newGame('Acme', 1), cash: 50_000_000 };
     const content = notificationContentFor(s);
-    expect(content?.title).toBe('Startup Tycoon');
+    expect(content?.title).toBe('Startup Empire Tycoon');
     expect(content?.body).toContain(`Week ${s.week}`);
   });
 
