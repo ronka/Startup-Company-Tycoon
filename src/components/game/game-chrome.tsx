@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { presentWeeksPaywall, purchasesAvailable } from '@/purchases';
+import { purchasesAvailable } from '@/purchases';
 import { EVENTS, track } from '@/analytics/events';
-import { BuyWeeksSheet, type BuyWeeksTrigger } from '@/components/game/buy-weeks-sheet';
+import { BuyWeeksSheet } from '@/components/game/buy-weeks-sheet';
 import { DayCompleteSheet } from '@/components/game/day-complete-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { HintSlot, useFirstRunHint } from '@/components/game/first-run-hint';
@@ -20,10 +20,11 @@ import { isNotableWeek } from '@/game/digest';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { tomorrowAgendaFor } from '@/state/day-close';
+import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
 import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
 import { notificationAskSettled } from '@/state/review-ask';
-import { notePurchaseFailed, reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
+import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import { WEEKS_BANK_CAP, dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
 
 /** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
@@ -59,7 +60,6 @@ export function GameChrome() {
     weekBudget,
     purchasedWeeks,
     creditPurchase,
-    reconcileAfterPaywall,
     devFreePlay,
     setDevFreePlay,
     streak,
@@ -67,24 +67,6 @@ export function GameChrome() {
   const insets = useSafeAreaInsets();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
-  // True while the RevenueCat paywall is on screen. Always cleared by the
-  // settling of its own promise — the paywall is a native presentation that
-  // outlives this component's render tree, so it reports back even if the run
-  // ends underneath it. The closing panel gates on this *and* on the sheet
-  // below, because presenting into either is the same iOS modal race
-  // (docs/bug-stuck-decision-modal.md).
-  const [paywallPresenting, setPaywallPresenting] = useState(false);
-  // Synchronous guard for the one thing committed React state can't catch: two
-  // taps landing in the same render both read the old `false` and both present.
-  // That double-present is the iOS hang, so the guard must see the first tap
-  // immediately.
-  const buyFlowOpenRef = useRef(false);
-  // Whether the chrome is currently rendering nothing (no run, or the run is
-  // over). Read by the async fallback path below, which resolves long after the
-  // tap that started it and must not hand a trigger to a sheet that can't mount.
-  const chromeDarkRef = useRef(false);
-  // Non-null only when the in-app sheet is standing in for the hosted paywall.
-  const [buySheetTrigger, setBuySheetTrigger] = useState<BuyWeeksTrigger | null>(null);
   // Week whose recap has "settled" — armed a beat after its tick's decision
   // card (if any) is answered, so the recap never presents into the same frame
   // the DecisionModal is dismissing (present-while-dismiss hangs iOS — see
@@ -113,85 +95,10 @@ export function GameChrome() {
   // the closing-panel effects key off it and hooks can't run conditionally.
   const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
 
-  /**
-   * The single entry point to "player wants more weeks", from all four
-   * triggers. Presents the RevenueCat-hosted paywall and falls back to the
-   * in-app sheet only when that paywall never made it to the screen.
-   *
-   * The hosted paywall reports how it closed and nothing more — no
-   * transaction — so a completed purchase is credited by re-running the
-   * launch reconciliation against the ledger (`reconcileAfterPaywall`), which
-   * is the same idempotent pass that already makes an interrupted purchase
-   * self-heal. Nothing here grants weeks directly.
-   */
-  const openBuyWeeks = useCallback(
-    (trigger: BuyWeeksTrigger) => {
-      // Two presentations into the same frame is the iOS hang this codebase
-      // keeps tripping over; one buy surface at a time, always.
-      if (buyFlowOpenRef.current) return;
-      buyFlowOpenRef.current = true;
-      setPaywallPresenting(true);
-      presentWeeksPaywall()
-        .then(async (outcome) => {
-          if (outcome === 'not_presented') {
-            // Offerings failed to load, no paywall attached, or this binary
-            // predates the paywall UI module. The sheet carries its own
-            // hardcoded pack catalog, so it still works where this doesn't.
-            setPaywallPresenting(false);
-            // Pressing Next Week at the wall can tick straight into bankruptcy
-            // and *then* open this flow, and the offerings round-trip above can
-            // take seconds — long enough for the run to be over and the chrome
-            // dark by the time we land here. Setting the trigger now would
-            // leave it armed and pop the sheet unprompted at the start of the
-            // player's next run, so route nowhere instead.
-            if (chromeDarkRef.current) {
-              buyFlowOpenRef.current = false;
-              return;
-            }
-            // The sheet takes over the flow from here, so the guard stays
-            // armed and its `onClose` is what releases it.
-            setBuySheetTrigger(trigger);
-            return;
-          }
-          track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'revenuecat' });
-          if (outcome === 'purchased' || outcome === 'restored') {
-            let { weeks } = await reconcileAfterPaywall();
-            // The old sheet got its transaction straight back from
-            // `purchasePackage()`; this path infers it from `getCustomerInfo()`,
-            // which may answer from a cache that hasn't caught the purchase
-            // that just completed. Left alone, that's a player who paid and
-            // sees nothing until the next cold start heals it. The pass is
-            // idempotent, so one retry is free insurance against that window.
-            if (weeks === 0 && outcome === 'purchased') {
-              await new Promise((resolve) => setTimeout(resolve, 1200));
-              weeks = (await reconcileAfterPaywall()).weeks;
-            }
-            track(EVENTS.PURCHASE_COMPLETED, {
-              trigger,
-              surface: 'revenuecat',
-              outcome,
-              weeks_granted: weeks,
-            });
-          } else if (outcome === 'error') {
-            track(EVENTS.PURCHASE_FAILED, { trigger, surface: 'revenuecat', error_code: 'unknown' });
-            // Only a genuine failure suppresses the review ask — deliberately
-            // *not* `cancelled`. Dismissing a full-screen paywall is ordinary
-            // browsing, and treating it as a failed purchase would mute the
-            // review prompt for most players who ever glance at this screen.
-            notePurchaseFailed();
-          }
-          buyFlowOpenRef.current = false;
-          setPaywallPresenting(false);
-        })
-        .catch(() => {
-          track(EVENTS.PURCHASE_FAILED, { trigger, surface: 'revenuecat', error_code: 'unknown' });
-          notePurchaseFailed();
-          buyFlowOpenRef.current = false;
-          setPaywallPresenting(false);
-        });
-    },
-    [reconcileAfterPaywall],
-  );
+  // The whole buy-weeks flow — presenting the paywall, falling back to the
+  // sheet, crediting and reporting — lives in `useBuyWeeksFlow`. The chrome
+  // only says when it was asked for and where the sheet goes.
+  const buyWeeks = useBuyWeeksFlow(state !== null && !state.gameOver);
 
   useEffect(() => {
     AsyncStorage.getItem(DAY_COMPLETE_KEY)
@@ -216,8 +123,7 @@ export function GameChrome() {
     dayCompleteLoaded && // don't flash before we know whether today is spent
     budgetExhausted &&
     !state.pendingEvent && // DecisionModal owns the screen
-    !paywallPresenting && // never stack on the RevenueCat paywall
-    buySheetTrigger === null && // ...nor on the fallback sheet
+    !buyWeeks.isOpen && // never stack on a buy-weeks surface
     // The tick that spent the last week still owes the player its recap:
     // `WeekInReviewSheet` arms 350ms *after* this panel would otherwise open,
     // and would present straight into it. The recap is the earlier beat, so
@@ -250,18 +156,6 @@ export function GameChrome() {
     const timer = setTimeout(() => setRecapArmedWeek(pendingWeek), 350);
     return () => clearTimeout(timer);
   }, [pendingWeek]);
-
-  // The fallback sheet renders *below* the early return, so a run ending while
-  // it is open — pressing Next Week at the wall can tick straight into
-  // bankruptcy — unmounts it without `onClose` ever firing. Releasing the guard
-  // here is what stops it staying armed and silently no-opping every later buy
-  // trigger this session. Ref-only on purpose: `paywallPresenting` clears
-  // itself via the promise, so there is no state to reconcile here.
-  const chromeDark = state === null || Boolean(state.gameOver);
-  useEffect(() => {
-    chromeDarkRef.current = chromeDark;
-    if (chromeDark) buyFlowOpenRef.current = false;
-  }, [chromeDark]);
 
   if (!state || state.gameOver) return null;
 
@@ -331,7 +225,7 @@ export function GameChrome() {
               // drifted off before reaching it. Where purchases exist, the press
               // also opens the week-pack sheet.
               dispatch({ type: 'TICK' });
-              if (budgetExhausted && purchasesAvailable) openBuyWeeks('out_of_weeks');
+              if (budgetExhausted && purchasesAvailable) buyWeeks.open('out_of_weeks');
             }}
             disabled={!!state.pendingEvent}
             style={styles.nextButton}
@@ -358,7 +252,7 @@ export function GameChrome() {
         <View style={styles.budgetRow}>
           {budgetExhausted ? (
             purchasesAvailable ? (
-              <Pressable onPress={() => openBuyWeeks('out_of_weeks')} accessibilityRole="button">
+              <Pressable onPress={() => buyWeeks.open('out_of_weeks')} accessibilityRole="button">
                 <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
                   That&apos;s the week planned out — the team gets to work.{' '}
                   <ThemedText type="smallBold" themeColor="text">
@@ -373,7 +267,7 @@ export function GameChrome() {
             )
           ) : weekBudget ? (
             purchasesAvailable ? (
-              <Pressable onPress={() => openBuyWeeks('hud')} accessibilityRole="button">
+              <Pressable onPress={() => buyWeeks.open('hud')} accessibilityRole="button">
                 <WeekBudgetDots
                   weeksRemaining={weekBudget.weeksRemaining}
                   purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
@@ -427,7 +321,7 @@ export function GameChrome() {
             ? () => {
                 setDayCompleteVisible(false);
                 track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'buy_weeks' });
-                openBuyWeeks('out_of_weeks');
+                buyWeeks.open('out_of_weeks');
               }
             : undefined
         }
@@ -441,12 +335,9 @@ export function GameChrome() {
 
       {purchasesAvailable ? (
         <BuyWeeksSheet
-          visible={buySheetTrigger !== null}
-          trigger={buySheetTrigger ?? 'hud'}
-          onClose={() => {
-            buyFlowOpenRef.current = false;
-            setBuySheetTrigger(null);
-          }}
+          visible={buyWeeks.sheetTrigger !== null}
+          trigger={buyWeeks.sheetTrigger ?? 'hud'}
+          onClose={buyWeeks.closeSheet}
           onPurchased={creditPurchase}
         />
       ) : null}

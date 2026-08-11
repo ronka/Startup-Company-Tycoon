@@ -73,21 +73,25 @@ export default function GameOverScreen() {
   // `/` before the replace below has moved us to the live game.
   const [redeeming, setRedeeming] = useState(false);
 
-  // First-run hints are exactly that — first *run*. A round that is genuinely
-  // over retires the whole pass, so the next company isn't taught the same
-  // lessons again. Idempotent, and Settings → Replay intro (and the debug reset)
-  // still bring them back.
-  //
-  // Not while a bailout is still on the table, though: a first-run player who
-  // pays to revive is *continuing* that run, not ending it, and pulling their
-  // hints mid-game would be a strange thing to buy. `startFresh` retires on that
-  // path instead — choosing a new company is what ends the round. Held until
-  // `revivePool` resolves so an unredeemed token can't be missed and retire the
-  // pass a moment before the bailout offer appears.
+  /**
+   * Whether this run is over for good, as opposed to merely showing its ending.
+   * A bailout still on the table means it isn't: the player can pay to carry on,
+   * so `startFresh` is what settles it on that path.
+   *
+   * Waits for `revivePool` to resolve, or an unredeemed token would be missed in
+   * the beat before the bailout offer appears.
+   */
+  const roundEndedForGood = reason !== null && revivePool !== null && !canBailout;
+
+  // First-run hints are exactly that — first *run*. Retire the whole pass once
+  // the round is settled, so the next company isn't taught the same lessons
+  // again. A first-run player who pays to revive is continuing that run, not
+  // ending it, and pulling their hints mid-game would be a strange thing to buy.
+  // Idempotent, and Settings → Replay intro (and the debug reset) still bring
+  // them back.
   useEffect(() => {
-    if (!reason || revivePool === null || canBailout) return;
-    retireAllHints();
-  }, [reason, revivePool, canBailout]);
+    if (roundEndedForGood) retireAllHints();
+  }, [roundEndedForGood]);
 
   useEffect(() => {
     if (!reason) return;

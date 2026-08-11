@@ -142,7 +142,7 @@ export const EVENTS = {
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
 
-type Props = Record<string, unknown>;
+export type Props = Record<string, unknown>;
 
 /**
  * Thin, always-safe wrapper over `posthog.capture`. Never throws — analytics

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { EVENTS, track } from '@/analytics/events';
+import { EVENTS, track, type EventName, type Props } from '@/analytics/events';
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { LegalLinksRow } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
@@ -9,9 +9,8 @@ import { RestorePurchasesButton } from '@/components/game/restore-purchases-butt
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
+import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { notePurchaseFailed } from '@/state/store-review';
-
-export type BuyWeeksTrigger = 'out_of_weeks' | 'hud';
 
 /**
  * iOS-only bottom sheet offering the two week packs.
@@ -27,6 +26,16 @@ export type BuyWeeksTrigger = 'out_of_weeks' | 'hud';
  * Purchases go through `@/purchases`, so this component never talks to a store
  * SDK directly.
  */
+/**
+ * Every event from this sheet is tagged with the surface it came from, so a
+ * funnel can tell the fallback apart from the hosted paywall. Stamped in one
+ * place rather than spelled at each call site, where it was five chances to
+ * forget.
+ */
+function trackSheet(event: EventName, props: Props): void {
+  track(event, { ...props, surface: 'sheet' });
+}
+
 export function BuyWeeksSheet({
   visible,
   trigger,
@@ -45,42 +54,36 @@ export function BuyWeeksSheet({
   useEffect(() => {
     if (!visible) return;
     setErrorCode(null);
-    track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'sheet' });
+    trackSheet(EVENTS.PAYWALL_SHOWN, { trigger });
     purchasesClient.getPacks().then(setPacks);
   }, [visible, trigger]);
 
   const handlePurchase = (pack: WeekPack) => {
     setErrorCode(null);
     setPendingPackId(pack.id);
-    track(EVENTS.PURCHASE_STARTED, {
-      pack_id: pack.id,
-      weeks: pack.weeks,
-      price_label: pack.priceLabel,
-      surface: 'sheet',
-    });
+    trackSheet(EVENTS.PURCHASE_STARTED, { pack_id: pack.id, weeks: pack.weeks, price_label: pack.priceLabel });
     purchasesClient
       .purchasePack(pack.id)
       .then((result) => {
         setPendingPackId(null);
         if (result.status === 'success') {
           const weeksGranted = result.reward.kind === 'weeks' ? result.reward.weeks : 0;
-          track(EVENTS.PURCHASE_COMPLETED, {
+          trackSheet(EVENTS.PURCHASE_COMPLETED, {
             pack_id: pack.id,
             weeks_granted: weeksGranted,
             price_label: pack.priceLabel,
-            surface: 'sheet',
           });
           onPurchased(weeksGranted, result.transactionId);
           onClose();
         } else {
-          track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code, surface: 'sheet' });
+          trackSheet(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code });
           notePurchaseFailed();
           setErrorCode(result.code);
         }
       })
       .catch(() => {
         setPendingPackId(null);
-        track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: 'unknown', surface: 'sheet' });
+        trackSheet(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: 'unknown' });
         notePurchaseFailed();
         setErrorCode('unknown');
       });

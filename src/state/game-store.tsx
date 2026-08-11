@@ -27,6 +27,7 @@ import {
   reconcileOnLaunch,
   restorePurchases as restorePurchasesFromStore,
   syncPostHogAttribute,
+  type LaunchReconciliation,
   type RestoreOutcome,
 } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
@@ -707,6 +708,44 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setPurchasedWeeks(next);
   };
 
+  /**
+   * The one place a reconciliation pass turns into credited weeks and revives.
+   *
+   * Every caller — the launch pass, a player-initiated restore, and the
+   * post-paywall catch-up — differs only in *which* pass runs; the ledger read,
+   * the two credits, and the tally are identical, so `pass` is the only
+   * parameter. Keeping this single means "one crediting path, one ledger" is a
+   * property of the code rather than a convention three call sites have to
+   * remember.
+   *
+   * Ledgers are read through the synchronous mirrors, never React state: a
+   * purchase that completed moments ago must already be visible, or this pass
+   * re-reports weeks a concurrent one has just credited (see `purchasedWeeksRef`).
+   */
+  const applyReconciliation = async (
+    pass: (
+      grantedWeekTransactionIds: ReadonlySet<string>,
+      grantedReviveTransactionIds: ReadonlySet<string>,
+    ) => Promise<LaunchReconciliation>,
+  ): Promise<{ weeks: number; revives: number }> => {
+    const weeksPool = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
+    const revives = revivePoolRef.current ?? initialRevivePool();
+    const { newlyGrantedWeeks, newlyGrantedRevives } = await pass(
+      new Set(weeksPool.grantedTransactionIds),
+      new Set(revives.grantedTransactionIds),
+    );
+    if (newlyGrantedWeeks.length > 0) {
+      applyPurchasedWeeks((prev) => creditTransactions(prev, newlyGrantedWeeks));
+    }
+    if (newlyGrantedRevives.length > 0) {
+      applyRevivePool((prev) => creditReviveTransactions(prev, newlyGrantedRevives));
+    }
+    return {
+      weeks: newlyGrantedWeeks.reduce((sum, tx) => sum + tx.weeks, 0),
+      revives: newlyGrantedRevives.length,
+    };
+  };
+
   const value: GameContextValue = {
     state,
     previousState,
@@ -768,55 +807,25 @@ export function GameProvider({ children }: { children: ReactNode }) {
     creditRevivePurchase: (transactionId: string) =>
       applyRevivePool((prev) => creditReviveTransaction(prev, transactionId)),
     restorePurchases: async (): Promise<RestoreOutcome> => {
-      // Read the ledgers through the synchronous mirrors, so a purchase that
-      // completed moments ago is already accounted for and can't be reported
-      // back to the player as if the restore had recovered it.
-      const weeksPool = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
-      const revives = revivePoolRef.current ?? initialRevivePool();
-      const result = await restorePurchasesFromStore(
-        new Set(weeksPool.grantedTransactionIds),
-        new Set(revives.grantedTransactionIds),
-      );
-      if (result.status === 'error') return { status: 'error' };
-
-      const { newlyGrantedWeeks, newlyGrantedRevives } = result.reconciliation;
-      // Same atomic credit-plus-ledger primitives the launch pass uses, so a
-      // restore is just another idempotent reconciliation — never a second
-      // grant path with its own rules.
-      if (newlyGrantedWeeks.length > 0) {
-        applyPurchasedWeeks((prev) => creditTransactions(prev, newlyGrantedWeeks));
-      }
-      if (newlyGrantedRevives.length > 0) {
-        applyRevivePool((prev) => creditReviveTransactions(prev, newlyGrantedRevives));
-      }
-
-      const weeks = newlyGrantedWeeks.reduce((sum, tx) => sum + tx.weeks, 0);
-      const revivesRestored = newlyGrantedRevives.length;
-      if (weeks === 0 && revivesRestored === 0) return { status: 'nothing' };
-      return { status: 'restored', weeks, revives: revivesRestored };
+      // A restore is just another idempotent reconciliation — the same pass the
+      // launch and post-paywall paths run, differing only in that the store can
+      // report the round-trip itself as failed. Everything after that is shared.
+      let failed = false;
+      const { weeks, revives } = await applyReconciliation(async (weekIds, reviveIds) => {
+        const result = await restorePurchasesFromStore(weekIds, reviveIds);
+        if (result.status === 'error') {
+          failed = true;
+          return { newlyGrantedWeeks: [], newlyGrantedRevives: [] };
+        }
+        return result.reconciliation;
+      });
+      if (failed) return { status: 'error' };
+      // "Nothing to restore" is a success, not a failure — consumables usually
+      // leave nothing to recover (see `revenuecat.ts`'s `restorePurchases`).
+      if (weeks === 0 && revives === 0) return { status: 'nothing' };
+      return { status: 'restored', weeks, revives };
     },
-    reconcileAfterPaywall: async (): Promise<{ weeks: number; revives: number }> => {
-      // Through the synchronous mirrors, not React state: the paywall closing
-      // and this call happen in the same beat, and a stale ledger here would
-      // re-report weeks that a concurrent pass already credited (see the
-      // `purchasedWeeksRef` comment above).
-      const weeksPool = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
-      const revives = revivePoolRef.current ?? initialRevivePool();
-      const { newlyGrantedWeeks, newlyGrantedRevives } = await reconcileOnLaunch(
-        new Set(weeksPool.grantedTransactionIds),
-        new Set(revives.grantedTransactionIds),
-      );
-      if (newlyGrantedWeeks.length > 0) {
-        applyPurchasedWeeks((prev) => creditTransactions(prev, newlyGrantedWeeks));
-      }
-      if (newlyGrantedRevives.length > 0) {
-        applyRevivePool((prev) => creditReviveTransactions(prev, newlyGrantedRevives));
-      }
-      return {
-        weeks: newlyGrantedWeeks.reduce((sum, tx) => sum + tx.weeks, 0),
-        revives: newlyGrantedRevives.length,
-      };
-    },
+    reconcileAfterPaywall: () => applyReconciliation(reconcileOnLaunch),
     redeemRevive: (reason: string) => {
       if (!state) return;
       // Read the synchronous mirror, so a credit in this same handler (the
