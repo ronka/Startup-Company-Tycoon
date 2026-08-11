@@ -7,6 +7,7 @@
  */
 export {
   configurePurchases,
+  presentWeeksPaywall,
   purchasesAvailable,
   purchasesClient,
   reconcileOnLaunch,
@@ -16,6 +17,7 @@ export {
 export { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
 export type { LaunchReconciliation, RestoreResult } from './reconciliation';
 export type {
+  PaywallOutcome,
   PurchaseErrorCode,
   PurchaseResult,
   PurchasesClient,

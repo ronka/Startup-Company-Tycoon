@@ -14,11 +14,18 @@ import { notePurchaseFailed } from '@/state/store-review';
 export type BuyWeeksTrigger = 'out_of_weeks' | 'hud';
 
 /**
- * iOS-only bottom sheet (Task 2, PRD week-packs) offering the two week packs.
- * Opened either when the player hits the daily wall (`out_of_weeks`) or by
- * tapping the HUD week counter anytime (`hud`). Purchases go through
- * `@/purchases` — a stub today, RevenueCat behind the same interface once
- * Task 5 lands — so this component never talks to a store SDK directly.
+ * iOS-only bottom sheet offering the two week packs.
+ *
+ * No longer the primary purchase surface — the RevenueCat-hosted paywall is
+ * (`game-chrome.tsx`'s `openBuyWeeks`). This is the fallback it degrades to
+ * when that paywall can't be shown at all: offerings failed to load, no
+ * paywall is attached to the `weeks` offering, or the running binary predates
+ * the paywall UI native module. It's kept precisely because it survives those
+ * cases — `getPacks()` falls back to a hardcoded `WEEK_PACKS` catalog, so this
+ * sheet still renders something buyable when the network doesn't cooperate.
+ *
+ * Purchases go through `@/purchases`, so this component never talks to a store
+ * SDK directly.
  */
 export function BuyWeeksSheet({
   visible,
@@ -38,14 +45,19 @@ export function BuyWeeksSheet({
   useEffect(() => {
     if (!visible) return;
     setErrorCode(null);
-    track(EVENTS.PAYWALL_SHOWN, { trigger });
+    track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'sheet' });
     purchasesClient.getPacks().then(setPacks);
   }, [visible, trigger]);
 
   const handlePurchase = (pack: WeekPack) => {
     setErrorCode(null);
     setPendingPackId(pack.id);
-    track(EVENTS.PURCHASE_STARTED, { pack_id: pack.id, weeks: pack.weeks, price_label: pack.priceLabel });
+    track(EVENTS.PURCHASE_STARTED, {
+      pack_id: pack.id,
+      weeks: pack.weeks,
+      price_label: pack.priceLabel,
+      surface: 'sheet',
+    });
     purchasesClient
       .purchasePack(pack.id)
       .then((result) => {
@@ -56,18 +68,19 @@ export function BuyWeeksSheet({
             pack_id: pack.id,
             weeks_granted: weeksGranted,
             price_label: pack.priceLabel,
+            surface: 'sheet',
           });
           onPurchased(weeksGranted, result.transactionId);
           onClose();
         } else {
-          track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code });
+          track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code, surface: 'sheet' });
           notePurchaseFailed();
           setErrorCode(result.code);
         }
       })
       .catch(() => {
         setPendingPackId(null);
-        track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: 'unknown' });
+        track(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: 'unknown', surface: 'sheet' });
         notePurchaseFailed();
         setErrorCode('unknown');
       });

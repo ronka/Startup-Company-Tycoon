@@ -5,6 +5,7 @@ import * as fallback from './fallback';
 import type { LaunchReconciliation, RestoreResult } from './reconciliation';
 import { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
 import type {
+  PaywallOutcome,
   PurchaseErrorCode,
   PurchaseResult,
   PurchasesClient,
@@ -42,6 +43,15 @@ export const restorePurchases: (
   grantedReviveTransactionIds: ReadonlySet<string>,
 ) => Promise<RestoreResult> = impl.restorePurchases;
 export const syncPostHogAttribute: (distinctId: string) => Promise<void> = impl.syncPostHogAttribute;
+export const presentWeeksPaywall: () => Promise<PaywallOutcome> = impl.presentWeeksPaywall;
 export { REVIVE_PRICE_LABEL, WEEK_PACKS };
 export type { LaunchReconciliation, RestoreResult };
-export type { PurchaseErrorCode, PurchaseResult, PurchasesClient, RestoreOutcome, Reward, WeekPack };
+export type {
+  PaywallOutcome,
+  PurchaseErrorCode,
+  PurchaseResult,
+  PurchasesClient,
+  RestoreOutcome,
+  Reward,
+  WeekPack,
+};

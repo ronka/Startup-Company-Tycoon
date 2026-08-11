@@ -283,6 +283,22 @@ interface GameContextValue {
    */
   restorePurchases: () => Promise<RestoreOutcome>;
   /**
+   * Credits whatever a just-closed RevenueCat paywall bought.
+   *
+   * The hosted paywall reports only *how it closed* — never a transaction — so
+   * this is how a purchase made on it actually reaches the pools. It runs the
+   * exact `getCustomerInfo()`-against-the-ledger diff the launch pass runs, and
+   * credits through the same atomic primitives, which is what keeps the hosted
+   * paywall from becoming a second crediting path with its own rules.
+   *
+   * Deliberately not `restorePurchases()`: that calls the SDK's
+   * `restorePurchases()`, which refreshes the StoreKit receipt and can put an
+   * Apple ID sign-in prompt on screen the instant a purchase completes.
+   *
+   * Returns what landed. Idempotent — anything already in the ledger is skipped.
+   */
+  reconcileAfterPaywall: () => Promise<{ weeks: number; revives: number }>;
+  /**
    * Redeem one revive token: consume it and dispatch the `REVIVE` engine action
    * (restore cash, clear the fuse, un-end the run) with the given windfall
    * `reason` flavor. No-op if no token is available or no run is active.
@@ -778,6 +794,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const revivesRestored = newlyGrantedRevives.length;
       if (weeks === 0 && revivesRestored === 0) return { status: 'nothing' };
       return { status: 'restored', weeks, revives: revivesRestored };
+    },
+    reconcileAfterPaywall: async (): Promise<{ weeks: number; revives: number }> => {
+      // Through the synchronous mirrors, not React state: the paywall closing
+      // and this call happen in the same beat, and a stale ledger here would
+      // re-report weeks that a concurrent pass already credited (see the
+      // `purchasedWeeksRef` comment above).
+      const weeksPool = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
+      const revives = revivePoolRef.current ?? initialRevivePool();
+      const { newlyGrantedWeeks, newlyGrantedRevives } = await reconcileOnLaunch(
+        new Set(weeksPool.grantedTransactionIds),
+        new Set(revives.grantedTransactionIds),
+      );
+      if (newlyGrantedWeeks.length > 0) {
+        applyPurchasedWeeks((prev) => creditTransactions(prev, newlyGrantedWeeks));
+      }
+      if (newlyGrantedRevives.length > 0) {
+        applyRevivePool((prev) => creditReviveTransactions(prev, newlyGrantedRevives));
+      }
+      return {
+        weeks: newlyGrantedWeeks.reduce((sum, tx) => sum + tx.weeks, 0),
+        revives: newlyGrantedRevives.length,
+      };
     },
     redeemRevive: (reason: string) => {
       if (!state) return;

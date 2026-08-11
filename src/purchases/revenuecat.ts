@@ -12,6 +12,7 @@
  * *computes* what's owed; the caller applies and persists it.
  */
 import Purchases, { PURCHASES_ERROR_CODE, type PurchasesError } from 'react-native-purchases';
+import type { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
 import { REVENUECAT_IOS_API_KEY } from './config';
 import { isReviveProduct, shortIdFromProductIdentifier, weeksForProduct } from './product-weeks';
@@ -22,7 +23,7 @@ import {
   type RestoreResult,
 } from './reconciliation';
 import { WEEK_PACKS } from './stub';
-import type { PurchaseResult, PurchasesClient, WeekPack } from './types';
+import type { PaywallOutcome, PurchaseResult, PurchasesClient, WeekPack } from './types';
 
 /** Matches the `weeks` offering created in Task 3. */
 const OFFERING_LOOKUP_KEY = 'weeks';
@@ -136,6 +137,74 @@ async function fetchRevivePackage() {
   return (
     offering.availablePackages.find((p) => isReviveProduct(p.product.identifier)) ?? offering.availablePackages[0]
   );
+}
+
+/**
+ * `react-native-purchases-ui` is a *second* native module, added after this
+ * app's shipped App Store build was cut. A `require` in a try/catch — not a
+ * static import — is what keeps that survivable: an `eas update` can land this
+ * JS on an older binary that has no such module linked, and there the require
+ * throws instead of taking the app down at startup. Callers read that as
+ * `not_presented` and fall back to the in-app sheet.
+ */
+function loadPaywallUI(): typeof import('react-native-purchases-ui').default | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('react-native-purchases-ui').default;
+  } catch (err) {
+    console.warn('[purchases] RevenueCat paywall UI unavailable in this build', err);
+    return null;
+  }
+}
+
+/**
+ * `PAYWALL_RESULT` -> our own outcome vocabulary.
+ *
+ * Typed as a total `Record` over the SDK enum on purpose: it's the only thing
+ * that makes `tsc` fail if RevenueCat ever adds or renames a result. A plain
+ * `switch` on string literals compiles clean against a string enum, so a
+ * renamed member would silently fall through to `error` — which here would
+ * mean a *completed purchase* being reported as a failure.
+ *
+ * The enum is imported `type`-only, so this costs no runtime require and can't
+ * defeat the lazy load above.
+ */
+const PAYWALL_OUTCOMES: Record<PAYWALL_RESULT, PaywallOutcome> = {
+  PURCHASED: 'purchased',
+  RESTORED: 'restored',
+  CANCELLED: 'cancelled',
+  NOT_PRESENTED: 'not_presented',
+  ERROR: 'error',
+};
+
+/**
+ * Presents the RevenueCat-hosted paywall for the `weeks` offering.
+ *
+ * Returns only how the screen closed. Crediting is deliberately *not* done
+ * here: `presentPaywall()` hands back a `PAYWALL_RESULT` and nothing else — no
+ * transaction, no product — so on `purchased`/`restored` the caller re-runs
+ * `reconcileOnLaunch`'s diff, which is the same idempotent
+ * `getCustomerInfo()`-against-the-ledger pass that already guarantees a paid
+ * purchase can't be lost or granted twice. One crediting path, one ledger.
+ */
+export async function presentWeeksPaywall(): Promise<PaywallOutcome> {
+  if (!configured) return 'not_presented';
+  const ui = loadPaywallUI();
+  if (!ui) return 'not_presented';
+  try {
+    const offering = await fetchWeeksOffering();
+    // No offering means no attached paywall to show. Reported as
+    // `not_presented` so the caller falls back to the sheet, which carries its
+    // own hardcoded `WEEK_PACKS` catalog and still works offline.
+    if (!offering) return 'not_presented';
+    const result = await ui.presentPaywall({ offering });
+    // `?? 'error'` guards the runtime case this table can't: a future SDK
+    // returning a member this build has never heard of.
+    return PAYWALL_OUTCOMES[result] ?? 'error';
+  } catch (err) {
+    console.warn('[purchases] failed to present paywall', err);
+    return 'error';
+  }
 }
 
 export const purchasesClient: PurchasesClient = {

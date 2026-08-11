@@ -1,6 +1,6 @@
 import type { LaunchReconciliation, RestoreResult } from './reconciliation';
 import { stubPurchasesClient } from './stub';
-import type { PurchasesClient } from './types';
+import type { PaywallOutcome, PurchasesClient } from './types';
 
 /**
  * No-native-SDK path: web, vitest, and Expo Go (which can't load the
@@ -18,6 +18,16 @@ export const purchasesClient: PurchasesClient = stubPurchasesClient;
 export const purchasesAvailable = false;
 
 export function configurePurchases(): void {}
+
+/**
+ * No RevenueCat paywall to present without the native SDK. `not_presented`
+ * (rather than `error`) is the honest answer and the useful one: it routes the
+ * caller to the in-app `BuyWeeksSheet`, which is the only thing that can work
+ * on web, in tests, and in Expo Go anyway.
+ */
+export async function presentWeeksPaywall(): Promise<PaywallOutcome> {
+  return 'not_presented';
+}
 
 export async function reconcileOnLaunch(
   _grantedWeekTransactionIds: ReadonlySet<string>,

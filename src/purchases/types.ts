@@ -17,6 +17,21 @@ export interface WeekPack {
 export type PurchaseErrorCode = 'cancelled' | 'unknown';
 
 /**
+ * How the RevenueCat-hosted paywall closed. Deliberately *not* a
+ * `PurchaseResult`: `presentPaywall()` reports only how the screen ended and
+ * never hands back a transaction, so the caller can't credit anything from
+ * this alone — it must re-run the same `getCustomerInfo()` reconciliation the
+ * launch pass uses (see `reconcileOnLaunch`). That's a feature, not a
+ * workaround: it keeps a single crediting path with a single ledger.
+ *
+ * `not_presented` is the case that matters for the UI. It means the paywall
+ * never appeared at all — offerings failed to load, or the offering has no
+ * paywall attached — and the caller is expected to fall back to the in-app
+ * `BuyWeeksSheet` rather than leave the player staring at a dead button.
+ */
+export type PaywallOutcome = 'purchased' | 'restored' | 'cancelled' | 'not_presented' | 'error';
+
+/**
  * What a completed purchase grants. Weeks top up the purchased-weeks pool
  * (`week-budget.ts`); a revive grants one bankruptcy-bailout token
  * (`revive.ts`). Both are consumable and delivered idempotently per
