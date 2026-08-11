@@ -24,10 +24,6 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#0B4F91",
-        "foregroundImage": "./assets/images/android-icon-foreground.png"
-      },
       "predictiveBackGestureEnabled": false,
       "package": "com.ronkaa.startuptycoon"
     },

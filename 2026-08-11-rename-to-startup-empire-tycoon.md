@@ -65,7 +65,7 @@ None of these are user-visible. Apple's objection is to the *displayed* name.
 
 ---
 
-## 3. Assets — all five branded images still say "STARTUP COMPANY TYCOON"
+## 3. Assets — the branded images still say "STARTUP COMPANY TYCOON"
 
 This is the biggest remaining item, and probably the actual cause of the
 rejection: the icon is a wordmark in a style that reads as the other game.
@@ -73,15 +73,22 @@ rejection: the icon is a wordmark in a style that reads as the other game.
 | File | Where it shows | Note |
 | --- | --- | --- |
 | `assets/images/icon.png` (1024²) | iOS home screen, App Store listing | Full wordmark |
-| `assets/images/android-icon-foreground.png` | Android adaptive icon | Full wordmark |
 | `assets/images/splash.png` (1000²) | Launch screen | Full wordmark on `#00387F` |
 | `assets/images/favicon.png` | Web tab | Wordmark, illegible at size |
 | `assets/logo-white.png` | Marketing only | Full wordmark. Not imported by `src/` or `app.json` — lower priority |
 | `assets/logo-transperent.png` | Marketing only | Same wordmark on transparency. Also unreferenced in code |
 | `app-store-screenshots/public/app-icon.png` | Screenshot deck | Copy of the old icon; replace when the icon is redrawn |
 
-The first four ship inside the binary or the store listing and are blocking.
+The first three ship inside the binary or the store listing and are blocking.
 The last three are marketing surfaces.
+
+**Dropped:** `assets/images/android-icon-foreground.png` is deleted, along with
+the `android.adaptiveIcon` block in `app.json` that pointed at it — there is no
+Android build. The rest of the `android` key (`package`,
+`predictiveBackGestureEnabled`) is untouched, so if Android ever happens it
+falls back to `icon.png` and nothing else needs undoing. To restore:
+`git checkout <this-commit>~1 -- assets/images/android-icon-foreground.png` and
+put the `adaptiveIcon` block back.
 
 Recommendation: don't just swap the words. The 3-D yellow-and-blue city-skyline
 treatment is itself close to the game Apple flagged. A distinct mark removes the
