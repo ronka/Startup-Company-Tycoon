@@ -1,26 +1,22 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
 import { retireAllHints } from '@/components/game/first-run-hint';
-import { LegalLinksRow } from '@/components/game/legal-links-row';
+import { LINK_HIT_SLOP } from '@/components/game/legal-links-row';
+import { PaywallFooter } from '@/components/game/paywall-footer';
 import { PrimaryButton } from '@/components/game/primary-button';
-import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { randomReviveReason } from '@/game/revive-reasons';
 import type { GameOverReason } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 import { buildShareText } from '@/lib/share-card';
 import { shareRunText } from '@/lib/share-run';
-import {
-  purchasesClient,
-  purchasesAvailable,
-  REVIVE_PRICE_LABEL,
-  type PurchaseErrorCode,
-} from '@/purchases';
+import { purchasesClient, purchasesAvailable, REVIVE_PRICE_LABEL, type PurchaseErrorCode } from '@/purchases';
 import { useGame } from '@/state/game-store';
 import { canRedeemRevive } from '@/state/revive';
 import { bestScore } from '@/state/run-history';
@@ -34,23 +30,35 @@ import { notePurchaseFailed, requestReviewOnce } from '@/state/store-review';
  */
 const REVIEW_ARM_MS = 1200;
 
+/**
+ * How long the result gets to itself before the bailout card rises into view.
+ * Short enough not to feel like a hang, long enough that the offer reads as a
+ * second beat rather than part of the scoreboard.
+ */
+const OFFER_ARM_MS = 700;
+
 const HEADLINE: Record<GameOverReason, string> = {
   bankruptcy: 'Bankrupt',
   acquired: 'Acquired',
   ipo: 'IPO',
 };
 
-const SUBTITLE: Record<GameOverReason, (weeks: number) => string> = {
-  bankruptcy: (weeks) =>
-    `Cash stayed negative too long — out of runway after ${weeks} weeks.`,
-  acquired: (weeks) => `Acquired after ${weeks} weeks.`,
-  ipo: (weeks) => `Rang the bell after ${weeks} weeks.`,
+/**
+ * One line, under the score. Short on purpose: the long form ("Cash stayed
+ * negative too long — out of runway after 36 weeks.") wrapped to two lines on
+ * the narrowest phones and pushed the result off its own beat.
+ */
+const TAGLINE: Record<GameOverReason, (weeks: number) => string> = {
+  bankruptcy: (weeks) => `Out of runway in week ${weeks}`,
+  acquired: (weeks) => `Acquired in week ${weeks}`,
+  ipo: (weeks) => `Rang the bell in week ${weeks}`,
 };
 
 export default function GameOverScreen() {
   const { state, revivePool, creditRevivePurchase, redeemRevive, runHistory, lastRunWasBest } = useGame();
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   const reason = state?.gameOver ?? null;
   const isBankruptcy = reason === 'bankruptcy';
@@ -72,6 +80,7 @@ export default function GameOverScreen() {
   // Set the instant we redeem, so the `!gameOver` re-render doesn't bounce to
   // `/` before the replace below has moved us to the live game.
   const [redeeming, setRedeeming] = useState(false);
+  const [offerSlide] = useState(() => new Animated.Value(0));
 
   /**
    * Whether this run is over for good, as opposed to merely showing its ending.
@@ -120,6 +129,25 @@ export default function GameOverScreen() {
     }, REVIEW_ARM_MS);
     return () => clearTimeout(timer);
   }, [reviewDue]);
+
+  // The offer is the screen's second beat: the result lands on its own, then
+  // the bailout card rises from the bottom edge. A player holding a token has
+  // already paid, so their claim button doesn't make them wait for the beat.
+  useEffect(() => {
+    if (!canBailout) return;
+    const timer = setTimeout(
+      () => {
+        Animated.spring(offerSlide, {
+          toValue: 1,
+          useNativeDriver: true,
+          damping: 18,
+          stiffness: 140,
+        }).start();
+      },
+      hasToken ? 0 : OFFER_ARM_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [canBailout, hasToken, offerSlide]);
 
   // Load the live store price and log the bailout paywall impression.
   useEffect(() => {
@@ -243,82 +271,89 @@ export default function GameOverScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <View style={styles.body}>
-        <ThemedText type="title" style={styles.headline}>
+      {/*
+        Beat one: the result, alone, with the whole screen to land in. Nothing
+        here asks the player for anything — the only control is the share link,
+        and it sits well below the score.
+      */}
+      <View style={styles.result}>
+        <ThemedText type="title" style={styles.centered}>
           {HEADLINE[state.gameOver]}
         </ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-          {SUBTITLE[state.gameOver](state.week)}
-        </ThemedText>
-        <ThemedText type="title" style={styles.score}>
+        <ThemedText type="hero" style={[styles.centered, styles.score]}>
           {formatMoney(state.finalScore ?? 0)}
         </ThemedText>
-        <ThemedText themeColor="textSecondary">Final score</ThemedText>
+        <ThemedText type="small" themeColor="textMuted" style={styles.centered}>
+          {TAGLINE[state.gameOver](state.week)}
+        </ThemedText>
         {lastRunWasBest ? (
-          <ThemedText type="smallBold" themeColor="success" style={styles.personalBest}>
+          <ThemedText type="smallBold" themeColor="success" style={[styles.centered, styles.personalBest]}>
             New personal best!
           </ThemedText>
         ) : best !== null && best > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.personalBest}>
-            Personal best: {formatMoney(best)}
+          <ThemedText type="small" themeColor="textSecondary" style={[styles.centered, styles.personalBest]}>
+            Personal best {formatMoney(best)}
           </ThemedText>
         ) : null}
-      </View>
-
-      <View style={styles.actions}>
-        {canBailout ? (
-          <View style={styles.bailout}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.windfall}>
-              🎩 {windfallReason}
-            </ThemedText>
-            <PrimaryButton
-              label={
-                hasToken
-                  ? 'Claim your inheritance'
-                  : `Take the money — ${revivePrice ?? REVIVE_PRICE_LABEL}`
-              }
-              loading={pending}
-              disabled={pending}
-              onPress={handleBailout}
-            />
-            {errorCode ? (
-              <ThemedText type="small" themeColor="danger" style={styles.error}>
-                {errorCode === 'cancelled' ? 'Purchase cancelled.' : "Purchase didn't go through — try again."}
-              </ThemedText>
-            ) : null}
-            {/*
-              This screen is a paywall too, so it carries the same restore control
-              and terms links the week-pack sheet does. Hidden once a token is
-              already in hand — there is nothing left to restore at that point,
-              and the CTA above is already "claim it".
-            */}
-            {hasToken ? null : (
-              <>
-                <ThemedText type="small" themeColor="textMuted" style={styles.fineprint}>
-                  One-time purchase, not a subscription.
-                </ThemedText>
-                <RestorePurchasesButton source="game_over" />
-                <LegalLinksRow source="game_over" />
-              </>
-            )}
-          </View>
-        ) : null}
-
-        <PrimaryButton
-          label="New Game"
-          variant={canBailout ? 'secondary' : 'primary'}
-          onPress={startFresh}
-          disabled={pending}
-        />
-
-        <PrimaryButton
-          label="Share result"
-          variant="ghost"
+        <Pressable
           onPress={handleShare}
-          loading={sharing}
-          disabled={pending}
-        />
+          disabled={sharing || pending}
+          hitSlop={LINK_HIT_SLOP}
+          accessibilityRole="button"
+          accessibilityState={{ busy: sharing, disabled: sharing || pending }}
+          style={styles.share}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.shareLabel}>
+            {sharing ? 'Sharing…' : 'Share result'}
+          </ThemedText>
+        </Pressable>
       </View>
+
+      {canBailout ? (
+        /*
+          Beat two: the offer, on its own surface at the bottom edge, arriving
+          after the result has been read. Everything the purchase needs lives
+          inside this card — pitch, price, the way out, and the compliance
+          line — so the ending above stays an ending.
+        */
+        <Animated.View
+          style={[
+            styles.offer,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              paddingBottom: insets.bottom + Spacing.four,
+              opacity: offerSlide,
+              transform: [{ translateY: offerSlide.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }],
+            },
+          ]}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.centered}>
+            🎩 {windfallReason}
+          </ThemedText>
+          <PrimaryButton
+            label={hasToken ? 'Claim your inheritance' : `Take the money — ${revivePrice ?? REVIVE_PRICE_LABEL}`}
+            loading={pending}
+            disabled={pending}
+            onPress={handleBailout}
+          />
+          {errorCode ? (
+            <ThemedText type="small" themeColor="danger" style={styles.centered}>
+              {errorCode === 'cancelled' ? 'Purchase cancelled.' : "Purchase didn't go through — try again."}
+            </ThemedText>
+          ) : null}
+          <PrimaryButton label="New Game" variant="ghost" onPress={startFresh} disabled={pending} />
+          {/*
+            This screen is a paywall too, so it carries the same disclosure,
+            restore control and terms links the week-pack sheet does. Hidden once
+            a token is already in hand: there is nothing left to restore at that
+            point, and the CTA above is already "claim it".
+          */}
+          {hasToken ? null : <PaywallFooter source="game_over" disclosure="One-time purchase" />}
+        </Animated.View>
+      ) : (
+        <View style={[styles.plainActions, { paddingBottom: insets.bottom + Spacing.four }]}>
+          <PrimaryButton label="New Game" onPress={startFresh} />
+        </View>
+      )}
     </View>
   );
 }
@@ -326,40 +361,38 @@ export default function GameOverScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    padding: Spacing.four,
+  },
+  centered: {
+    textAlign: 'center',
+  },
+  /** Takes the whole screen when there's no offer, and the space above it when there is. */
+  result: {
+    flex: 1,
     justifyContent: 'center',
-    gap: Spacing.five,
-  },
-  body: {
     alignItems: 'center',
-    gap: Spacing.three,
-  },
-  headline: {
-    textAlign: 'center',
-  },
-  subtitle: {
-    textAlign: 'center',
+    padding: Spacing.four,
+    gap: Spacing.one,
   },
   score: {
-    textAlign: 'center',
-    marginTop: Spacing.three,
+    marginVertical: Spacing.two,
   },
   personalBest: {
-    textAlign: 'center',
+    marginTop: Spacing.two,
   },
-  actions: {
-    gap: Spacing.three,
+  share: {
+    marginTop: Spacing.four,
   },
-  bailout: {
+  shareLabel: {
+    textDecorationLine: 'underline',
+  },
+  offer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
+    padding: Spacing.four,
     gap: Spacing.two,
   },
-  windfall: {
-    textAlign: 'center',
-  },
-  error: {
-    textAlign: 'center',
-  },
-  fineprint: {
-    textAlign: 'center',
+  plainActions: {
+    paddingHorizontal: Spacing.four,
   },
 });

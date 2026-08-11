@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
+import { LINK_HIT_SLOP } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -24,16 +25,27 @@ import { useGame } from '@/state/game-store';
  * something was restored, the store answered but owed nothing, or the store
  * couldn't be reached at all. Only the last is an error.
  */
+/** Every surface that can sell or restore something — carried onto the analytics. */
+export type PurchaseSurface = 'settings' | 'buy_weeks_sheet' | 'game_over';
+
 export function RestorePurchasesButton({
   source,
   label = 'Restore purchases',
   variant = 'ghost',
+  appearance = 'button',
   onRestored,
 }: {
   /** Which surface this instance lives on — recorded on the analytics events. */
-  source: 'settings' | 'buy_weeks_sheet' | 'game_over';
+  source: PurchaseSurface;
   label?: string;
   variant?: 'primary' | 'secondary' | 'ghost';
+  /**
+   * `link` is the same control drawn as one muted word, for `PaywallFooter` to
+   * run inline among the disclosure and legal links rather than spending a
+   * full-width button on it. Same handler, same analytics, same three outcomes;
+   * `variant` is ignored.
+   */
+  appearance?: 'button' | 'link';
   /** Called after a restore that actually credited something, so a paywall can close itself. */
   onRestored?: (weeks: number, revives: number) => void;
 }) {
@@ -78,7 +90,15 @@ export function RestorePurchasesButton({
 
   return (
     <>
-      <PrimaryButton label={label} variant={variant} loading={pending} disabled={pending} onPress={handlePress} />
+      {appearance === 'link' ? (
+        <Pressable onPress={handlePress} disabled={pending} hitSlop={LINK_HIT_SLOP} accessibilityRole="button">
+          <ThemedText type="footnote" style={styles.link}>
+            {pending ? 'Restoring…' : 'Restore'}
+          </ThemedText>
+        </Pressable>
+      ) : (
+        <PrimaryButton label={label} variant={variant} loading={pending} disabled={pending} onPress={handlePress} />
+      )}
       {message ? (
         <ThemedText
           type="small"
@@ -100,6 +120,9 @@ function describeRestored(weeks: number, revives: number): string {
 }
 
 const styles = StyleSheet.create({
+  link: {
+    textDecorationLine: 'underline',
+  },
   message: {
     textAlign: 'center',
     paddingHorizontal: Spacing.two,

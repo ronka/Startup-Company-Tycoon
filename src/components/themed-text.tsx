@@ -18,6 +18,8 @@ export type ThemedTextType =
   | 'cardValue'
   /** Uppercase, tracked-out section divider (e.g. "THIS WEEK"). */
   | 'sectionLabel'
+  /** Quietest line on a screen — the compliance footer under a paywall. */
+  | 'footnote'
   /** Bottom-sheet headline. */
   | 'sheetTitle';
 
@@ -30,6 +32,7 @@ export type ThemedTextProps = TextProps & {
 const DEFAULT_COLOR: Partial<Record<ThemedTextType, ThemeColor>> = {
   linkPrimary: 'accent',
   sectionLabel: 'textMuted',
+  footnote: 'textMuted',
 };
 
 export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
@@ -103,6 +106,11 @@ export const themedTextStyles = StyleSheet.create({
     fontWeight: 700,
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
+  },
+  footnote: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: 500,
   },
   sectionLabel: {
     fontSize: 12,
