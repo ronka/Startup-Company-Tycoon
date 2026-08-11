@@ -1,6 +1,6 @@
 # Rename: "Startup Company Tycoon" → "Startup Empire Tycoon"
 
-Branch: `rename-startup-empire`. Triggered by an App Review rejection for name
+Branch: `rename-startup-empire-tycoon`. Triggered by an App Review rejection for name
 similarity to an existing game.
 
 The codebase carried **two** old variants — `Startup Company Tycoon` (app.json,
@@ -65,22 +65,26 @@ None of these are user-visible. Apple's objection is to the *displayed* name.
 
 ---
 
-## 3. Assets — the branded images still say "STARTUP COMPANY TYCOON"
+## 3. Assets — redrawn (one marketing file outstanding)
 
-This is the biggest remaining item, and probably the actual cause of the
-rejection: the icon is a wordmark in a style that reads as the other game.
+All six carried the old "STARTUP COMPANY TYCOON" wordmark, and the icon was
+probably the actual cause of the rejection.
 
 | File | Where it shows | Note |
 | --- | --- | --- |
-| `assets/images/icon.png` (1024²) | iOS home screen, App Store listing | Full wordmark |
-| `assets/images/splash.png` (1000²) | Launch screen | Full wordmark on `#00387F` |
-| `assets/images/favicon.png` | Web tab | Wordmark, illegible at size |
-| `assets/logo-white.png` | Marketing only | Full wordmark. Not imported by `src/` or `app.json` — lower priority |
-| `assets/logo-transperent.png` | Marketing only | Same wordmark on transparency. Also unreferenced in code |
-| `app-store-screenshots/public/app-icon.png` | Screenshot deck | Copy of the old icon; replace when the icon is redrawn |
+| `assets/images/icon.png` (1024²) | iOS home screen, App Store listing | ✅ Redrawn |
+| `assets/images/splash.png` (1000²) | Launch screen | ✅ Redrawn |
+| `assets/images/favicon.png` | Web tab | ✅ Redrawn |
+| `assets/logo-white.png` | Marketing only | ❌ **Still old.** Not imported by `src/` or `app.json`, so not blocking — but it's the white-background twin of the logo that was redrawn |
+| `assets/logo-transperent.png` | Marketing only | ✅ Redrawn |
+| `app-store-screenshots/public/app-icon.png` | Screenshot deck | ❌ Still the old icon. Gitignored, so it's a local copy — swap before re-rendering screenshots |
 
-The first three ship inside the binary or the store listing and are blocking.
-The last three are marketing surfaces.
+The first three ship inside the binary or the store listing and are blocking;
+all three are done. The last three are marketing surfaces, and two are
+outstanding.
+
+The favicon is illegible at 48², but that was equally true before — it is what
+a three-line wordmark does at that size.
 
 **Dropped:** `assets/images/android-icon-foreground.png` is deleted, along with
 the `android.adaptiveIcon` block in `app.json` that pointed at it — there is no
@@ -90,9 +94,10 @@ falls back to `icon.png` and nothing else needs undoing. To restore:
 `git checkout <this-commit>~1 -- assets/images/android-icon-foreground.png` and
 put the `adaptiveIcon` block back.
 
-Recommendation: don't just swap the words. The 3-D yellow-and-blue city-skyline
-treatment is itself close to the game Apple flagged. A distinct mark removes the
-similarity argument entirely rather than arguing about it.
+**Residual risk, noted once:** the redraw swaps the words but keeps the 3-D
+yellow-and-blue city-skyline treatment. If Apple's objection was to the visual
+resemblance rather than the wording alone, a words-only swap may not clear it.
+Judgement call — depends on what the rejection notice actually said.
 
 ---
 
@@ -140,11 +145,44 @@ Apple allows the App Store name (30 chars) to differ from the on-device label.
 If you'd rather control the truncation, the lever is `CFBundleName` via
 `ios.infoPlist`, not `expo.name`.
 
+Versioning needs no manual step: `npm run build:production:ios` runs
+`scripts/bump-app-version.js` (1.0.2 → 1.0.3) and `eas.json` has
+`appVersionSource: "remote"` with `autoIncrement`, so the build number rises on
+its own. A rejected binary only strictly needs a new build number, but the
+version bump is free and clearer in the ASC timeline.
+
 Rough order:
 
-1. Redraw the assets (§3).
+1. ~~Redraw the assets~~ — done, except `assets/logo-white.png` (§3).
 2. Decide the `links.ts` question (§4).
-3. Bump the version past 1.0.2 — `npm run build:production:ios` does this via
-   `scripts/bump-app-version.js`.
+3. `npx expo prebuild --clean` if testing locally (§1).
 4. Build + submit, and update the App Store Connect metadata (§4) in the same
    submission.
+
+---
+
+## 6. Verified clean (checked, nothing to do)
+
+- **No old-name string survives in tracked source.** The only `Tycoon` hits are
+  the new name itself, the frozen `startuptycoon` identifiers, and the `.env`
+  comment that deliberately records the real RevenueCat app name.
+- **Nothing reads the app name from native at runtime** — no
+  `Constants.expoConfig.name` / `applicationName` lookups, so there is no
+  surface that could disagree with `app.json`.
+- **Screenshot deck headlines** never contained the name; only `appName` did.
+- **`settings.tsx`** shows `version-UPDATE_VERSION`, no app name.
+- **`README.md` / `LICENSE`** never named the app (README is still
+  create-expo-app boilerplate).
+- **`npm run lint`** reports 12 problems (5 errors, 7 warnings) — identical to
+  the pre-rename baseline at `3d85ccc`, none in files this rename touched.
+- **`dist/`** holds stale web build output with the old name in two sourcemaps.
+  Gitignored and regenerated on the next export; not shipped to iOS.
+
+### Loose ends worth a decision
+
+- `assets/expo.icon/` is the untouched Expo Icon Composer template (an Expo
+  symbol on a grid). Nothing references it — `app.json` points at
+  `assets/images/icon.png`. Dead scaffolding, safe to delete.
+- `assets/asset.png` (1240² master of the new icon) and
+  `assets/logo-transperent-old.png` (backup of the old logo) are untracked. The
+  old logo is already recoverable from git history.
