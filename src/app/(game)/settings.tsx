@@ -31,7 +31,7 @@ const LEGAL_LINKS: LegalLink[] = ['privacy', 'terms', 'support'];
  * gives a unique build+update stamp (e.g. `1.0.0-3`) so we can tell exactly
  * which JS bundle a device is running.
  */
-const UPDATE_VERSION = 11;
+const UPDATE_VERSION = 12;
 
 
 export default function SettingsScreen() {
