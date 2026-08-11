@@ -69,7 +69,7 @@ export default function GameOverScreen() {
   const [sharing, setSharing] = useState(false);
   const [errorCode, setErrorCode] = useState<PurchaseErrorCode | null>(null);
   // Set the instant we redeem, so the `!gameOver` re-render doesn't bounce to
-  // `/` before `dismissAll` unwinds this modal.
+  // `/` before the replace below has moved us to the live game.
   const [redeeming, setRedeeming] = useState(false);
 
   useEffect(() => {
@@ -88,9 +88,9 @@ export default function GameOverScreen() {
   // is on screen, which would put an ask for a favour next to an ask for money.
   //
   // Armed rather than immediate, and the timer is cleared on unmount: this screen
-  // is a modal, `startFresh` runs `dismissAll()` + `push('/onboarding')`, and a
-  // stray timer firing the system sheet mid-navigation is exactly this repo's
-  // documented modal-hang class (docs/bug-stuck-decision-modal.md).
+  // is a modal, `startFresh` replaces it with `/onboarding`, and a stray timer
+  // firing the system sheet mid-navigation is exactly this repo's documented
+  // modal-hang class (docs/bug-stuck-decision-modal.md).
   const reviewDue = reason !== null && reason !== 'bankruptcy' && lastRunWasBest;
   useEffect(() => {
     if (!reviewDue) return;
@@ -119,19 +119,26 @@ export default function GameOverScreen() {
   }, [canBailout]);
 
   // Reached only when a run has actually ended — but not while we're redeeming
-  // (gameOver has just cleared and we're about to dismiss this modal ourselves).
+  // (gameOver has just cleared and we're already navigating to `/hq` ourselves).
   if (!state || !state.gameOver) {
     if (redeeming) return null;
     return <Redirect href="/" />;
   }
 
   const startFresh = () => {
-    // This screen is presented as a modal (see app/_layout.tsx). Pushing
-    // onboarding directly would stack it *inside* this modal's sheet container,
-    // so it would open in a bottom sheet instead of full screen. Dismiss the
-    // modal first, then push onboarding onto the clean root stack.
-    router.dismissAll();
-    router.push('/onboarding');
+    // This screen is presented as a modal (see app/_layout.tsx). *Pushing*
+    // onboarding would stack it inside this modal's sheet container, so it
+    // would open in a bottom sheet instead of full screen — hence a replace,
+    // which swaps this route out of the root stack and lets onboarding render
+    // with its own (full-screen) presentation.
+    //
+    // Replace rather than `dismissAll()` + `push` because this screen is
+    // usually the *only* route there is: launch runs `replace('/hq')`, and the
+    // tab guards reach here via `<Redirect>`, which is also a replace. On that
+    // single-route stack `dismissAll()` dispatches POP_TO_TOP at a navigator
+    // with nothing to pop — it no-ops, warns, and leaves onboarding to be
+    // pushed inside the modal after all.
+    router.replace('/onboarding');
   };
 
   const handleShare = () => {
@@ -162,9 +169,18 @@ export default function GameOverScreen() {
   const finishRevive = () => {
     setRedeeming(true);
     // Redeem first (clears gameOver) so the tabs underneath stop redirecting
-    // back to /game-over, then dismiss this modal to reveal the live game.
+    // back to /game-over, then go straight to the live game.
     redeemRevive(windfallReason);
-    router.dismissAll();
+    // Named destination rather than `dismissAll()`, which lands somewhere
+    // different depending on how deep the stack happens to be — and both
+    // outcomes are wrong for a player who just paid for a bailout. On the
+    // single-route stack this screen usually sits on, POP_TO_TOP has nothing
+    // to pop, so the modal stays up while this component renders `null`
+    // (`redeeming` is set): a blank screen. On a deeper stack it pops to `/`,
+    // where `autoContinued` has already been spent for this launch, so the
+    // start menu sits there instead of resuming. `/hq` is the intended
+    // destination in both cases, so ask for it directly.
+    router.replace('/hq');
   };
 
   const handleBailout = () => {
