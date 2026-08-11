@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
+import { retireAllHints } from '@/components/game/first-run-hint';
 import { LegalLinksRow } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
@@ -72,6 +73,22 @@ export default function GameOverScreen() {
   // `/` before the replace below has moved us to the live game.
   const [redeeming, setRedeeming] = useState(false);
 
+  // First-run hints are exactly that — first *run*. A round that is genuinely
+  // over retires the whole pass, so the next company isn't taught the same
+  // lessons again. Idempotent, and Settings → Replay intro (and the debug reset)
+  // still bring them back.
+  //
+  // Not while a bailout is still on the table, though: a first-run player who
+  // pays to revive is *continuing* that run, not ending it, and pulling their
+  // hints mid-game would be a strange thing to buy. `startFresh` retires on that
+  // path instead — choosing a new company is what ends the round. Held until
+  // `revivePool` resolves so an unredeemed token can't be missed and retire the
+  // pass a moment before the bailout offer appears.
+  useEffect(() => {
+    if (!reason || revivePool === null || canBailout) return;
+    retireAllHints();
+  }, [reason, revivePool, canBailout]);
+
   useEffect(() => {
     if (!reason) return;
     track(EVENTS.GAME_OVER_VIEWED, {
@@ -126,6 +143,11 @@ export default function GameOverScreen() {
   }
 
   const startFresh = () => {
+    // Walking away from the bailout ends the round for good, so this is the
+    // other place the first-run pass retires (the mount effect above skips it
+    // while a bailout is still being offered). A no-op when that effect has
+    // already run.
+    retireAllHints();
     // This screen is presented as a modal (see app/_layout.tsx). *Pushing*
     // onboarding would stack it inside this modal's sheet container, so it
     // would open in a bottom sheet instead of full screen — hence a replace,

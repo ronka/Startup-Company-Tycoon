@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { pickActiveHint, type HintDef } from '@/lib/hints';
+import { ALL_HINTS_RETIRED_ID, hintsRetired, pickActiveHint, type HintDef } from '@/lib/hints';
 
 const HQ: HintDef[] = [
   { id: 'hq', text: 'top bar' },
@@ -43,5 +43,34 @@ describe('pickActiveHint', () => {
     expect(pickActiveHint(off, new Set())).toBeUndefined();
     expect(pickActiveHint(on, new Set())?.id).toBe('runway-short');
     expect(pickActiveHint(on, new Set(['runway-short']))).toBeUndefined();
+  });
+
+  it('shows nothing once the pass is retired, even for hints never seen', () => {
+    // The whole point of the sentinel: a second company gets no tutoring, and
+    // it must not depend on which individual hints the first run happened to
+    // surface (a short first run may never have reached the money tab).
+    expect(pickActiveHint(HQ, new Set([ALL_HINTS_RETIRED_ID]))).toBeUndefined();
+    expect(pickActiveHint(HQ, new Set([ALL_HINTS_RETIRED_ID, 'hq']))).toBeUndefined();
+  });
+
+  it('keeps showing hints while the pass is live', () => {
+    expect(pickActiveHint(HQ, new Set(['hq']))?.id).toBe('runway-short');
+  });
+});
+
+describe('hintsRetired', () => {
+  it('is false for a fresh player and for any ordinary seen hint', () => {
+    expect(hintsRetired(new Set())).toBe(false);
+    expect(hintsRetired(new Set(['hq', 'market', 'team']))).toBe(false);
+  });
+
+  it('is true once the sentinel is present', () => {
+    expect(hintsRetired(new Set([ALL_HINTS_RETIRED_ID]))).toBe(true);
+  });
+
+  it('uses an id no real hint could collide with', () => {
+    // Real ids are kebab-case slugs; the sentinel is double-underscored so a
+    // future hint can never accidentally retire the entire pass.
+    expect(ALL_HINTS_RETIRED_ID.startsWith('__')).toBe(true);
   });
 });

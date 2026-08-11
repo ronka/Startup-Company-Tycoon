@@ -6,7 +6,7 @@ import { EVENTS, track } from '@/analytics/events';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { pickActiveHint, type HintDef } from '@/lib/hints';
+import { ALL_HINTS_RETIRED_ID, hintsRetired, pickActiveHint, type HintDef } from '@/lib/hints';
 
 export type { HintDef };
 
@@ -68,6 +68,18 @@ export function markHintSeen(id: string): void {
   AsyncStorage.setItem(KEY_PREFIX + id, 'true').catch(() => {});
 }
 
+/**
+ * Retires the whole first-run pass for good — the player has finished a run
+ * (IPO, acquisition, or bankruptcy), so the hints have done their job and
+ * shouldn't teach the same lessons again on the next one.
+ *
+ * Written as an ordinary seen-flag, so it needs no special handling anywhere:
+ * it loads with the rest and `resetAllHints` clears it. Idempotent.
+ */
+export function retireAllHints(): void {
+  markHintSeen(ALL_HINTS_RETIRED_ID);
+}
+
 /** Un-retires every hint, so the whole first-run pass plays again (Settings → Reset / Replay intro). */
 export async function resetAllHints(): Promise<void> {
   seenIds = new Set();
@@ -102,7 +114,10 @@ function dismissHint(id: string): void {
  */
 export function useFirstRunHint(id: string): { visible: boolean; dismiss: () => void } {
   const seen = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const visible = seen !== null && !seen.has(id);
+  // `pickActiveHint` gates the slot-based hints on this; the ones driven
+  // through this hook (the Next Week spotlight, the decision-card banner) don't
+  // go through the picker, so they check it here.
+  const visible = seen !== null && !hintsRetired(seen) && !seen.has(id);
 
   useTrackShown(visible ? id : undefined);
 
