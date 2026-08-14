@@ -8,6 +8,15 @@ import {
   weeklyBurnFor,
 } from '../balance';
 import {
+  allDrawPeople,
+  allDraws,
+  drawSource,
+  drawsFor,
+  membersFor,
+  MIN_MEMBERS_PER_ROLE,
+  TIER_BAND,
+} from '../clevel-draws';
+import {
   CANDIDATES_PER_ROLL,
   generateCandidates,
   IS_COMPANY_TIER,
@@ -355,6 +364,109 @@ describe('roll', () => {
         expect(isDominated(candidate, offer.candidates)).toBe(false);
       }
     });
+  });
+});
+
+describe('themed draws', () => {
+  const COMPANY_BANDS: PerkBand[] = PERK_BANDS.filter((b) => IS_COMPANY_TIER[b]);
+
+  it('never repeats a draw id', () => {
+    const ids = allDraws().map((d) => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('never repeats a person', () => {
+    const names = allDrawPeople().map((p) => p.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('gives every person at least one seat', () => {
+    for (const person of allDrawPeople()) {
+      expect(person.roles.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('resolves every member name against the registry', () => {
+    const known = new Set(allDrawPeople().map((p) => p.name));
+    const dangling = allDraws().flatMap((d) => d.members.filter((m) => !known.has(m)).map((m) => `${d.id}: ${m}`));
+    expect(dangling).toEqual([]);
+  });
+
+  it('never lists the same person twice in one draw', () => {
+    for (const draw of allDraws()) {
+      expect(new Set(draw.members).size).toBe(draw.members.length);
+    }
+  });
+
+  it('lets every draw field a pair for at least one seat', () => {
+    // A draw nobody can be hired out of is dead data, not a thin roster.
+    const unusable = allDraws()
+      .filter((d) => !ROLES.some((role) => membersFor(d, role).length >= MIN_MEMBERS_PER_ROLE))
+      .map((d) => d.id);
+    expect(unusable).toEqual([]);
+  });
+
+  it('covers every seat at every company band', () => {
+    // If a (band, role) pair had no eligible draw the roll would silently fall
+    // back to the plain ex-employer pools forever, and the tier would look empty.
+    for (const band of COMPANY_BANDS) {
+      for (const role of ROLES) {
+        expect(drawsFor(role, band).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('keeps the eligibility floor equal to what a roll actually needs', () => {
+    expect(MIN_MEMBERS_PER_ROLE).toBe(CANDIDATES_PER_ROLL);
+  });
+
+  it('only ever sits at a company band', () => {
+    // desperate/personal keep their cluster relations and legend keeps its
+    // hand-written legends; a draw landing there would break those rules.
+    for (const tier of Object.keys(TIER_BAND) as (keyof typeof TIER_BAND)[]) {
+      expect(IS_COMPANY_TIER[TIER_BAND[tier]]).toBe(true);
+    }
+  });
+
+  it('folds the era into the banner and leaves it out when there is none', () => {
+    const withEra = allDraws().find((d) => d.era !== null)!;
+    const withoutEra = allDraws().find((d) => d.era === null)!;
+    expect(drawSource(withEra)).toBe(`${withEra.label} · ${withEra.era}`);
+    expect(drawSource(withoutEra)).toBe(withoutEra.label);
+  });
+
+  it('draws both faces from the roster the banner names', () => {
+    // The banner is a claim about who walked in; this is the claim being true.
+    const banners = new Map(allDraws().map((d) => [drawSource(d), d]));
+    let sawThemed = false;
+    for (const seed of Array.from({ length: 400 }, (_, i) => i + 1)) {
+      for (const role of ROLES) {
+        for (const stage of ['garage', 'seed', 'seriesA', 'growth'] as Stage[]) {
+          const { offer } = roll(createRng(seed), role, stage);
+          const drawn = banners.get(offer.source);
+          if (!drawn) continue;
+          sawThemed = true;
+          const roster = new Set(membersFor(drawn, role).map((p) => p.name));
+          for (const candidate of offer.candidates) {
+            expect(roster.has(candidate.name)).toBe(true);
+            expect(candidate.exEmployer).toBe(offer.source);
+          }
+        }
+      }
+    }
+    expect(sawThemed).toBe(true); // the sample has to actually reach one
+  });
+
+  it('leaves the plain ex-employer pools in circulation', () => {
+    // THEMED_DRAW_CHANCE_PERCENT is deliberately below 100 so the original
+    // parody names do not go dead.
+    const banners = new Set(allDraws().map((d) => drawSource(d)));
+    let sawPlain = false;
+    for (const seed of Array.from({ length: 400 }, (_, i) => i + 1)) {
+      const { offer } = roll(createRng(seed), 'cto', 'growth');
+      if (IS_COMPANY_TIER[offer.tier] && !banners.has(offer.source)) sawPlain = true;
+    }
+    expect(sawPlain).toBe(true);
   });
 });
 

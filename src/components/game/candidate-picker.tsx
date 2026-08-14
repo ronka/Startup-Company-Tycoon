@@ -143,6 +143,7 @@ export function CandidatePicker({
                 entering={FadeInDown.delay(BANNER_SETTLE_MS + i * CANDIDATE_STAGGER_MS).duration(260)}>
                 <CandidateRow
                   candidate={candidate}
+                  source={offer.source}
                   affordable={!unaffordable.has(candidate.id)}
                   onHire={() => {
                     onHire(candidate.id);
@@ -235,10 +236,13 @@ function rollLabel(offer: CLevelOffer | null, rollsRemaining: number | null): st
 
 function CandidateRow({
   candidate,
+  source,
   affordable,
   onHire,
 }: {
   candidate: CLevelCandidate;
+  /** The offer's banner text, so the row can skip repeating it. */
+  source: string;
   affordable: boolean;
   onHire: () => void;
 }) {
@@ -247,7 +251,13 @@ function CandidateRow({
   return (
     <ThemedView type="backgroundElement" style={styles.candidate}>
       <ThemedText type="smallBold">
-        {candidate.name} · {candidate.exEmployer}
+        {/* On a company tier every candidate's employer *is* the banner, so
+            repeating it just prints the same line three times — and a themed
+            roster banner is long enough to wrap when it does. On the cluster
+            and legend tiers it differs per candidate, which is the whole
+            point of showing it. */}
+        {candidate.name}
+        {candidate.exEmployer === source ? '' : ` · ${candidate.exEmployer}`}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {candidate.personality}

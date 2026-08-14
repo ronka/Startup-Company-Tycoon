@@ -3,6 +3,7 @@
  * by the seeded RNG, so the same seed always offers the same three people.
  */
 
+import { DrawPerson, drawSource, drawsFor, membersFor, ThemedDraw } from './clevel-draws';
 import { nextFloat, nextInt } from './rng';
 import {
   CLevelCandidate,
@@ -729,6 +730,14 @@ export const CANDIDATES_PER_ROLL = 2;
 export const LEGEND_LABEL = 'A legend walked in';
 
 /**
+ * How often a company-band roll lands on a themed roster (see clevel-draws.ts)
+ * rather than a plain ex-employer. Themed draws are the interesting content, so
+ * they dominate — but the original parody pools stay in circulation rather than
+ * going dead, which is why this is not 100.
+ */
+export const THEMED_DRAW_CHANCE_PERCENT = 70;
+
+/**
  * Relative odds of each band per company stage — the whole of the
  * "bigger company draws from better sources" rule, as one lookup on
  * `state.stage`. Weights, not percentages: `rollTier` normalises by their sum,
@@ -791,6 +800,11 @@ function shuffled<T>(items: readonly T[], rng: RngState): [T[], RngState] {
  * gives both candidates the **same** employer while a cluster tier gives each
  * their **own** relation; a legend roll offers **two different** legends; and
  * within the pair the stronger-looking perk always carries the higher salary.
+ *
+ * A company tier's employer may be a themed roster from clevel-draws.ts — the
+ * banner then names a real team and both faces come from it. That only swaps
+ * where the names and the banner string come from; band, salary and perk are
+ * decided exactly as before, which is why no balance rule moves.
  */
 export function roll(
   rng: RngState,
@@ -807,7 +821,38 @@ export function roll(
   [tiers, r] = shuffled(bandTiers, r);
   tiers = tiers.slice(0, CANDIDATES_PER_ROLL);
 
-  // Who they are. Legends bring their own name, company and flavour line;
+  // Where they came from, and what the banner says. Decided *before* the faces
+  // because a themed draw supplies both at once.
+  let source: string;
+  let relations: string[] = [];
+  let draw: ThemedDraw | null = null;
+  if (band === 'legend') {
+    source = LEGEND_LABEL;
+  } else if (IS_COMPANY_TIER[band]) {
+    // A company band is either a themed roster ("PayPal Mafia · 2002") or a
+    // plain ex-employer ("ex-Foogle"). Both read as one shared employer, which
+    // is what the company-tier rule already promises.
+    const themed = drawsFor(role, band);
+    let themedRoll: number;
+    [themedRoll, r] = nextInt(r, 0, 99);
+    if (themed.length > 0 && themedRoll < THEMED_DRAW_CHANCE_PERCENT) {
+      let drawIdx: number;
+      [drawIdx, r] = nextInt(r, 0, themed.length - 1);
+      draw = themed[drawIdx];
+      source = drawSource(draw);
+    } else {
+      const pool = COMPANIES[band as CompanyBand];
+      let companyIdx: number;
+      [companyIdx, r] = nextInt(r, 0, pool.length - 1);
+      source = pool[companyIdx];
+    }
+  } else {
+    const cluster = band as 'desperate' | 'personal';
+    source = CLUSTER_LABELS[cluster];
+    [relations, r] = shuffled(RELATIONS[cluster], r);
+  }
+
+  // Who they are. Legends and themed-draw people bring their own flavour line;
   // everyone else draws from the role pools.
   let people: { name: string; personality: string; from: string | null }[];
   if (band === 'legend') {
@@ -816,6 +861,13 @@ export function roll(
     people = picked
       .slice(0, CANDIDATES_PER_ROLL)
       .map((l) => ({ name: l.name, personality: l.flavour, from: l.from }));
+  } else if (draw) {
+    // `drawsFor` already guaranteed at least CANDIDATES_PER_ROLL of these.
+    let roster: DrawPerson[];
+    [roster, r] = shuffled(membersFor(draw, role), r);
+    people = roster
+      .slice(0, CANDIDATES_PER_ROLL)
+      .map((p) => ({ name: p.name, personality: p.flavour, from: null }));
   } else {
     let names: string[];
     [names, r] = shuffled(NAMES[role], r);
@@ -824,22 +876,6 @@ export function roll(
     people = names
       .slice(0, CANDIDATES_PER_ROLL)
       .map((name, i) => ({ name, personality: personalities[i], from: null }));
-  }
-
-  // Where they came from, and what the banner says.
-  let source: string;
-  let relations: string[] = [];
-  if (band === 'legend') {
-    source = LEGEND_LABEL;
-  } else if (IS_COMPANY_TIER[band]) {
-    const pool = COMPANIES[band as CompanyBand];
-    let companyIdx: number;
-    [companyIdx, r] = nextInt(r, 0, pool.length - 1);
-    source = pool[companyIdx];
-  } else {
-    const cluster = band as 'desperate' | 'personal';
-    source = CLUSTER_LABELS[cluster];
-    [relations, r] = shuffled(RELATIONS[cluster], r);
   }
 
   const candidates: CLevelCandidate[] = tiers.map((tier, i) => {
