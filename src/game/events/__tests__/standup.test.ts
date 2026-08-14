@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { CLEAN_RAISE_TERMS_DILUTION_MULTIPLIER } from '../../balance';
 import { newGame, reduce } from '../../engine';
-import { GameState } from '../../types';
 import { applyEventEffects } from '../apply';
 import {
   CLEAN_RAISE_TERMS_FLAG,
@@ -53,29 +52,36 @@ describe('standupCardForStreak', () => {
   });
 });
 
-describe('refreshCandidates effect (golden-tier reward)', () => {
-  it('rerolls every open C-level seat, leaving hired seats untouched', () => {
+describe('grantRoll effect (golden-tier reward)', () => {
+  it('records one earned roll for the store to credit', () => {
     const s0 = newGame('Acme', 1);
-    const hired = s0.cLevels.cto.candidates[0];
-    const withHire: GameState = {
-      ...s0,
-      cLevels: { ...s0.cLevels, cto: { hired, candidates: s0.cLevels.cto.candidates } },
-    };
-
-    const refreshed = applyEventEffects(withHire, { refreshCandidates: true });
-
-    expect(refreshed.cLevels.cto).toEqual(withHire.cLevels.cto); // hired seat untouched
-    expect(refreshed.cLevels.cmo.candidates).not.toEqual(withHire.cLevels.cmo.candidates);
-    expect(refreshed.cLevels.cfo.candidates).not.toEqual(withHire.cLevels.cfo.candidates);
-    expect(refreshed.cLevels.cmo.hired).toBeNull();
+    expect(s0.rollGrantsEarned).toBe(0);
+    expect(applyEventEffects(s0, { grantRoll: true }).rollGrantsEarned).toBe(1);
   });
 
-  it('is a no-op on cash/morale/hype and consumes rng deterministically', () => {
+  it('counts monotonically, so two grants are never collapsed into one', () => {
+    const s0 = newGame('Acme', 1);
+    const twice = applyEventEffects(applyEventEffects(s0, { grantRoll: true }), { grantRoll: true });
+    expect(twice.rollGrantsEarned).toBe(2);
+  });
+
+  it('touches nothing else — no seat is refilled and no rng is consumed', () => {
     const s0 = newGame('Acme', 2);
-    const a = applyEventEffects(s0, { refreshCandidates: true });
-    const b = applyEventEffects(s0, { refreshCandidates: true });
-    expect(a.cash).toBe(s0.cash);
-    expect(a).toEqual(b);
+    const granted = applyEventEffects(s0, { grantRoll: true });
+    expect(granted.cash).toBe(s0.cash);
+    expect(granted.cLevels).toEqual(s0.cLevels);
+    // The seats stay empty: the reward is a spin, not a free offer. That is
+    // the whole point — the old refreshCandidates bypassed the roll budget.
+    expect(granted.rng).toEqual(s0.rng);
+  });
+
+  it("is the golden tier's reward, and no other tier grants one", () => {
+    const grantsRoll = (streakDays: number) =>
+      (standupCardForStreak(streakDays).choices ?? []).some((c) => c.effects.grantRoll);
+    expect(grantsRoll(STANDUP_GOLDEN_STREAK_DAYS)).toBe(true);
+    for (const streakDays of [1, STANDUP_UPGRADED_STREAK_DAYS, STANDUP_RARE_STREAK_DAYS]) {
+      expect(grantsRoll(streakDays)).toBe(false);
+    }
   });
 });
 

@@ -85,9 +85,17 @@ describe('focus transition drag', () => {
   it('rapid flip-flopping is strictly worse than committing: constant drag beats never settling', () => {
     // Flip-flopper: switches focus every single week, so it's permanently
     // inside the transition window and never gets the settled multiplier.
-    let flopper: GameState = { ...newGame('Acme', 4), cash: 5_000_000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
-    let committed: GameState = { ...newGame('Acme', 4), cash: 5_000_000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED } };
-    committed = reduce(committed, { type: 'SET_FOCUS', focus: 'hardware' });
+    // Events held off for the whole run: the two sims diverge in RNG position
+    // the moment one of them draws a card the other doesn't, and a single
+    // lucky card swamps the drag this test is actually measuring.
+    const base = { cash: 5_000_000, headcount: { ...STAFFED }, pendingHeadcount: { ...STAFFED }, weeksUntilNextEvent: 1000 };
+    let flopper: GameState = { ...newGame('Acme', 4), ...base };
+    let committed: GameState = { ...newGame('Acme', 4), ...base };
+    // Committed to 'ai' — one of the two the flopper cycles through. Settling
+    // on 'hardware' instead wins on quality but *loses* on customers, because
+    // hardware's own market multipliers are weaker: the transition drag is
+    // real, and it is not large enough to paper over a focus-strength gap.
+    committed = reduce(committed, { type: 'SET_FOCUS', focus: 'ai' });
 
     const focuses: Array<'hardware' | 'ai'> = ['hardware', 'ai'];
     for (let i = 0; i < 10; i++) {

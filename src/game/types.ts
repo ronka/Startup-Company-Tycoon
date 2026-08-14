@@ -47,6 +47,17 @@ export type CLevelPerkAxis =
   | 'cfo-burnCut'
   | 'cfo-roundTerms';
 
+/**
+ * Price band a perk tier sits in — the six rungs of the hire ladder, cheapest
+ * first. `scrappy` / `mid` / `elite` are the original three; `desperate` and
+ * `personal` sit below them and `legend` above. Within a role, the bands'
+ * salary ranges never overlap, so "better costs more" is structural rather
+ * than tuned. Lives here rather than in `clevels.ts` because the roll odds and
+ * `CLevelCandidate.tier` both need it.
+ */
+export const PERK_BANDS = ['desperate', 'personal', 'scrappy', 'mid', 'elite', 'legend'] as const;
+export type PerkBand = (typeof PERK_BANDS)[number];
+
 /** A perk multiplier applied inside the relevant balance formula for its axis. */
 export interface CLevelPerk {
   id: string;
@@ -68,18 +79,43 @@ export interface CLevelCandidate {
   id: string;
   name: string;
   personality: string;
-  /** Flavor background, e.g. 'ex-Foogle' or 'bootcamp grad'. Signals the candidate's price band. */
+  /**
+   * Where they came from, e.g. 'ex-Foogle' or 'the intern who got good'.
+   * Signals the candidate's price band. On company tiers this is an employer;
+   * on the cluster tiers (`desperate` / `personal`) it is the candidate's
+   * relation to you, which is why the field is rendered verbatim rather than
+   * prefixed with "ex-" at the call site.
+   */
   exEmployer: string;
+  /** The band this candidate was drawn from — drives price and perk strength together. */
+  tier: PerkBand;
   salary: number;
   perk: CLevelPerk;
   quirk: CLevelQuirk | null;
 }
 
-/** One C-level seat: either filled, or open with a standing offer. */
+/**
+ * What one spin of the hire roll landed on. `source` is the banner text and
+ * `tier` says how to read it — a company name on the company tiers, a cluster
+ * label on `desperate` / `personal`, and the legend banner on `legend`, where
+ * each candidate brings their own company instead.
+ */
+export interface CLevelOffer {
+  tier: PerkBand;
+  source: string;
+  candidates: CLevelCandidate[];
+}
+
+/**
+ * One C-level seat: filled, holding the result of your last spin, or empty.
+ *
+ * `offer` is null until the seat is spun for. It then persists until the seat
+ * is spun again — deliberately, so running out of rolls never leaves the
+ * player empty-handed: the last result stays hireable at zero budget.
+ */
 export interface CLevelSlot {
   hired: CLevelCandidate | null;
-  /** The current offer for this seat; persists until hired or the seat is refreshed by a firing. */
-  candidates: CLevelCandidate[];
+  offer: CLevelOffer | null;
 }
 
 export type CLevels = Record<CLevelRole, CLevelSlot>;
@@ -194,6 +230,22 @@ export interface GameState {
 
   /** CTO / CMO / CFO seats: each either filled or carrying a standing offer. */
   cLevels: CLevels;
+  /**
+   * Monotone count of extra hire-rolls this run has *earned* from events (the
+   * golden Morning Standup streak). The roll budget itself lives in the store,
+   * because it is keyed to a real calendar day and `src/game/` never sees a
+   * clock — so the engine cannot credit it directly. It records the grant here
+   * instead and the store credits the difference, which makes the handoff
+   * idempotent under re-render: a double commit lands the same rolls once.
+   *
+   * It is *not* crash-safe across a reload. The store's baseline is in-memory,
+   * so the first observation after a reload credits nothing — a grant taken in
+   * the same beat the app dies is lost. Deliberate: the alternative is
+   * persisting a second counter to make the pair atomic, which is the machinery
+   * `PurchasedWeeksPool.grantedTransactionIds` exists for, and a streak reward
+   * is not a purchase.
+   */
+  rollGrantsEarned: number;
 
   // Funding
   /** Founder's remaining ownership, 0–1. Diluted by each round raised. */
@@ -245,6 +297,7 @@ export type GameAction =
   | { type: 'SET_COMPANY_LOGO'; logo: string | null }
   | { type: 'SET_PENDING_HIRES'; role: Role; delta: number }
   | { type: 'SET_MORALE_LEVER'; active: boolean }
+  | { type: 'ROLL_CANDIDATES'; role: CLevelRole }
   | { type: 'HIRE_CLEVEL'; role: CLevelRole; candidateId: string }
   | { type: 'FIRE_CLEVEL'; role: CLevelRole }
   | { type: 'RAISE_ROUND' }

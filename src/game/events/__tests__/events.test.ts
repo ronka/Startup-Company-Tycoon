@@ -216,8 +216,13 @@ describe('acquisition offers', () => {
 describe('era-gated decks (Task 6)', () => {
   it('the Boom deck never draws while the run is in Scrappy', () => {
     let s: GameState = newGame('Acme', 60);
-    for (let i = 0; i < 40 && s.era === 'scrappy'; i++) {
+    for (let i = 0; i < 40; i++) {
       s = tickAutoAnswer(s);
+      // Stop the moment the run leaves Scrappy. The tick that *enters* Boom is
+      // allowed to draw a Boom card — the deck is picked from the era as it
+      // stands at the draw, and `boomStartWeek` is that same week. Asserting
+      // past this point tests the wrong era.
+      if (s.era !== 'scrappy') break;
       const drawnBoomCards = s.newsLog.filter((entry) =>
         BOOM_DECK.some((card) => card.title === entry.title),
       );

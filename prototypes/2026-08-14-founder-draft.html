@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Founder Draft — prototype</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel-2: #1c232d; --line: #262e3a;
+    --text: #e6edf3; --dim: #8b98a8; --accent: #f0a04b; --good: #4ec9a0; --bad: #e5686d;
+    --font: ui-sans-serif, -apple-system, "SF Pro Text", Inter, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px 20px 96px; background: var(--bg); color: var(--text);
+    font-family: var(--font); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.09em;
+       color: var(--dim); font-weight: 600; margin: 36px 0 12px; }
+  .lede { color: var(--dim); margin: 0 0 4px; max-width: 68ch; }
+  .question { background: var(--panel); border-left: 3px solid var(--accent);
+    padding: 14px 18px; margin: 20px 0 0; border-radius: 0 8px 8px 0; max-width: 72ch; }
+  .question strong { color: var(--accent); }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 2px;
+          background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .cell { background: var(--panel); padding: 12px 14px; }
+  .cell .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--dim); }
+  .cell .v { font-size: 19px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .cell .sub { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .chg { color: var(--accent); font-size: 12px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+
+  button { font-family: inherit; font-size: 14px; cursor: pointer; background: var(--panel-2);
+    color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button.primary { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 600; }
+  button.warn { background: transparent; border-color: var(--bad); color: var(--bad); }
+  button.step { display: block; width: 100%; text-align: left; margin-bottom: 6px; }
+  button.step.done { opacity: 0.4; } button.step.next { border-color: var(--accent); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tabs button.on { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 600; }
+
+  .cohort { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 10px; }
+  .person { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+            padding: 14px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+  .person .nm { font-weight: 600; font-size: 16px; }
+  .person .tag { color: var(--dim); font-size: 13px; font-style: italic; }
+  .person .up { color: var(--good); font-size: 13px; }
+  .person .dn { color: var(--bad); font-size: 13px; }
+  .person .cost { font-variant-numeric: tabular-nums; font-size: 13px; margin-top: auto;
+                  padding-top: 8px; border-top: 1px solid var(--line); }
+  .shape { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+  .seatlbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+  .replace { background: rgba(229,104,109,0.10); border: 1px solid rgba(229,104,109,0.35);
+             border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--bad); }
+
+  .seats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .seat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 13px; }
+  .seat.empty { border-style: dashed; color: var(--dim); }
+  .seat .who { font-weight: 600; }
+  .seat .what { color: var(--dim); font-size: 12.5px; margin-top: 3px; }
+
+  .log { font-family: var(--mono); font-size: 12.5px; max-height: 280px; overflow-y: auto;
+         background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .log div { padding: 2px 0; color: var(--dim); }
+  .log .hot { color: var(--text); } .log .bad { color: var(--bad); } .log .good { color: var(--good); }
+
+  .toggle { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
+  .over { text-align: center; padding: 22px; } .over .big { font-size: 30px; font-variant-numeric: tabular-nums; }
+  .dim { color: var(--dim); }
+  .note { color: var(--dim); font-size: 13px; margin: 0 0 10px; max-width: 72ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>The Founder Draft</h1>
+  <p class="lede">A throwaway prototype for Startup Empire Tycoon. Not production code.</p>
+
+  <div class="question">
+    <strong>The question this answers:</strong> the draft <em>replaces</em> C-level hiring outright.
+    You no longer browse candidates whenever you like — every 12–18 weeks the run pauses and offers
+    you three founders, and you take one. They fill the CTO / CMO / CFO seats.
+    <br><br>
+    Each one wants a different <strong>mix of cash and equity</strong>: a hired gun takes a huge
+    salary and almost no stake; a true believer works nearly free for a big slice of you. So every
+    cohort asks <em>which resource can I afford right now</em> — and the answer flips with your runway.
+    <br><br>
+    Two things to judge: <strong>does the cash-vs-dilution mix actually change your pick as the run
+    goes on</strong>, and <strong>at week 50 with all three seats full, is the cohort still a decision?</strong>
+    Replacing someone means the equity you already paid them is gone for good.
+    <br><br>
+    The weekly simulation is a deliberately crude fake, not the real <code>balance.ts</code>.
+    Read the shape of the choice, not the numbers.
+  </div>
+
+  <h2>Where you stand</h2>
+  <div class="grid" id="state"></div>
+
+  <div id="draftArea"></div>
+
+  <h2>Leadership</h2>
+  <div class="seats" id="seats"></div>
+  <p class="note" id="seatSummary"></p>
+
+  <h2>Play freely</h2>
+  <p class="note">Poke at it in any order. Every click re-renders the panel above.</p>
+  <div class="row" id="free"></div>
+  <div class="row" style="margin-top:10px">
+    <label class="toggle">
+      <input type="checkbox" id="rivalToggle">
+      Variant — the two founders you pass on join a rival
+    </label>
+  </div>
+
+  <h2>Guided walkthroughs</h2>
+  <div class="tabs" id="tabs"></div>
+  <div class="panel">
+    <p class="note" id="scenarioDesc"></p>
+    <div id="steps"></div>
+  </div>
+
+  <h2>What happened</h2>
+  <div class="log" id="log"></div>
+
+</div>
+
+<script>
+/* ============================================================================
+ * PURE MODULE — no DOM, no document, no handlers. Written in the shape
+ * src/game/ uses (seeded RNG threaded in and out) so it can lift out whole.
+ * This REPLACES clevels.ts: same three seats, but populated by a pushed
+ * one-shot cohort instead of a standing offer you browse.
+ * ==========================================================================*/
+
+/* --- rng: mirrors src/game/rng.ts --------------------------------------- */
+function createRng(seed) { return { seed: seed >>> 0, counter: 0 }; }
+function nextRandom(rng) {
+  let s = (rng.seed + 0x6D2B79F5) >>> 0;
+  let t = s;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return [((t ^ (t >>> 14)) >>> 0) / 4294967296, { seed: s, counter: rng.counter + 1 }];
+}
+function nextInt(rng, min, max) {
+  const [v, next] = nextRandom(rng);
+  return [min + Math.floor(v * (max - min + 1)), next];
+}
+
+/* --- seats: unchanged from C_LEVEL_ROLES in src/game/types.ts ------------ */
+const SEATS = ['cto', 'cmo', 'cfo'];
+const SEAT_LABEL = { cto: 'CTO', cmo: 'CMO', cfo: 'CFO' };
+
+/* --- cost shapes: the axis the whole mechanic now turns on ---------------
+ * A cohort always spans all three, so every draft is a question about which
+ * resource you can spare — cash now, or your exit later.
+ * -------------------------------------------------------------------------*/
+const SHAPES = ['gun', 'mixed', 'believer'];
+const SHAPE_LABEL = {
+  gun: 'Hired gun — wants cash',
+  mixed: 'Operator — wants both',
+  believer: 'True believer — wants a slice',
+};
+
+/* --- the cast ------------------------------------------------------------
+ * Names follow the repo's parody convention (clevels.ts: "Linus Torvold",
+ * "Jensen Wong", "ex-Foogle"). `stake` is a share of your REMAINING equity.
+ * -------------------------------------------------------------------------*/
+const FOUNDERS = [
+  // ============================ CTO ============================
+  { id:'jensen', seat:'cto', shape:'gun', name:'Jensen Wong', salary:18000, stake:3, chaos:0,
+    tagline:'The leather jacket is non-negotiable.',
+    mods:{ quality:1.50, valuation:1.30 } },
+  { id:'dorsey', seat:'cto', shape:'gun', name:'Jack Dorsee', salary:13000, stake:2, chaos:0,
+    tagline:'Fasting, ice baths, one product decision a quarter.',
+    mods:{ burn:0.85, quality:0.94 } },
+  { id:'zuck', seat:'cto', shape:'mixed', name:'Mark Zuckerburg', salary:9000, stake:9, chaos:1,
+    tagline:'Move fast. Break things. Apologize to Congress.',
+    mods:{ quality:1.25, conversion:1.20, churn:1.10 },
+    chaosEvents:[ {label:'An internal memo leaks. It reads badly out of context.', hype:0.70} ] },
+  { id:'chesky', seat:'cto', shape:'mixed', name:'Brian Cheskyy', salary:7000, stake:7, chaos:0,
+    tagline:'A designer’s brain in a CEO’s chair.',
+    mods:{ quality:1.18, churn:0.90 } },
+  { id:'jobs', seat:'cto', shape:'believer', name:'Steve Jobbz', salary:2500, stake:21, chaos:1,
+    tagline:'The reality distortion field is load-bearing.',
+    mods:{ quality:1.40, hype:1.40, burn:1.15 },
+    chaosEvents:[ {label:'Told the team their work is garbage. Output soars, two people quit.',
+                   quality:1.15, customers:0.95, morale:-10} ] },
+  { id:'graham', seat:'cto', shape:'believer', name:'Paul Grahem', salary:2000, stake:17, chaos:0,
+    tagline:'Do things that don’t scale.',
+    mods:{ conversion:1.18, quality:1.10 } },
+
+  // ============================ CMO ============================
+  { id:'kalanick', seat:'cmo', shape:'gun', name:'Travis Kalanik', salary:16000, stake:2, chaos:2,
+    tagline:'Growth at all costs. Especially the costs.',
+    mods:{ conversion:1.50, churn:1.20 },
+    chaosEvents:[
+      {label:'Blitzscaled into a new market overnight, permits pending.', customers:1.15, good:true},
+      {label:'Another exposé. This one has receipts.', customers:0.88, hype:0.65, morale:-8},
+      {label:'A city banned the product. Briefly.', cash:-60000} ] },
+  { id:'wojcicki', seat:'cmo', shape:'gun', name:'Anne Wojcickii', salary:13000, stake:3, chaos:1,
+    tagline:'Ships to consumers, argues with regulators.',
+    mods:{ churn:0.85, conversion:1.10 },
+    chaosEvents:[ {label:'A regulator sends a letter about the consumer claims.', cash:-30000} ] },
+  { id:'neumann', seat:'cmo', shape:'mixed', name:'Adam Newmann', salary:9500, stake:10, chaos:3,
+    tagline:'Community-adjusted EBITDA.',
+    mods:{ hype:1.70, dilution:0.55, burn:1.40 },
+    chaosEvents:[
+      {label:'Signed a 15-year lease on a building shaped like a W.', cash:-140000},
+      {label:'Sold the word “We” back to the company for cash.', cash:70000, good:true},
+      {label:'Held a mandatory summer camp. Morale up, runway down.', cash:-90000, morale:8},
+      {label:'Rebranded everything overnight. Investors loved it.', hype:1.60, good:true} ] },
+  { id:'mayer', seat:'cmo', shape:'mixed', name:'Marissa Mayerr', salary:7500, stake:6, chaos:1,
+    tagline:'Turnaround specialist. Results may vary.',
+    mods:{ hype:1.25, burn:1.10 },
+    chaosEvents:[ {label:'Another reorg. Nobody knows who they report to.', quality:0.90, morale:-6} ] },
+  { id:'musk', seat:'cmo', shape:'believer', name:'Elon Muskk', salary:2000, stake:19, chaos:3,
+    tagline:'Posts through it.',
+    mods:{ hype:1.60, quality:1.10 },
+    chaosEvents:[
+      {label:'Posted something that went nuclear. The good kind.', hype:1.80, good:true},
+      {label:'Posted something that went nuclear. The other kind.', hype:0.50, customers:0.92},
+      {label:'Announced a product that does not exist. Everyone believed it.', hype:1.50, good:true},
+      {label:'Called a critic something unprintable, on the company account.', hype:0.60, cash:-45000} ] },
+  { id:'holmes', seat:'cmo', shape:'believer', name:'Bess Holmzz', salary:2200, stake:20, chaos:3,
+    tagline:'The demo works. Please don’t look at the demo.',
+    mods:{ quality:1.55, hype:1.50, valuation:1.40 },
+    chaosEvents:[
+      {label:'Landed a partnership on a product that does not exist yet.', hype:1.70, good:true},
+      {label:'A journalist asked to watch the machine run.', quality:0.55, hype:0.30},
+      {label:'A senior engineer resigned and took their notes with them.',
+       quality:0.75, cash:-40000, morale:-12} ] },
+
+  // ============================ CFO ============================
+  { id:'thiel', seat:'cfo', shape:'gun', name:'Peter Theil', salary:17000, stake:3, chaos:1,
+    tagline:'Competition is for losers.',
+    mods:{ churn:0.62, valuation:1.25 },
+    chaosEvents:[ {label:'Quietly funded a lawsuit against a blog. It made the news.',
+                   cash:-50000, hype:0.80} ] },
+  { id:'hoffman', seat:'cfo', shape:'gun', name:'Reid Hoffmann', salary:12000, stake:2, chaos:0,
+    tagline:'Knows a guy. Knows every guy.',
+    mods:{ dilution:0.85, hype:1.12 } },
+  { id:'sandberg', seat:'cfo', shape:'mixed', name:'Sheryl Sandbergg', salary:9000, stake:8, chaos:0,
+    tagline:'Adult supervision, finally.',
+    mods:{ burn:0.80, churn:0.85 } },
+  { id:'bezos', seat:'cfo', shape:'mixed', name:'Jeff Bezoz', salary:10000, stake:10, chaos:0,
+    tagline:'It’s still Day One. It is always Day One.',
+    mods:{ conversion:1.30, churn:0.80, quality:0.90 } },
+  { id:'altman', seat:'cfo', shape:'believer', name:'Sam Altmann', salary:2500, stake:20, chaos:1,
+    tagline:'Always be raising.',
+    mods:{ dilution:0.60, valuation:1.25 },
+    chaosEvents:[ {label:'The board fires him. He is back by Friday, with more power.',
+                   quality:0.85, hype:1.35} ] },
+  { id:'sbf', seat:'cfo', shape:'believer', name:'Sam Bankmann', salary:1500, stake:19, chaos:3,
+    tagline:'The treasury is fine. The treasury is a vibe.',
+    mods:{ valuation:1.60, dilution:0.50 },
+    chaosEvents:[
+      {label:'The treasury bet paid off. Nobody asks how.', cashPct:1.35, good:true},
+      {label:'The treasury was, it turns out, commingled.', cashPct:0.55},
+      {label:'A balance sheet leaked. It was drawn by hand.', valuationHit:true, hype:0.40} ] },
+];
+
+const CHAOS_CHANCE_PERCENT = [0, 4, 7, 10];
+
+/* --- economy (crude fakes, NOT balance.ts) ------------------------------- */
+const STARTING_CASH = 250000;
+const BASE_BURN = 30000;
+const COGS = 11;
+const ARPC = 42;
+const MARKET = 26000;
+const ROUND_WEEKS = [15, 35, 55];
+const ROUND_CASH = [600000, 1800000, 5000000];
+const ROUND_DILUTION = 0.20;
+const DRAFT_INTERVAL_MIN = 12;
+const DRAFT_INTERVAL_MAX = 18;
+/** Early — the draft is now the ONLY route to leadership, so the opening can't be dead. */
+const FIRST_DRAFT_WEEK = 4;
+/** Replacing a seated founder costs the team, on top of the equity already sunk. */
+const REPLACE_MORALE_HIT = 14;
+
+const NEUTRAL = { quality:1, hype:1, burn:1, conversion:1, churn:1, valuation:1, dilution:1 };
+
+/** Everyone currently sitting in a seat. Only these apply their perks. */
+function seatedCrew(state) { return SEATS.map(s => state.seats[s]).filter(Boolean); }
+
+function modifiersFor(state) {
+  const out = { ...NEUTRAL };
+  for (const p of seatedCrew(state)) {
+    for (const axis of Object.keys(p.mods)) out[axis] *= p.mods[axis];
+  }
+  return out;
+}
+
+/** Exec payroll — the same line `cLevelPayroll` fills in balance.ts today. */
+function execPayroll(state) { return seatedCrew(state).reduce((s, p) => s + p.salary, 0); }
+
+function revenueFor(state) { return Math.round(state.customers * ARPC); }
+function burnFor(state) {
+  return Math.round(BASE_BURN * modifiersFor(state).burn + execPayroll(state) + state.customers * COGS);
+}
+function valuationFor(state) {
+  return Math.round(revenueFor(state) * 52 * 7 * modifiersFor(state).valuation
+                    * state.hype * state.valuationPenalty);
+}
+/** Founder take-home at exit — the same shape as scoreFor() in src/game/score.ts. */
+function projectedScore(state) { return Math.round(valuationFor(state) * state.founderEquity); }
+function runwayWeeks(state) {
+  const net = burnFor(state) - revenueFor(state);
+  return net <= 0 ? Infinity : Math.max(0, state.cash / net);
+}
+/** Points of the whole company a `stake`% bite costs at this equity level. */
+function pointsOf(equity, stake) { return equity * stake; }
+
+/* --- drafting ------------------------------------------------------------ */
+/**
+ * Draw one founder per cost shape, so every cohort spans cash-heavy →
+ * equity-heavy. Prefers distinct seats, and prefers people not yet offered.
+ */
+function drawCohort(rng, seenIds) {
+  const cohort = [];
+  const usedSeats = [];
+  let r = rng;
+  for (const shape of SHAPES) {
+    const all = FOUNDERS.filter(f => f.shape === shape);
+    const fresh = all.filter(f => !seenIds.includes(f.id));
+    const base = fresh.length ? fresh : all;
+    // Try to keep the three seats distinct; fall back if that's impossible.
+    const distinct = base.filter(f => !usedSeats.includes(f.seat));
+    const pool = distinct.length ? distinct : base;
+    let i; [i, r] = nextInt(r, 0, pool.length - 1);
+    cohort.push(pool[i]);
+    usedSeats.push(pool[i].seat);
+  }
+  return { cohort, rng: r };
+}
+
+function scheduleNextDraft(state) {
+  const [weeks, rng] = nextInt(state.rng, DRAFT_INTERVAL_MIN, DRAFT_INTERVAL_MAX);
+  return { ...state, rng, weeksUntilNextDraft: weeks };
+}
+
+function openDraft(state) {
+  const { cohort, rng } = drawCohort(state.rng, state.seenIds);
+  return {
+    ...state, rng, pendingDraft: cohort,
+    seenIds: [...state.seenIds, ...cohort.map(p => p.id)],
+    log: [{ week: state.week, text: 'A cohort walked in: ' +
+            cohort.map(p => p.name).join(', ') + '. Take one.', kind:'hot' }, ...state.log],
+  };
+}
+
+function passedToRivals(state, passed) {
+  let r = state.rng, rivals = state.rivals.map(x => ({ ...x })), entries = [];
+  for (const p of passed) {
+    let i; [i, r] = nextInt(r, 0, rivals.length - 1);
+    rivals[i].quality *= 1.12;
+    rivals[i].share = Math.min(0.9, rivals[i].share * 1.10);
+    entries.push({ week: state.week, text: p.name + ' joined ' + rivals[i].name + '.', kind:'bad' });
+  }
+  return { ...state, rng: r, rivals, log: [...entries, ...state.log] };
+}
+
+/**
+ * Take one from the cohort; the other two are gone for good. They fill their
+ * own seat — and if it's occupied, the incumbent leaves. The equity you
+ * already gave that incumbent does NOT come back. That sunk cost is the whole
+ * reason a late cohort is still a real decision.
+ */
+function draftPerson(state, personId, rivalsTakeTheRest) {
+  if (!state.pendingDraft) return state;
+  const taken = state.pendingDraft.find(p => p.id === personId);
+  if (!taken) return state;
+  const passed = state.pendingDraft.filter(p => p.id !== personId);
+  const outgoing = state.seats[taken.seat];
+
+  const points = pointsOf(state.founderEquity, taken.stake);
+  let next = {
+    ...state,
+    seats: { ...state.seats, [taken.seat]: taken },
+    founderEquity: Math.max(0, state.founderEquity * (1 - taken.stake / 100)),
+    morale: outgoing ? Math.max(0, state.morale - REPLACE_MORALE_HIT) : state.morale,
+    alumni: outgoing ? [...state.alumni, outgoing] : state.alumni,
+    pendingDraft: null,
+    log: [{ week: state.week, text: 'Signed ' + taken.name + ' as ' + SEAT_LABEL[taken.seat] +
+            ' — $' + Math.round(taken.salary / 1000) + 'k/wk and ' + taken.stake +
+            '% of your stake (' + points.toFixed(1) + ' points).', kind:'good' }, ...state.log],
+  };
+  if (outgoing) {
+    next = { ...next, log: [{ week: state.week, text: outgoing.name + ' is out. The equity ' +
+      'they were given does not come back.', kind:'bad' }, ...next.log] };
+  }
+  if (rivalsTakeTheRest) next = passedToRivals(next, passed);
+  return scheduleNextDraft(next);
+}
+
+/** Walk away from all three. Seats stay as they are until the next cohort. */
+function declineDraft(state, rivalsTakeTheRest) {
+  if (!state.pendingDraft) return state;
+  const passed = state.pendingDraft;
+  let next = { ...state, pendingDraft: null,
+    log: [{ week: state.week, text: 'Passed on all three.', kind:'hot' }, ...state.log] };
+  if (rivalsTakeTheRest) next = passedToRivals(next, passed);
+  return scheduleNextDraft(next);
+}
+
+/**
+ * Fire a seated founder. With no standing offer to fall back on, the seat sits
+ * EMPTY until the next cohort — a real cost the old pull-based system never had.
+ */
+function fireSeat(state, seat) {
+  const out = state.seats[seat];
+  if (!out) return state;
+  return {
+    ...state,
+    seats: { ...state.seats, [seat]: null },
+    alumni: [...state.alumni, out],
+    morale: Math.max(0, state.morale - REPLACE_MORALE_HIT),
+    log: [{ week: state.week, text: 'Fired ' + out.name + '. The ' + SEAT_LABEL[seat] +
+            ' seat is empty until a cohort walks in — and their equity is still gone.',
+            kind:'bad' }, ...state.log],
+  };
+}
+
+/* --- chaos --------------------------------------------------------------- */
+function rollChaos(state) {
+  let next = state, r = state.rng;
+  for (const p of seatedCrew(state)) {
+    if (!p.chaos || !p.chaosEvents || !p.chaosEvents.length) continue;
+    let roll; [roll, r] = nextInt(r, 0, 99);
+    if (roll >= CHAOS_CHANCE_PERCENT[p.chaos]) continue;
+    let i; [i, r] = nextInt(r, 0, p.chaosEvents.length - 1);
+    const e = p.chaosEvents[i];
+    next = { ...next,
+      cash: next.cash + (e.cash || 0),
+      hype: e.hype ? Math.max(0.1, next.hype * e.hype) : next.hype,
+      quality: e.quality ? Math.max(1, next.quality * e.quality) : next.quality,
+      customers: e.customers ? Math.max(0, Math.round(next.customers * e.customers)) : next.customers,
+      morale: e.morale ? Math.max(0, Math.min(100, next.morale + e.morale)) : next.morale,
+      valuationPenalty: e.valuationHit ? next.valuationPenalty * 0.5 : next.valuationPenalty };
+    if (e.cashPct) next = { ...next, cash: Math.round(next.cash * e.cashPct) };
+    next = { ...next, log: [{ week: next.week, text: p.name + ': ' + e.label,
+                              kind: e.good ? 'good' : 'bad' }, ...next.log] };
+  }
+  return { ...next, rng: r };
+}
+
+/* --- the crude fake tick ------------------------------------------------- */
+function tick(state) {
+  if (state.gameOver || state.pendingDraft) return state;   // same freeze rule as pendingEvent
+  const m = modifiersFor(state);
+  const week = state.week + 1;
+  let next = { ...state, week };
+
+  // Morale drifts back to a baseline; low morale drags output (mirrors moraleCrisisMultiplier).
+  next.morale = Math.min(100, next.morale + (next.morale < 70 ? 1.5 : 0));
+  const moraleDrag = next.morale < 60 ? 0.75 : 1;
+
+  next.quality = next.quality + 6 * m.quality * moraleDrag;
+  next.hype = 1 + (next.hype - 1) * 0.92 + 0.06 * (m.hype - 1);
+  const saturation = Math.max(0, 1 - next.customers / MARKET);
+  const leads = 62 * Math.sqrt(next.quality / 10) * next.hype * m.conversion * saturation * moraleDrag;
+  next.customers = Math.max(0, Math.round(next.customers + leads - next.customers * 0.05 * m.churn));
+  next.cash = next.cash + revenueFor(next) - burnFor(next);
+
+  next = rollChaos(next);
+
+  const roundIdx = ROUND_WEEKS.indexOf(week);
+  if (roundIdx >= 0) {
+    const dilution = ROUND_DILUTION * m.dilution;
+    next = { ...next,
+      cash: next.cash + ROUND_CASH[roundIdx],
+      founderEquity: next.founderEquity * (1 - dilution),
+      log: [{ week, text: 'Raised a round: $' + (ROUND_CASH[roundIdx] / 1e6).toFixed(1) +
+              'M in, ' + (dilution * 100).toFixed(0) + '% of you out.', kind:'hot' }, ...next.log] };
+  }
+
+  next.weeksUntilNextDraft = next.weeksUntilNextDraft - 1;
+  if (next.weeksUntilNextDraft <= 0) next = openDraft(next);
+  if (next.cash < 0) next = { ...next, gameOver: 'bankruptcy',
+    log: [{ week, text: 'Out of cash. The run ends here.', kind:'bad' }, ...next.log] };
+  return next;
+}
+
+function tickMany(state, weeks) {
+  let s = state;
+  for (let i = 0; i < weeks; i++) {
+    if (s.gameOver || s.pendingDraft) return s;
+    s = tick(s);
+  }
+  return s;
+}
+
+function newRun(seed) {
+  return {
+    rng: createRng(seed), week: 0, cash: STARTING_CASH, quality: 10, hype: 1,
+    customers: 40, morale: 70, founderEquity: 1.0, valuationPenalty: 1,
+    seats: { cto: null, cmo: null, cfo: null },
+    alumni: [], seenIds: [], pendingDraft: null, weeksUntilNextDraft: FIRST_DRAFT_WEEK,
+    rivals: [ { name:'Bitwarp', quality:12, share:0.06 }, { name:'Cloudmoss', quality:11, share:0.05 } ],
+    gameOver: null,
+    log: [{ week:0, text:'Founded. Three empty seats and 100% of nothing.', kind:'hot' }],
+  };
+}
+
+/* ============================================================================
+ * THROWAWAY PAGE — the shell. Nothing here flows back into the module above.
+ * ==========================================================================*/
+
+let state = newRun(20260814);
+let prev = null;
+
+const $ = id => document.getElementById(id);
+const money = n => (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString();
+const pct = n => (n * 100).toFixed(1) + '%';
+
+function delta(now, before, fmt) {
+  if (before === null || before === undefined || Math.abs(now - before) < 0.005) return '';
+  return '<span class="chg">' + (now > before ? '+' : '−') + fmt(Math.abs(now - before)) + '</span>';
+}
+
+const LABEL = { quality:'product quality', hype:'hype', burn:'burn', conversion:'new customers',
+                churn:'churn', valuation:'valuation multiple', dilution:'round dilution' };
+const GOOD_IS_UP = { quality:1, hype:1, conversion:1, valuation:1 };
+function modLine(p) {
+  const up = [], dn = [];
+  for (const a of Object.keys(p.mods)) {
+    const m = p.mods[a];
+    const better = GOOD_IS_UP[a] ? m > 1 : m < 1;
+    (better ? up : dn).push((m > 1 ? '+' : '−') + Math.round(Math.abs(m - 1) * 100) + '% ' + LABEL[a]);
+  }
+  return { up, dn };
+}
+
+function renderState() {
+  const r = runwayWeeks(state);
+  const cells = [
+    ['Week', state.week, ''],
+    ['Cash', money(state.cash), 'burn ' + money(burnFor(state)) + '/wk'],
+    ['Runway', r === Infinity ? 'profitable' : r.toFixed(0) + ' wks',
+      'exec payroll ' + money(execPayroll(state))],
+    ['Revenue', money(revenueFor(state)) + '/wk', state.customers.toLocaleString() + ' customers'],
+    ['Product quality', state.quality.toFixed(0), 'hype ' + state.hype.toFixed(2) + '×'],
+    ['Morale', Math.round(state.morale), state.morale < 60 ? 'dragging output' : 'fine'],
+    ['Your stake', pct(state.founderEquity) +
+      delta(state.founderEquity, prev && prev.founderEquity, n => pct(n)), 'of the company'],
+    ['If you exited now', money(projectedScore(state)) +
+      delta(projectedScore(state), prev && projectedScore(prev), n => money(n)), 'the score'],
+    ['Next cohort', state.gameOver ? '—' :
+      (state.pendingDraft ? 'waiting on you' : 'in ' + state.weeksUntilNextDraft + ' wks'), ''],
+  ];
+  $('state').innerHTML = cells.map(([k, v, s]) =>
+    `<div class="cell"><div class="k">${k}</div><div class="v">${v}</div>` +
+    (s ? `<div class="sub">${s}</div>` : '') + `</div>`).join('');
+}
+
+function renderDraft() {
+  const area = $('draftArea');
+  if (state.gameOver) {
+    area.innerHTML = `<h2>Run over</h2><div class="panel over">
+      <div class="dim">Bankrupt at week ${state.week}.</div><div class="big">$0</div>
+      <div class="dim">Every point of equity you gave away, for nothing.</div></div>`;
+    return;
+  }
+  if (!state.pendingDraft) { area.innerHTML = ''; return; }
+
+  const cards = state.pendingDraft.map(p => {
+    const { up, dn } = modLine(p);
+    const incumbent = state.seats[p.seat];
+    const after = state.founderEquity * (1 - p.stake / 100);
+    const points = pointsOf(state.founderEquity, p.stake);
+    const burnNow = burnFor(state);
+    const burnAfter = burnFor({ ...state, seats: { ...state.seats, [p.seat]: p } });
+    const rNow = runwayWeeks(state);
+    const rAfter = runwayWeeks({ ...state, seats: { ...state.seats, [p.seat]: p } });
+    const fmtR = x => x === Infinity ? 'profitable' : x.toFixed(0) + ' wks';
+    return `<div class="person">
+      <div class="seatlbl">${SEAT_LABEL[p.seat]}</div>
+      <div class="nm">${p.name}</div>
+      <div class="shape">${SHAPE_LABEL[p.shape]}</div>
+      <div class="tag">“${p.tagline}”</div>
+      ${up.length ? `<div class="up">▲ ${up.join(', ')}</div>` : ''}
+      ${dn.length ? `<div class="dn">▼ ${dn.join(', ')}</div>` : ''}
+      ${p.chaos ? `<div class="dn">⚠ Chaos ${p.chaos} — ~${CHAOS_CHANCE_PERCENT[p.chaos]}%/wk something happens</div>` : ''}
+      ${incumbent ? `<div class="replace">Replaces ${incumbent.name}. Their equity is already
+        spent and does not come back — and the team takes ${REPLACE_MORALE_HIT} morale.</div>` : ''}
+      <div class="cost">
+        <div>Cash: ${money(p.salary)}/wk · burn ${money(burnNow)} → <strong>${money(burnAfter)}</strong></div>
+        <div>Runway: ${fmtR(rNow)} → <strong>${fmtR(rAfter)}</strong></div>
+        <div>Equity: ${p.stake}% of your stake = <strong>${points.toFixed(1)} points</strong>
+          · you go ${pct(state.founderEquity)} → ${pct(after)}</div>
+      </div>
+      <button class="primary" data-pick="${p.id}" style="margin-top:8px">
+        ${incumbent ? 'Replace with' : 'Sign'} ${p.name.split(' ')[0]}</button>
+    </div>`;
+  }).join('');
+
+  area.innerHTML = `<h2>Week ${state.week} — take one</h2>
+    <p class="note">One of the three. The other two walk, and you will not see them again this run.
+      There is no candidate list to browse — this is the only way leadership gets hired.</p>
+    <div class="cohort">${cards}</div>
+    <div class="row" style="margin-top:10px">
+      <button data-decline="1">Pass on all three</button></div>`;
+
+  area.querySelectorAll('[data-pick]').forEach(b =>
+    b.onclick = () => act(s => draftPerson(s, b.dataset.pick, $('rivalToggle').checked)));
+  area.querySelector('[data-decline]').onclick =
+    () => act(s => declineDraft(s, $('rivalToggle').checked));
+}
+
+function renderSeats() {
+  $('seats').innerHTML = SEATS.map(seat => {
+    const p = state.seats[seat];
+    if (!p) return `<div class="seat empty"><div class="seatlbl">${SEAT_LABEL[seat]}</div>
+      <div class="who">Empty</div>
+      <div class="what">Wait for a cohort — there is no candidate list.</div></div>`;
+    const { up, dn } = modLine(p);
+    return `<div class="seat"><div class="seatlbl">${SEAT_LABEL[seat]}</div>
+      <div class="who">${p.name}</div>
+      <div class="what">${money(p.salary)}/wk · took ${p.stake}% of stake${p.chaos ? ' · chaos ' + p.chaos : ''}</div>
+      <div class="what">${[...up, ...dn].join(' · ')}</div>
+      <button class="warn" data-fire="${seat}" style="margin-top:8px">Fire</button></div>`;
+  }).join('');
+  $('seats').querySelectorAll('[data-fire]').forEach(b =>
+    b.onclick = () => act(s => fireSeat(s, b.dataset.fire)));
+
+  const gone = state.alumni;
+  const kept = state.founderEquity;
+  $('seatSummary').innerHTML =
+    `You have <strong>${pct(kept)}</strong> left. Exec payroll is ${money(execPayroll(state))}/wk.` +
+    (gone.length ? ` <span class="dim">Departed, still holding what you gave them: ` +
+      gone.map(p => p.name + ' (' + p.stake + '%)').join(', ') + '.</span>' : '');
+}
+
+function renderLog() {
+  $('log').innerHTML = state.log.slice(0, 45).map(e =>
+    `<div class="${e.kind || ''}">wk ${String(e.week).padStart(2)} · ${e.text}</div>`).join('');
+}
+
+function render() { renderState(); renderDraft(); renderSeats(); renderLog(); renderSteps(); }
+function act(fn) { prev = state; state = fn(state); render(); }
+
+/* --- free play ----------------------------------------------------------- */
+const FREE = [
+  ['Advance 1 week', s => tick(s)],
+  ['Advance 5 weeks', s => tickMany(s, 5)],
+  ['Advance 20 weeks', s => tickMany(s, 20)],
+  ['Force a cohort now', s => s.pendingDraft || s.gameOver ? s : openDraft(s)],
+  ['Start over', () => newRun(20260814)],
+  ['Start over (new seed)', () => newRun(Math.floor(Math.random() * 1e9))],
+];
+$('free').innerHTML = FREE.map((f, i) => `<button data-free="${i}">${f[0]}</button>`).join('');
+$('free').querySelectorAll('[data-free]').forEach(b => b.onclick = () => act(FREE[b.dataset.free][1]));
+
+/* --- walkthroughs -------------------------------------------------------- */
+function forcePick(id) {
+  return s => {
+    let n = s.pendingDraft ? s : openDraft(s);
+    const target = FOUNDERS.find(f => f.id === id);
+    if (!n.pendingDraft.some(p => p.id === id)) {
+      const cohort = n.pendingDraft.slice();
+      const slot = cohort.findIndex(p => p.shape === target.shape);
+      cohort[slot < 0 ? 0 : slot] = target;
+      n = { ...n, pendingDraft: cohort };
+    }
+    return draftPerson(n, id, $('rivalToggle').checked);
+  };
+}
+function pickShape(shape) {
+  return s => {
+    const n = s.pendingDraft ? s : openDraft(s);
+    const p = n.pendingDraft.find(x => x.shape === shape) || n.pendingDraft[0];
+    return draftPerson(n, p.id, $('rivalToggle').checked);
+  };
+}
+function runTo(week) {
+  return s => { let n = s;
+    while (n.week < week && !n.gameOver) n = n.pendingDraft ? declineDraft(n, false) : tick(n);
+    return n; };
+}
+
+const SCENARIOS = [
+  { title: 'First cohort (wk 4)',
+    desc: 'The draft is now the only way to hire leadership, so the first one lands at week 4 — ' +
+          'no dead opening. Look at the three cards: same job, wildly different price shapes. ' +
+          'Take the hired gun and watch Runway, not equity.',
+    steps: [
+      ['Reset the run', () => newRun(20260814)],
+      ['Advance to week 4', s => tickMany(s, 4)],
+      ['Take the hired gun (big salary, tiny stake)', pickShape('gun')],
+      ['Run 10 weeks — check the runway', s => tickMany(s, 10)],
+    ] },
+
+  { title: 'Cash or dilution ★',
+    desc: 'The same cohort, the other way round. Take the true believer instead: almost no salary, ' +
+          'a big bite of you. Compare Runway and "If you exited now" against walkthrough one at the ' +
+          'same week. That trade — cash now vs. your exit later — is the whole mechanic.',
+    steps: [
+      ['Reset the run', () => newRun(20260814)],
+      ['Advance to week 4', s => tickMany(s, 4)],
+      ['Take the true believer (near-free, big stake)', pickShape('believer')],
+      ['Run 10 weeks — check the runway now', s => tickMany(s, 10)],
+      ['Run to the next cohort', s => tickMany(s, 20)],
+    ] },
+
+  { title: 'Late-run replacement ★',
+    desc: 'The one that decides whether seats work. Fill all three seats, get to week ~50 with two ' +
+          'rounds raised, then force a cohort. Every card now offers to replace someone — and the ' +
+          'equity you gave the incumbent is gone whatever you do. Is it still a decision, or do ' +
+          'you decline on sight?',
+    steps: [
+      ['Reset the run', () => newRun(20260814)],
+      ['Advance to week 4', s => tickMany(s, 4)],
+      ['Fill a seat', pickShape('mixed')],
+      ['Run to the next cohort, fill another', s => pickShape('mixed')(tickMany(s, 20))],
+      ['Run to the next, fill the third', s => pickShape('mixed')(tickMany(s, 20))],
+      ['Run to week 50', runTo(50)],
+      ['Force a cohort — every card is now a replacement', s => s.pendingDraft ? s : openDraft(s)],
+    ] },
+
+  { title: 'The chaos pick',
+    desc: 'Take Adam Newmann as CMO. Best hype in the game, and a ~10%/week chance of doing ' +
+          'something. Run 30 weeks. Would you take him again?',
+    steps: [
+      ['Reset the run', () => newRun(20260814)],
+      ['Advance to week 4', s => tickMany(s, 4)],
+      ['Sign Adam Newmann (chaos 3)', forcePick('neumann')],
+      ['Run 10 weeks', s => tickMany(s, 10)],
+      ['Run 10 more', s => tickMany(s, 10)],
+      ['Run 10 more', s => tickMany(s, 10)],
+    ] },
+
+  { title: 'All guns / all believers',
+    desc: 'Two failure modes, both reachable. Take the hired gun every single time: exec payroll ' +
+          'stacks toward $80k/wk and the runway eats you. Then reset and take the true believer ' +
+          'every time instead: you survive comfortably and exit owning very little.',
+    steps: [
+      ['Reset the run', () => newRun(20260814)],
+      ['Advance to week 4', s => tickMany(s, 4)],
+      ['Gun', pickShape('gun')],
+      ['Run on, gun again', s => pickShape('gun')(tickMany(s, 20))],
+      ['Gun again', s => pickShape('gun')(tickMany(s, 20))],
+      ['Run 20 more and see if you survived', s => tickMany(s, 20)],
+    ] },
+
+  { title: 'Empty seat (firing)',
+    desc: 'Fire someone. With no candidate list to browse, the seat stays empty until a cohort ' +
+          'happens to walk in — which could be 18 weeks. That is a cost the old pull-based hiring ' +
+          'never had, and it is why replacing via the draft is usually better than firing.',
+    steps: [
+      ['Reset the run', () => newRun(20260814)],
+      ['Advance to week 4', s => tickMany(s, 4)],
+      ['Sign anyone', s => s.pendingDraft ? draftPerson(s, s.pendingDraft[0].id, false) : s],
+      ['Run 6 weeks', s => tickMany(s, 6)],
+      ['Fire them', s => { const filled = SEATS.find(x => s.seats[x]); return filled ? fireSeat(s, filled) : s; }],
+      ['Run 10 weeks with an empty seat', s => tickMany(s, 10)],
+    ] },
+];
+
+let activeScenario = 0, stepIndex = 0;
+$('tabs').innerHTML = SCENARIOS.map((s, i) => `<button data-tab="${i}">${s.title}</button>`).join('');
+$('tabs').querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+  activeScenario = +b.dataset.tab; stepIndex = 0; prev = null;
+  state = newRun(20260814); render();
+});
+
+function renderSteps() {
+  const sc = SCENARIOS[activeScenario];
+  $('tabs').querySelectorAll('[data-tab]').forEach(b =>
+    b.classList.toggle('on', +b.dataset.tab === activeScenario));
+  $('scenarioDesc').textContent = sc.desc;
+  $('steps').innerHTML = sc.steps.map((s, i) =>
+    `<button class="step ${i < stepIndex ? 'done' : ''} ${i === stepIndex ? 'next' : ''}"
+      data-step="${i}" ${i === stepIndex ? '' : 'disabled'}>${i + 1}. ${s[0]}</button>`).join('');
+  $('steps').querySelectorAll('[data-step]').forEach(b => b.onclick = () => {
+    const fn = SCENARIOS[activeScenario].steps[+b.dataset.step][1];
+    stepIndex++;
+    act(fn);
+  });
+}
+
+render();
+</script>
+</body>
+</html>

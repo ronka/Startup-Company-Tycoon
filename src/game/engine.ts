@@ -4,7 +4,7 @@
  * delegates here. Everything is deterministic given the seeded RNG in state.
  */
 
-import { generateCandidates } from './clevels';
+import { roll } from './clevels';
 import { applyEventEffects } from './events/apply';
 import { BOOM_DECK } from './events/boom';
 import { drawCadenceWeeks, drawCard, drawFillerCard } from './events/deck';
@@ -92,7 +92,9 @@ import { checkGameOver, isIpoEligible, scoreFor } from './score';
 import { advanceTrend, initialTrend, trendPhaseChangeNewsEntry } from './trends';
 import {
   C_LEVEL_ROLES,
+  CLevelCandidate,
   CLevels,
+  CLevelSlot,
   FocusId,
   GameAction,
   GameState,
@@ -151,11 +153,11 @@ export function newGame(
   logo?: string,
 ): GameState {
   let rng = createRng(seed);
+  // Every seat starts empty with no offer: leadership is something you spin
+  // for, not a standing menu that is simply there on week 1.
   const cLevels = {} as CLevels;
   for (const role of C_LEVEL_ROLES) {
-    const offer = generateCandidates(role, rng);
-    cLevels[role] = { hired: null, candidates: offer.candidates };
-    rng = offer.rng;
+    cLevels[role] = { hired: null, offer: null };
   }
   const rivalOffer = generateRivals(rng);
   rng = rivalOffer.rng;
@@ -195,6 +197,7 @@ export function newGame(
     valuationHistory: [],
     rivals: rivalOffer.rivals,
     cLevels,
+    rollGrantsEarned: 0,
     founderEquity: STARTING_FOUNDER_EQUITY,
     stage: STARTING_STAGE,
     roundsRaised: 0,
@@ -213,6 +216,30 @@ export function newGame(
     gameOver: null,
     finalScore: null,
   };
+}
+
+/**
+ * Brings a save written by an older build up to the current `GameState` shape.
+ *
+ * There is no `SAVE_VERSION` gate — it was removed pre-release and the app is
+ * live — so this runs on every hydrate and has to be safe on an already-current
+ * save. It is deliberately additive: it fills in what is missing and never
+ * touches anything a run would miss.
+ *
+ * The one thing it does discard is a pre-roll seat's standing six-candidate
+ * offer, which the roll's picker has no way to render. That costs an open seat
+ * one spin; everything the player actually built — cash, week, headcount,
+ * whoever they already hired — survives untouched.
+ */
+export function normalizeSave(saved: GameState): GameState {
+  const cLevels = {} as CLevels;
+  for (const role of C_LEVEL_ROLES) {
+    const slot = (saved.cLevels?.[role] ?? { hired: null, offer: null }) as CLevelSlot & {
+      candidates?: CLevelCandidate[];
+    };
+    cLevels[role] = { hired: slot.hired ?? null, offer: slot.offer ?? null };
+  }
+  return { ...saved, cLevels, rollGrantsEarned: saved.rollGrantsEarned ?? 0 };
 }
 
 /**
@@ -608,24 +635,45 @@ export function reduce(state: GameState, action: GameAction): GameState {
     }
     case 'SET_MORALE_LEVER':
       return { ...state, moraleLeverActive: action.active };
-    case 'HIRE_CLEVEL': {
-      const slot = state.cLevels[action.role];
-      const candidate = slot.candidates.find((c) => c.id === action.candidateId);
-      if (!candidate) return state;
+    case 'ROLL_CANDIDATES': {
+      // The budget check lives in the store, which owns the calendar day.
+      const { offer, rng } = roll(state.rng, action.role, state.stage);
       return {
         ...state,
-        cLevels: { ...state.cLevels, [action.role]: { hired: candidate, candidates: slot.candidates } },
+        rng,
+        cLevels: {
+          ...state.cLevels,
+          [action.role]: { hired: state.cLevels[action.role].hired, offer },
+        },
+      };
+    }
+    case 'HIRE_CLEVEL': {
+      const slot = state.cLevels[action.role];
+      const candidate = slot.offer?.candidates.find((c) => c.id === action.candidateId);
+      if (!candidate) return state;
+      // Hiring over a filled seat is a swap, and the incumbent walking out
+      // costs exactly what firing them would. Charging nothing here would make
+      // the roll a free way around `FIRE_CLEVEL`'s price — and since a legend
+      // almost always arrives after the seats are full, the swap is the common
+      // case, not the corner one.
+      const morale = slot.hired
+        ? clamp(state.morale - C_LEVEL_DEPARTURE_MORALE_HIT, 0, 100)
+        : state.morale;
+      return {
+        ...state,
+        morale,
+        cLevels: { ...state.cLevels, [action.role]: { hired: candidate, offer: slot.offer } },
       };
     }
     case 'FIRE_CLEVEL': {
       const slot = state.cLevels[action.role];
       if (!slot.hired) return state;
-      const offer = generateCandidates(action.role, state.rng);
+      // Deliberately does *not* regenerate an offer — that was the free-reroll
+      // loop. The seat empties and the player spends a roll to refill it.
       return {
         ...state,
-        rng: offer.rng,
         morale: clamp(state.morale - C_LEVEL_DEPARTURE_MORALE_HIT, 0, 100),
-        cLevels: { ...state.cLevels, [action.role]: { hired: null, candidates: offer.candidates } },
+        cLevels: { ...state.cLevels, [action.role]: { hired: null, offer: null } },
       };
     }
     case 'RAISE_ROUND': {

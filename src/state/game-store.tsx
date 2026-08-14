@@ -18,7 +18,7 @@ import {
 import { EVENTS, gameProps, track } from '@/analytics/events';
 import { posthog } from '@/analytics/posthog';
 import { totalHeadcount } from '@/game/balance';
-import { newGame, reduce } from '@/game/engine';
+import { newGame, normalizeSave, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
@@ -31,6 +31,13 @@ import {
   type RestoreOutcome,
 } from '@/purchases';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
+import {
+  initialRollBudget,
+  isRollBudgetExhausted,
+  refreshRollBudget,
+  spendRoll,
+  type RollBudget,
+} from '@/state/roll-budget';
 import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import {
@@ -64,6 +71,7 @@ export const REVIVE_STORAGE_KEY = 'startup-tycoon/revive/v1';
 export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
 export const RUN_HISTORY_STORAGE_KEY = 'startup-tycoon/run-history/v1';
+export const ROLL_STORAGE_KEY = 'startup-tycoon/rolls/v1';
 
 /**
  * The revision of the intro story this build ships. Bump it when the intro is
@@ -247,6 +255,15 @@ interface GameContextValue {
    */
   weekBudget: WeekBudget | null;
   /**
+   * The daily hire-roll budget: null until the initial load resolves. One
+   * pool shared across all three C-level seats, which is what makes "which
+   * seat do I spend this on?" a real decision. `ROLL_CANDIDATES` is rejected
+   * once `rollsRemaining` hits 0 unless `devFreePlay` is on; the last rolled
+   * offer stays hireable at zero, so an empty budget never leaves the player
+   * with nothing to do.
+   */
+  rollBudget: RollBudget | null;
+  /**
    * IAP-purchased weeks (separate from the free daily budget): cap-exempt,
    * never expire, and outlive `NEW_GAME` / game over. Spent only after the
    * free budget is exhausted. Null until the initial load resolves.
@@ -336,6 +353,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // context type above and the mount effect below.
   const [saveLoaded, setSaveLoaded] = useState(false);
   const [weekBudget, setWeekBudget] = useState<WeekBudget | null>(null);
+  const [rollBudget, setRollBudget] = useState<RollBudget | null>(null);
   const [purchasedWeeks, setPurchasedWeeks] = useState<PurchasedWeeksPool | null>(null);
   // Synchronous mirror of `purchasedWeeks`, for the same reason as
   // `revivePoolRef` below: `restorePurchases` has to read the *current*
@@ -373,7 +391,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (!cancelled && raw) {
-          dispatch({ type: 'HYDRATE', state: JSON.parse(raw) as GameState });
+          // Every save goes through `normalizeSave`: there is no version gate,
+          // so the only safe assumption is that any save may predate the
+          // current shape. It is a no-op on a current one.
+          dispatch({ type: 'HYDRATE', state: normalizeSave(JSON.parse(raw) as GameState) });
         }
       } catch (err) {
         console.warn('[game-store] failed to load save', err);
@@ -392,6 +413,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.warn('[game-store] failed to load week budget', err);
         if (!cancelled) setWeekBudget(initialWeekBudget(new Date()));
+      }
+      try {
+        const raw = await AsyncStorage.getItem(ROLL_STORAGE_KEY);
+        const saved = raw ? (JSON.parse(raw) as RollBudget) : null;
+        const refreshed = refreshRollBudget(saved ?? initialRollBudget(new Date()), new Date());
+        if (!cancelled) setRollBudget(refreshed);
+      } catch (err) {
+        console.warn('[game-store] failed to load roll budget', err);
+        if (!cancelled) setRollBudget(initialRollBudget(new Date()));
       }
       let loadedPurchasedWeeks = initialPurchasedWeeksPool();
       try {
@@ -483,6 +513,41 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save week budget', err),
     );
   }, [weekBudget, loading]);
+
+  // Credit rolls the run has earned from events (the golden standup streak).
+  // The engine can only count them — the budget is keyed to a real calendar
+  // day, which `src/game/` never sees — so the handoff is a monotone counter
+  // and this effect credits whatever it has not credited yet. Crediting a
+  // difference rather than reacting to an event makes it idempotent: a
+  // re-render, a reload mid-grant, or a double commit all land the same rolls.
+  const creditedRollGrantsRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (loading || rollBudget === null || state === null) return;
+    const earned = state.rollGrantsEarned;
+    const credited = creditedRollGrantsRef.current;
+    creditedRollGrantsRef.current = earned;
+    // First observation of a run (hydrate, new game, revive) sets the
+    // baseline without crediting — those grants were spent in an earlier
+    // session, and their rolls went into that session's budget.
+    if (credited === null || earned <= credited) return;
+    const owed = earned - credited;
+    // Deliberately *not* clamped to `ROLLS_BANK_CAP`. The cap exists to stop a
+    // week-long absence banking into a pile — it is a rule about the free daily
+    // allowance. This roll was earned by picking it over cash and morale, and
+    // clamping would silently make that a dead choice for anyone sitting at the
+    // cap. Same reasoning that makes `PurchasedWeeksPool` cap-exempt.
+    setRollBudget((prev) => (prev === null ? prev : { ...prev, rollsRemaining: prev.rollsRemaining + owed }));
+  }, [state, rollBudget, loading]);
+
+  // Persist the hire-roll budget whenever it changes. Its own key and its own
+  // effect, exactly like the week budget: the two allowances refresh on the
+  // same day boundary but are otherwise unrelated pools.
+  useEffect(() => {
+    if (loading || rollBudget === null) return;
+    AsyncStorage.setItem(ROLL_STORAGE_KEY, JSON.stringify(rollBudget)).catch((err) =>
+      console.warn('[game-store] failed to save roll budget', err),
+    );
+  }, [rollBudget, loading]);
 
   // Persist the purchased-weeks pool whenever it changes, and keep the ref
   // mirror in sync with each committed value.
@@ -683,6 +748,29 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // fresh post-tick numbers, once the reducer commits.
       return;
     }
+    if (action.type === 'ROLL_CANDIDATES') {
+      if (!state) return;
+      // Same shape as the TICK gate above: a null budget means the read has
+      // not landed yet, and spinning in that window would be a free roll.
+      if (!devFreePlay && rollBudget === null) return;
+      if (isRollBudgetExhausted(rollBudget, devFreePlay)) {
+        // The second daily wall. Tracked like the first, and for the same
+        // reason: it is where a session ends.
+        track(EVENTS.ROLL_BLOCKED, { ...gameProps(state), role: action.role });
+        return;
+      }
+      if (!devFreePlay && rollBudget) setRollBudget(spendRoll(rollBudget));
+      // Reduced here rather than dispatched blind, so the event can carry the
+      // tier the wheel actually landed on instead of guessing it from a diff.
+      const next = reduce(state, action);
+      track(EVENTS.CANDIDATES_ROLLED, {
+        ...gameProps(state),
+        role: action.role,
+        tier: next.cLevels[action.role].offer?.tier ?? null,
+      });
+      dispatch({ type: 'SET_STATE', state: next });
+      return;
+    }
     // Every other game action carries its params + the pre-action run context.
     // (Outcomes like stage/era changes are emitted separately by the diff effect.)
     if (state) captureAction(action, state);
@@ -777,6 +865,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setProfileState(null);
       setStreak(null);
       setWeekBudget(initialWeekBudget(new Date()));
+      setRollBudget(initialRollBudget(new Date()));
       setRunHistory(initialRunHistory());
       // Deliberately *not* reset: the purchased-weeks and revive pools. Both
       // are paid entitlements ("a durable entitlement, not a daily allowance",
@@ -802,6 +891,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       ]).catch(() => {});
     },
     weekBudget,
+    rollBudget,
     purchasedWeeks,
     grantPurchasedWeeks: (amount: number) => {
       applyPurchasedWeeks((prev) => grantPurchasedWeeks(prev, amount));

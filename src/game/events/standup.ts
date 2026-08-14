@@ -60,8 +60,8 @@ const STANDUP_CARDS: Record<StandupTier, EventCard> = {
     flavor: 'A full week of daily check-ins. The team offers something bigger today.',
     choices: [
       {
-        label: 'Refresh every open leadership search',
-        effects: { refreshCandidates: true },
+        label: 'Work the network for one more leadership lead',
+        effects: { grantRoll: true },
       },
       { label: 'Grab a quick win', effects: { deltas: [{ stat: 'cash', amount: 20_000 }] } },
       { label: 'Check in on the team', effects: { deltas: [{ stat: 'morale', amount: 15 }] } },

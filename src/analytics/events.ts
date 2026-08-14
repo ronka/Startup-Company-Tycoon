@@ -61,6 +61,15 @@ export const EVENTS = {
   CLEVEL_HIRED: 'clevel_hired',
   CLEVEL_FIRED: 'clevel_fired',
   CANDIDATES_VIEWED: 'candidates_viewed',
+  /**
+   * One spin of the hire roll. Carries `tier` (the band the wheel landed on)
+   * alongside the usual `stage`, which together are the production version of
+   * the odds table in the design doc — the only way to see whether the weights
+   * survive contact with real runs.
+   */
+  CANDIDATES_ROLLED: 'candidates_rolled',
+  /** A spin was refused because the daily roll budget was spent — the second daily wall, tracked like the first. */
+  ROLL_BLOCKED: 'roll_blocked',
   FUNDING_ROUND_RAISED: 'funding_round_raised',
   RUN_ENDED_IPO: 'run_ended_ipo',
   FOCUS_CHANGED: 'focus_changed',

@@ -46,12 +46,16 @@ export interface EventEffects {
    */
   setsFlag?: string;
   /**
-   * Rerolls the candidate offer for every open (not yet hired) C-level seat.
-   * Used by the Morning Standup's golden-streak tier (Task 15) — a fresh
-   * batch of options is often worth more than a flat stat bump once a run is
-   * mid-search for a CTO/CMO/CFO.
+   * Grants one extra hire-roll. Used by the Morning Standup's golden-streak
+   * tier — an extra spin is often worth more than a flat stat bump once a run
+   * is mid-search for a CTO/CMO/CFO.
+   *
+   * It cannot credit the budget directly: that lives in the store, keyed to a
+   * real calendar day, and `src/game/` never sees a clock. The engine bumps
+   * `rollGrantsEarned` and the store credits the difference — see that field's
+   * note for what the handoff does and does not guarantee.
    */
-  refreshCandidates?: boolean;
+  grantRoll?: boolean;
 }
 
 export interface EventChoice {

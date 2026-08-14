@@ -1,8 +1,7 @@
 /** Applies an EventEffects bundle to a GameState. Shared by news auto-apply and ANSWER_EVENT. */
 
 import { clamp, EVENT_MARKET_SHARE_CUSTOMER_SCALE } from '../balance';
-import { generateCandidates } from '../clevels';
-import { C_LEVEL_ROLES, GameState } from '../types';
+import { GameState } from '../types';
 import { EventEffects } from './types';
 
 export function applyEventEffects(state: GameState, effects: EventEffects): GameState {
@@ -44,16 +43,8 @@ export function applyEventEffects(state: GameState, effects: EventEffects): Game
     next = { ...next, storyFlags: [...next.storyFlags, effects.setsFlag] };
   }
 
-  if (effects.refreshCandidates) {
-    let rng = next.rng;
-    const cLevels = { ...next.cLevels };
-    for (const role of C_LEVEL_ROLES) {
-      if (cLevels[role].hired) continue; // nothing to reroll for an already-filled seat
-      const offer = generateCandidates(role, rng);
-      rng = offer.rng;
-      cLevels[role] = { hired: null, candidates: offer.candidates };
-    }
-    next = { ...next, cLevels, rng };
+  if (effects.grantRoll) {
+    next = { ...next, rollGrantsEarned: next.rollGrantsEarned + 1 };
   }
 
   return next;

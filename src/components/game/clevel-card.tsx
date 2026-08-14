@@ -10,11 +10,17 @@ import { formatMoney } from '@/lib/format';
 export function CLevelCard({
   title,
   hired,
+  hasOffer,
+  searchLabel,
   onFire,
   onViewCandidates,
 }: {
   title: string;
   hired: CLevelCandidate | null;
+  /** Whether this seat has been spun for yet — an empty seat and a seat with a standing offer read differently. */
+  hasOffer: boolean;
+  /** What the search button says — it spins, opens a standing offer, or browses over a filled seat. */
+  searchLabel: string;
   onFire: () => void;
   onViewCandidates: () => void;
 }) {
@@ -32,14 +38,20 @@ export function CLevelCard({
               Quirk: {hired.quirk.label}
             </ThemedText>
           ) : null}
+          {/* A filled seat still reaches the search. Without this the only way
+              to see a roll is to fire first — paying morale before you know
+              what the wheel gives you — and rolling would stop entirely once
+              all three seats fill, which is early, and long before the stages
+              where a legend is actually reachable. */}
+          <PrimaryButton variant="primary" label={searchLabel} onPress={onViewCandidates} />
           <PrimaryButton variant="secondary" label="Fire" onPress={onFire} />
         </View>
       ) : (
         <View style={styles.filled}>
           <ThemedText type="small" themeColor="textSecondary">
-            Seat open
+            {hasOffer ? 'Seat open' : 'Empty — spin to see who’s available'}
           </ThemedText>
-          <PrimaryButton variant="primary" label="View candidates" onPress={onViewCandidates} />
+          <PrimaryButton variant="primary" label={searchLabel} onPress={onViewCandidates} />
         </View>
       )}
     </Card>

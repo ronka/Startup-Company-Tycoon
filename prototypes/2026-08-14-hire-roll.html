@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hire Roll — prototype</title>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#161b22; --panel-2:#1c232d; --line:#262e3a;
+    --text:#e6edf3; --dim:#8b98a8; --accent:#f0a04b; --good:#4ec9a0; --bad:#e5686d;
+    --t1:#6b7280; --t2:#7c8b9c; --t3:#4e9ec9; --t4:#4ec99a; --t5:#c98fe0; --t6:#f0a04b;
+    --font: ui-sans-serif,-apple-system,"SF Pro Text",Inter,system-ui,sans-serif;
+    --mono: ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 20px 96px;background:var(--bg);color:var(--text);
+    font-family:var(--font);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);
+     font-weight:600;margin:36px 0 12px}
+  .lede{color:var(--dim);margin:0 0 4px;max-width:70ch}
+  .question{background:var(--panel);border-left:3px solid var(--accent);padding:14px 18px;
+    margin:20px 0 0;border-radius:0 8px 8px 0;max-width:74ch}
+  .question strong{color:var(--accent)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+  .note{color:var(--dim);font-size:13px;margin:0 0 10px;max-width:74ch}
+  .dim{color:var(--dim)}
+
+  button{font-family:inherit;font-size:14px;cursor:pointer;background:var(--panel-2);color:var(--text);
+    border:1px solid var(--line);border-radius:8px;padding:9px 14px}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.35;cursor:default}
+  button.primary{background:var(--accent);color:#1a1206;border-color:var(--accent);font-weight:600}
+  button.spin{font-size:15px;font-weight:600;padding:12px 18px;width:100%}
+  button.step{display:block;width:100%;text-align:left;margin-bottom:6px}
+  button.step.done{opacity:.4} button.step.next{border-color:var(--accent)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .tabs button.on{background:var(--accent);color:#1a1206;border-color:var(--accent);font-weight:600}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:2px;
+    background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .cell{background:var(--panel);padding:12px 14px}
+  .cell .k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim)}
+  .cell .v{font-size:19px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .cell .sub{font-size:12px;color:var(--dim)}
+
+  .desks{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+  .desk{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .desk h3{margin:0 0 2px;font-size:15px}
+  .seated{background:var(--panel-2);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+  .seated .nm{font-weight:600}
+  .seated .sub{color:var(--dim);font-size:12.5px}
+
+  .source{border-radius:8px;padding:8px 12px;margin:10px 0 8px;font-weight:600;font-size:13px;
+    letter-spacing:.02em;border:1px solid}
+  .cand{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;
+    margin-bottom:8px}
+  .cand .nm{font-weight:600}
+  .cand .fl{color:var(--dim);font-size:12.5px;font-style:italic}
+  .cand .pk{color:var(--good);font-size:13px;margin-top:3px}
+  .cand .sal{font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim)}
+  .cand button{margin-top:8px;padding:6px 12px;font-size:13px}
+
+  table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:right;padding:7px 9px;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .bar{display:inline-block;height:9px;border-radius:2px;vertical-align:middle;margin-right:6px}
+
+  .log{font-family:var(--mono);font-size:12.5px;max-height:260px;overflow-y:auto;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .log div{padding:2px 0;color:var(--dim)}
+  .log .hot{color:var(--text)} .log .good{color:var(--good)} .log .leg{color:var(--accent);font-weight:600}
+  .wall{background:rgba(240,160,75,.10);border:1px solid rgba(240,160,75,.4);border-radius:10px;
+    padding:12px 14px;margin:12px 0;color:var(--accent);font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Hire Roll</h1>
+<p class="lede">A throwaway prototype for Startup Empire Tycoon. Not production code.</p>
+
+<div class="question">
+  <strong>The mechanic:</strong> open a leadership seat and press <em>Spin</em>. The wheel lands on a
+  <strong>source</strong> — a friend of your mom, someone from your last job, ex-Foogle, or, rarely, a
+  name you actually know. That source hands you two candidates. Better candidates cost more, and a
+  bigger company draws from better sources.
+  <br><br>
+  You get <strong>2 rolls per real day</strong>, shared across all three seats, banking to 6. A source
+  can be all-bad — both candidates junk. Your only recourse is another roll, or tomorrow.
+  <br><br>
+  <strong>The question this answers</strong> is not whether spinning feels good. It is whether the
+  stage-gated table produces a legend often enough to chase and rarely enough to matter — and whether
+  2 rolls a day is generous or stingy when a roll can be wasted. The tables below are the deliverable;
+  the spin button is secondary.
+</div>
+
+<h2>The odds — every roll, by company stage</h2>
+<p class="note">Computed live from the table in the module below by rolling 40,000 times per stage.
+  This is the thing to argue with.</p>
+<div class="panel" id="odds"></div>
+
+<h2>How long until a legend</h2>
+<p class="note">Rolls needed to see your first legend, and what that means in real days at 2 rolls/day.</p>
+<div class="panel" id="chase"></div>
+
+<h2>Try it</h2>
+<div class="grid" id="hud"></div>
+<div id="wallArea"></div>
+<div class="desks" id="desks" style="margin-top:12px"></div>
+
+<h2>Play freely</h2>
+<div class="row" id="free"></div>
+
+<h2>Guided walkthroughs</h2>
+<div class="tabs" id="tabs"></div>
+<div class="panel">
+  <p class="note" id="scenarioDesc"></p>
+  <div id="steps"></div>
+</div>
+
+<h2>What happened</h2>
+<div class="log" id="log"></div>
+
+</div>
+
+<script>
+/* ============================================================================
+ * PURE MODULE — no DOM, no document, no clock. Same shape as src/game/:
+ * seeded RNG threaded in and out. The roll table is the part worth keeping.
+ * ==========================================================================*/
+
+/* --- rng: mirrors src/game/rng.ts --------------------------------------- */
+function createRng(seed){ return { seed: seed>>>0, counter: 0 }; }
+function nextRandom(rng){
+  let s=(rng.seed+0x6D2B79F5)>>>0, t=s;
+  t=Math.imul(t^(t>>>15), t|1);
+  t^=t+Math.imul(t^(t>>>7), t|61);
+  return [((t^(t>>>14))>>>0)/4294967296, { seed:s, counter:rng.counter+1 }];
+}
+function nextInt(rng,min,max){ const [v,n]=nextRandom(rng); return [min+Math.floor(v*(max-min+1)), n]; }
+
+/* --- seats: unchanged from C_LEVEL_ROLES in src/game/types.ts ------------ */
+const ROLES = ['cto','cmo','cfo'];
+const ROLE_LABEL = { cto:'CTO', cmo:'CMO', cfo:'CFO' };
+
+/* --- stages: unchanged from STAGE_ORDER in src/game/types.ts ------------- */
+const STAGES = ['garage','seed','seriesA','growth'];
+const STAGE_LABEL = { garage:'Garage', seed:'Seed', seriesA:'Series A', growth:'Growth' };
+
+/* --- source tiers --------------------------------------------------------
+ * `scrappy` / `mid` / `elite` already exist in clevels.ts as BOTH EX_EMPLOYERS
+ * pools and PerkBand salary bands. This adds two tiers below and one above.
+ * -------------------------------------------------------------------------*/
+const TIERS = ['desperate','personal','scrappy','mid','elite','legend'];
+const TIER_LABEL = {
+  desperate:'Who you can get', personal:'Your network', scrappy:'Scrappy',
+  mid:'Solid', elite:'Big tech', legend:'Legend',
+};
+
+/**
+ * What the wheel lands on. Two kinds, exactly as the pitch described it —
+ * "a company, or a type of cluster of candidates":
+ *
+ *  - COMPANY tiers: the wheel lands on ONE company. Both candidates came from
+ *    it, and each card carries it as their `ex-` line, the same way
+ *    CandidatePicker already renders `{name} · {exEmployer}` today.
+ *  - CLUSTER tiers: the wheel lands on the *type* of connection. Each
+ *    candidate then has their OWN relation to you, so two people from one
+ *    roll are never the same person twice.
+ */
+const IS_COMPANY_TIER = { desperate:false, personal:false, scrappy:true, mid:true, elite:true, legend:true };
+
+/** Company tiers: the wheel picks one of these, and both candidates share it. */
+const COMPANIES = {
+  scrappy: ['ex-Uper','ex-WeWerk','ex-Yahooo','ex-Twitterr','ex-Groupoon'],
+  mid:     ['ex-Netflex','ex-Tesler','ex-Stripee','ex-Airbrb','ex-Dropboxx','ex-Snapp'],
+  elite:   ['ex-Foogle','ex-ClosedAI','ex-Macrosoft','ex-Metta','ex-Nvidiaa','ex-Applle','ex-Anthroppic'],
+};
+
+/** Cluster tiers: the wheel picks the type; each candidate draws their own relation. */
+const RELATIONS = {
+  desperate: ['a friend of your mom','your cousin who "does computers"','a guy from your gym',
+              'your old roommate','replied to the job post','your landlord’s nephew'],
+  personal:  ['from your last job','you studied together','your bootcamp cohort',
+              'a friend of a friend','the intern who got good','your first manager'],
+};
+const CLUSTER_LABEL = { desperate:'Whoever you can get', personal:'Your own network' };
+
+/**
+ * Probability of each tier, by company stage. `stage` already lives on
+ * GameState. Legends stay reachable from the garage on purpose: a week-3 pull
+ * is the run you tell someone about.
+ */
+const STAGE_WEIGHTS = {
+  garage:  { desperate:40, personal:32, scrappy:20, mid:6,  elite:1.5, legend:0.5 },
+  seed:    { desperate:20, personal:30, scrappy:28, mid:15, elite:5,   legend:2   },
+  seriesA: { desperate:8,  personal:20, scrappy:27, mid:25, elite:15,  legend:5   },
+  growth:  { desperate:2,  personal:10, scrappy:20, mid:28, elite:30,  legend:10  },
+};
+
+/** Weekly salary range per tier. Never overlaps across tiers — better always costs more. */
+const SALARY = {
+  desperate:[1800,2800], personal:[3200,5200], scrappy:[6000,7000],
+  mid:[7600,9500], elite:[24000,31000], legend:[52000,78000],
+};
+/** Perk strength range per tier, as a fraction. Drives the label and the price within the band. */
+const POWER = {
+  desperate:[0.04,0.10], personal:[0.10,0.18], scrappy:[0.16,0.26],
+  mid:[0.26,0.38], elite:[0.36,0.55], legend:[0.60,0.95],
+};
+
+/** Perk axes per seat — the same ones balance.ts already threads. */
+const AXES = {
+  cto:[ {id:'cto-productivity', label:p=>`+${p}% dev productivity`},
+        {id:'cto-techDebt',     label:p=>`−${p}% tech-debt drag`} ],
+  cmo:[ {id:'cmo-hypeGain',     label:p=>`+${p}% hype impact`},
+        {id:'cmo-hypeDecay',    label:p=>`−${p}% hype decay`} ],
+  cfo:[ {id:'cfo-burnCut',      label:p=>`−${p}% fixed burn`},
+        {id:'cfo-roundTerms',   label:p=>`−${p}% dilution next round`} ],
+};
+
+const FIRST_NAMES = ['Gary','Denise','Kevin','Sharon','Barry','Janet','Trevor','Michelle',
+                     'Doug','Priya','Nigel','Carol','Wayne','Bev','Roy','Sandra'];
+const LAST_NAMES  = ['Pilcher','Nunn','Braddock','Sooley','Renk','Vance','Ottway','Mullen'];
+
+const FLAVOUR = {
+  desperate:['Did a course once.','Very enthusiastic.','Owns a laptop.','Has "ideas".',
+             'Available immediately. Extremely available.','Says they know Python.'],
+  personal:['You have seen them work. It was fine.','Still owes you forty quid.',
+            'Better than you remember.','Wants out of their current job, badly.',
+            'Reliable. Not exciting. Reliable.','Would follow you anywhere, cheaply.'],
+  scrappy:['Survived a startup that did not.','Ships fast, sleeps rarely.',
+           'Has seen a company die and learned from it.','Cheap for what they are.'],
+  mid:['Knows exactly what they are worth.','Has done this at scale once already.',
+       'Competent, expensive, unremarkable.','Reads the room and the roadmap.'],
+  elite:['Interviewing you as much as you are them.','Has a number in mind. It is large.',
+         'Comes with a reputation and a rider.','Would be a downgrade to lose.'],
+};
+
+/** Named legends by seat. Repo parody convention, as in clevels.ts. Each keeps
+ *  the company they are famous for, so the `ex-` line works for them too. */
+const LEGENDS = {
+  cto:[ {name:'Jensen Wong',   from:'ex-Nvidiaa',   flavour:'The leather jacket is non-negotiable.'},
+        {name:'Linus Torvold', from:'ex-Linnux',    flavour:'Will tell you the code is bad. It is.'},
+        {name:'Satya Nadellla',from:'ex-Macrosoft', flavour:'Turned a battleship. Quietly.'},
+        {name:'Steve Jobbz',   from:'ex-Applle',    flavour:'The reality distortion field is load-bearing.'} ],
+  cmo:[ {name:'Elon Muskk',      from:'ex-Tesler',      flavour:'Posts through it.'},
+        {name:'Mark Zuckerburg', from:'ex-Metta',       flavour:'Move fast. Apologize to Congress.'},
+        {name:'Sundar Pichaii',  from:'ex-Foogle',      flavour:'Says nothing controversial, ever, on purpose.'},
+        {name:'Gary Vaynerchukk',from:'ex-VaynerMedya', flavour:'Will yell you into product-market fit.'} ],
+  cfo:[ {name:'Warren Buffet',   from:'ex-Berkshyre', flavour:'Reads the cap table for pleasure.'},
+        {name:'Sam Altmann',     from:'ex-ClosedAI',  flavour:'Always be raising.'},
+        {name:'Sheryl Sandbergg',from:'ex-Metta',     flavour:'Adult supervision, finally.'},
+        {name:'Ruth Poratt',     from:'ex-Foogle',    flavour:'Has never met a budget she did not cut.'} ],
+};
+
+/* --- the roll ------------------------------------------------------------ */
+const ROLLS_PER_DAY = 2;
+const ROLLS_BANK_CAP = 6;
+const CANDIDATES_PER_ROLL = 2;
+
+/** Pick a tier for this stage, by weight. Pure. */
+function rollTier(rng, stage) {
+  const w = STAGE_WEIGHTS[stage];
+  const total = TIERS.reduce((s,t) => s + w[t], 0);
+  // integer draw over a 10x-scaled wheel keeps this in the repo's nextInt idiom
+  let [pick, r] = nextInt(rng, 0, Math.round(total * 10) - 1);
+  for (const t of TIERS) {
+    const slice = Math.round(w[t] * 10);
+    if (pick < slice) return [t, r];
+    pick -= slice;
+  }
+  return [TIERS[TIERS.length - 1], r];
+}
+
+function makeCandidate(rng, role, tier, i, forcedAxisIdx, rolledCompany, forcedLegendIdx) {
+  let r = rng;
+  const [pMin, pMax] = POWER[tier];
+  let pRoll; [pRoll, r] = nextInt(r, 0, 1000);
+  const power = pMin + (pMax - pMin) * (pRoll / 1000);
+
+  // Salary tracks power inside the band, so a better candidate always costs more.
+  const [sMin, sMax] = SALARY[tier];
+  const salary = Math.round((sMin + (sMax - sMin) * (pRoll / 1000)) / 100) * 100;
+
+  let axisIdx;
+  if (forcedAxisIdx === undefined) [axisIdx, r] = nextInt(r, 0, AXES[role].length - 1);
+  else axisIdx = forcedAxisIdx;
+  const axis = AXES[role][axisIdx];
+
+  // `from` is the line shown next to the name — the ex-company for anyone who
+  // came out of one, their relation to you for anyone who did not.
+  let name, flavour, from;
+  if (tier === 'legend') {
+    const l = LEGENDS[role][forcedLegendIdx];     // distinct per candidate — never the same twice
+    name = l.name; flavour = l.flavour; from = l.from;
+  } else {
+    let fi, si, xi;
+    [fi, r] = nextInt(r, 0, FIRST_NAMES.length - 1);
+    [si, r] = nextInt(r, 0, LAST_NAMES.length - 1);
+    [xi, r] = nextInt(r, 0, FLAVOUR[tier].length - 1);
+    name = FIRST_NAMES[fi] + ' ' + LAST_NAMES[si];
+    flavour = FLAVOUR[tier][xi];
+    if (IS_COMPANY_TIER[tier]) {
+      from = rolledCompany;                       // shared: the wheel landed on it
+    } else {
+      let ri; [ri, r] = nextInt(r, 0, RELATIONS[tier].length - 1);
+      from = RELATIONS[tier][ri];                 // personal: their own connection
+    }
+  }
+
+  let idSeed; [idSeed, r] = nextInt(r, 0, 999999);
+  return [{ id: role + '-' + idSeed + '-' + i, name, flavour, from, tier, salary,
+            axis: axis.id, perkLabel: axis.label(Math.round(power * 100)), power }, r];
+}
+
+/**
+ * One roll: land on a source, then draw candidates from it. Everything comes
+ * from the SAME tier, so a bad source really is all-bad — the only recourse is
+ * another roll.
+ */
+function roll(rng, role, stage) {
+  let r = rng;
+  let tier; [tier, r] = rollTier(r, stage);
+
+  // Company tiers land on ONE company, shared by both candidates. Cluster
+  // tiers land on the type, and each candidate draws their own relation.
+  let rolledCompany = null, source;
+  if (tier === 'legend') {
+    source = null;                                 // the name itself is the drama
+  } else if (IS_COMPANY_TIER[tier]) {
+    let ci; [ci, r] = nextInt(r, 0, COMPANIES[tier].length - 1);
+    rolledCompany = COMPANIES[tier][ci];
+    source = rolledCompany;
+  } else {
+    source = CLUSTER_LABEL[tier];
+  }
+
+  // The two candidates always sit on DIFFERENT perk axes. A weak source can
+  // still hand you two weak people — that is the gamble — but never two
+  // near-identical ones, which is just noise rather than a decision.
+  let firstAxis; [firstAxis, r] = nextInt(r, 0, AXES[role].length - 1);
+  // Same rule for legends: a legend roll offers two DIFFERENT famous people.
+  let firstLegend; [firstLegend, r] = nextInt(r, 0, LEGENDS[role].length - 1);
+  const candidates = [];
+  for (let i = 0; i < CANDIDATES_PER_ROLL; i++) {
+    let c;
+    [c, r] = makeCandidate(r, role, tier, i, (firstAxis + i) % AXES[role].length, rolledCompany,
+                           (firstLegend + i) % LEGENDS[role].length);
+    candidates.push(c);
+  }
+  return { offer: { tier, source, company: rolledCompany, candidates }, rng: r };
+}
+
+/* --- roll budget: mirrors week-budget.ts exactly ------------------------- */
+function dateKey(now){ return now.toISOString().slice(0,10); }
+function initialRollBudget(dayIndex){ return { lastDay: dayIndex, rollsRemaining: ROLLS_PER_DAY }; }
+function refreshRollBudget(b, dayIndex){
+  if (dayIndex === b.lastDay) return b;
+  return { lastDay: dayIndex, rollsRemaining: Math.min(ROLLS_BANK_CAP, b.rollsRemaining + ROLLS_PER_DAY) };
+}
+function canRoll(b){ return b.rollsRemaining > 0; }
+function spendRoll(b){ return { ...b, rollsRemaining: Math.max(0, b.rollsRemaining - 1) }; }
+
+/* --- state --------------------------------------------------------------- */
+function newRun(seed){
+  return { rng: createRng(seed), stage:'garage', day:0,
+    budget: initialRollBudget(0),
+    offers: { cto:null, cmo:null, cfo:null },   // the standing result of your last roll
+    hired:  { cto:null, cmo:null, cfo:null },
+    rollsMade: 0, legendsSeen: 0,
+    log: [{ text:'Three empty seats. Two rolls a day.', kind:'hot' }] };
+}
+
+function doRoll(state, role){
+  if (!canRoll(state.budget)) return state;
+  const { offer, rng } = roll(state.rng, role, state.stage);
+  const isLegend = offer.tier === 'legend';
+  return { ...state, rng,
+    budget: spendRoll(state.budget),
+    offers: { ...state.offers, [role]: offer },
+    rollsMade: state.rollsMade + 1,
+    legendsSeen: state.legendsSeen + (isLegend ? 1 : 0),
+    log: [{ text: ROLE_LABEL[role] + ' roll → ' +
+            (isLegend ? 'A LEGEND: ' + offer.candidates[0].name : TIER_LABEL[offer.tier] + ' — ' + offer.source),
+            kind: isLegend ? 'leg' : (offer.tier === 'desperate' ? '' : 'good') }, ...state.log] };
+}
+
+function hire(state, role, candidateId){
+  const offer = state.offers[role];
+  if (!offer) return state;
+  const c = offer.candidates.find(x => x.id === candidateId);
+  if (!c) return state;
+  return { ...state,
+    hired: { ...state.hired, [role]: c },
+    offers: { ...state.offers, [role]: null },
+    log: [{ text:'Hired ' + c.name + ' as ' + ROLE_LABEL[role] + ' — $' +
+            c.salary.toLocaleString() + '/wk · ' + c.perkLabel, kind:'good' }, ...state.log] };
+}
+
+/** A new real day: budget refreshes, banking to the cap. */
+function nextDay(state){
+  const day = state.day + 1;
+  return { ...state, day, budget: refreshRollBudget(state.budget, day),
+    log: [{ text:'A new day. Rolls refreshed.', kind:'hot' }, ...state.log] };
+}
+
+function setStage(state, stage){
+  return { ...state, stage,
+    log: [{ text:'Company is now at ' + STAGE_LABEL[stage] + ' — better sources unlock.', kind:'hot' }, ...state.log] };
+}
+
+function payroll(state){ return ROLES.reduce((s,r) => s + (state.hired[r]?.salary || 0), 0); }
+
+/* --- analysis: the actual deliverable ------------------------------------ */
+/** Roll N times per stage and count where they land. */
+function tierHistogram(samples){
+  const out = {};
+  for (const stage of STAGES) {
+    let r = createRng(12345), counts = {};
+    TIERS.forEach(t => counts[t] = 0);
+    for (let i = 0; i < samples; i++) { let t; [t, r] = rollTier(r, stage); counts[t]++; }
+    out[stage] = counts;
+  }
+  return out;
+}
+
+/** Median and 90th-percentile rolls until the first legend, per stage. */
+function rollsUntilLegend(trials){
+  const out = {};
+  for (const stage of STAGES) {
+    let r = createRng(999), results = [];
+    for (let i = 0; i < trials; i++) {
+      let n = 0, t;
+      do { [t, r] = rollTier(r, stage); n++; } while (t !== 'legend' && n < 2000);
+      results.push(n);
+    }
+    results.sort((a,b) => a-b);
+    out[stage] = { median: results[Math.floor(trials*0.5)], p90: results[Math.floor(trials*0.9)] };
+  }
+  return out;
+}
+
+/* ============================================================================
+ * THROWAWAY PAGE — the shell.
+ * ==========================================================================*/
+let state = newRun(20260814);
+const $ = id => document.getElementById(id);
+const money = n => '$' + Math.round(n).toLocaleString();
+const TIER_COLOR = { desperate:'var(--t1)', personal:'var(--t2)', scrappy:'var(--t3)',
+                     mid:'var(--t4)', elite:'var(--t5)', legend:'var(--t6)' };
+
+function renderOdds(){
+  const h = tierHistogram(40000);
+  const rows = TIERS.map(t => {
+    const cells = STAGES.map(s => {
+      const p = h[s][t] / 40000 * 100;
+      return `<td><span class="bar" style="width:${Math.max(1,p*1.1)}px;background:${TIER_COLOR[t]}"></span>${p.toFixed(1)}%</td>`;
+    }).join('');
+    return `<tr><td><span style="color:${TIER_COLOR[t]}">■</span> ${TIER_LABEL[t]}</td>${cells}</tr>`;
+  }).join('');
+  $('odds').innerHTML = `<table><tr><th>Source tier</th>${
+    STAGES.map(s=>`<th>${STAGE_LABEL[s]}</th>`).join('')}</tr>${rows}</table>`;
+}
+
+function renderChase(){
+  const u = rollsUntilLegend(4000);
+  const rows = STAGES.map(s => {
+    const m = u[s], days = n => (n / ROLLS_PER_DAY).toFixed(0);
+    return `<tr><td>${STAGE_LABEL[s]}</td>
+      <td>${m.median}</td><td>${days(m.median)} days</td>
+      <td>${m.p90}</td><td>${days(m.p90)} days</td></tr>`;
+  }).join('');
+  $('chase').innerHTML = `<table>
+    <tr><th>Stage</th><th>Typical rolls</th><th>= real time</th>
+        <th>Unlucky (p90)</th><th>= real time</th></tr>${rows}</table>
+    <p class="note" style="margin-top:12px">At ${ROLLS_PER_DAY} rolls/day. Read the Garage row as
+    "most players will never pull a legend before raising" — which is the point, but check you agree.</p>`;
+}
+
+function renderHud(){
+  const cells = [
+    ['Day', state.day, 'prototype clock'],
+    ['Rolls left', state.budget.rollsRemaining, `${ROLLS_PER_DAY}/day, banks to ${ROLLS_BANK_CAP}`],
+    ['Stage', STAGE_LABEL[state.stage], 'gates the source table'],
+    ['Rolls made', state.rollsMade, `${state.legendsSeen} legend${state.legendsSeen===1?'':'s'} seen`],
+    ['Exec payroll', money(payroll(state)) + '/wk', ROLES.filter(r=>state.hired[r]).length + ' of 3 seats'],
+  ];
+  $('hud').innerHTML = cells.map(([k,v,s]) =>
+    `<div class="cell"><div class="k">${k}</div><div class="v">${v}</div><div class="sub">${s}</div></div>`).join('');
+  $('wallArea').innerHTML = canRoll(state.budget) ? '' :
+    `<div class="wall"><strong>Out of rolls.</strong> Come back tomorrow — or this is exactly where a
+     roll-pack IAP would sit, the same way the week wall opens the week-pack sheet.</div>`;
+}
+
+function renderDesks(){
+  $('desks').innerHTML = ROLES.map(role => {
+    const h = state.hired[role], o = state.offers[role];
+    const seated = h
+      ? `<div class="seated"><div class="nm">${h.name} <span class="dim" style="font-weight:400">· ${h.from}</span></div>
+           <div class="sub">${money(h.salary)}/wk · ${h.perkLabel}</div></div>`
+      : `<div class="seated"><div class="nm dim">Seat empty</div>
+           <div class="sub">Spin to see who is available.</div></div>`;
+    let offerHtml = '';
+    if (o) {
+      const head = o.tier === 'legend'
+        ? `<div class="source" style="color:${TIER_COLOR.legend};border-color:${TIER_COLOR.legend};
+             background:rgba(240,160,75,.12)">★ A LEGEND WALKED IN</div>`
+        : `<div class="source" style="color:${TIER_COLOR[o.tier]};border-color:${TIER_COLOR[o.tier]};
+             background:rgba(255,255,255,.03)">${TIER_LABEL[o.tier]} — ${o.source}</div>`;
+      offerHtml = head + o.candidates.map(c => `<div class="cand">
+        <div class="nm">${c.name} <span class="dim" style="font-weight:400">· ${c.from}</span></div>
+        <div class="fl">“${c.flavour}”</div>
+        <div class="pk">${c.perkLabel}</div>
+        <div class="sal">${money(c.salary)}/wk</div>
+        <button class="primary" data-hire="${role}|${c.id}">Hire</button></div>`).join('');
+    }
+    return `<div class="desk"><h3>${ROLE_LABEL[role]}</h3>${seated}${offerHtml}
+      <button class="spin" data-roll="${role}" ${canRoll(state.budget)?'':'disabled'}>
+        ${o ? 'Roll again' : 'Spin'} (${state.budget.rollsRemaining} left)</button></div>`;
+  }).join('');
+  $('desks').querySelectorAll('[data-roll]').forEach(b =>
+    b.onclick = () => act(s => doRoll(s, b.dataset.roll)));
+  $('desks').querySelectorAll('[data-hire]').forEach(b => b.onclick = () => {
+    const [role, id] = b.dataset.hire.split('|');
+    act(s => hire(s, role, id));
+  });
+}
+
+function renderLog(){
+  $('log').innerHTML = state.log.slice(0,40).map(e =>
+    `<div class="${e.kind||''}">${e.text}</div>`).join('');
+}
+
+function render(){ renderHud(); renderDesks(); renderLog(); renderSteps(); }
+function act(fn){ state = fn(state); render(); }
+
+const FREE = [
+  ['Next day (+2 rolls)', s => nextDay(s)],
+  ['Skip 3 days', s => nextDay(nextDay(nextDay(s)))],
+  ['Raise → Seed', s => setStage(s,'seed')],
+  ['Raise → Series A', s => setStage(s,'seriesA')],
+  ['Raise → Growth', s => setStage(s,'growth')],
+  ['Start over', () => newRun(20260814)],
+  ['Start over (new seed)', () => newRun(Math.floor(Math.random()*1e9))],
+];
+$('free').innerHTML = FREE.map((f,i)=>`<button data-free="${i}">${f[0]}</button>`).join('');
+$('free').querySelectorAll('[data-free]').forEach(b => b.onclick = () => act(FREE[b.dataset.free][1]));
+
+const SCENARIOS = [
+  { title:'Day one in the garage',
+    desc:'Two rolls, three empty seats, worst source table in the game. Spend both on the CTO seat. '+
+         'Most likely you see "a friend of your mom" and someone from your last job. Ask yourself: '+
+         'is a bad roll funny, or annoying?',
+    steps:[ ['Reset', () => newRun(20260814)],
+            ['Spin the CTO seat', s => doRoll(s,'cto')],
+            ['Not great? Roll again — that is your last one', s => doRoll(s,'cto')],
+            ['Out of rolls. Next day', s => nextDay(s)] ] },
+
+  { title:'The stage curve ★',
+    desc:'The same seat, spun at each stage. Watch the source names climb from "your landlord’s nephew" '+
+         'to ex-ClosedAI. This is "the bigger the company, the better the hires" — and it is one lookup '+
+         'on state.stage.',
+    steps:[ ['Reset', () => newRun(20260814)],
+            ['Spin in the garage', s => doRoll(s,'cto')],
+            ['Raise to Seed, spin again', s => doRoll(setStage(s,'seed'),'cto')],
+            ['Next day, raise to Series A, spin', s => doRoll(setStage(nextDay(s),'seriesA'),'cto')],
+            ['Raise to Growth, spin', s => doRoll(setStage(s,'growth'),'cto')],
+            ['Next day, spin again at Growth', s => doRoll(nextDay(s),'cto')] ] },
+
+  { title:'Chasing a legend',
+    desc:'Growth stage, ~10% a roll. Burn 10 rolls over 5 days and see how it feels to miss. '+
+         'If this reads as tedious rather than tense, the legend rate is wrong — or 2 rolls a day is.',
+    steps:[ ['Reset at Growth', () => setStage(newRun(7),'growth')],
+            ['Spin ×2 (day 1)', s => doRoll(doRoll(s,'cto'),'cto')],
+            ['Next day, spin ×2', s => { let n=nextDay(s); return doRoll(doRoll(n,'cto'),'cto'); }],
+            ['Next day, spin ×2', s => { let n=nextDay(s); return doRoll(doRoll(n,'cto'),'cto'); }],
+            ['Next day, spin ×2', s => { let n=nextDay(s); return doRoll(doRoll(n,'cto'),'cto'); }],
+            ['Next day, spin ×2', s => { let n=nextDay(s); return doRoll(doRoll(n,'cto'),'cto'); }] ] },
+
+  { title:'Three seats, two rolls',
+    desc:'The shared-pool question. You have three empty seats and two rolls a day. Do you spread them '+
+         'or commit to one seat? Come back across three days and see whether the pace is satisfying '+
+         'or frustrating — this is the main risk of the real-day version.',
+    steps:[ ['Reset', () => newRun(4242)],
+            ['Spin CTO, spin CMO', s => doRoll(doRoll(s,'cto'),'cmo')],
+            ['Next day: spin CFO, re-roll CTO', s => { let n=nextDay(s); return doRoll(doRoll(n,'cfo'),'cto'); }],
+            ['Next day: two more', s => { let n=nextDay(s); return doRoll(doRoll(n,'cmo'),'cfo'); }],
+            ['Bank a day without spending', s => nextDay(s)],
+            ['Next day — now you have 4 banked', s => nextDay(s)] ] },
+];
+
+let activeScenario = 0, stepIndex = 0;
+$('tabs').innerHTML = SCENARIOS.map((s,i)=>`<button data-tab="${i}">${s.title}</button>`).join('');
+$('tabs').querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+  activeScenario = +b.dataset.tab; stepIndex = 0; state = newRun(20260814); render();
+});
+function renderSteps(){
+  const sc = SCENARIOS[activeScenario];
+  $('tabs').querySelectorAll('[data-tab]').forEach(b =>
+    b.classList.toggle('on', +b.dataset.tab === activeScenario));
+  $('scenarioDesc').textContent = sc.desc;
+  $('steps').innerHTML = sc.steps.map((s,i) =>
+    `<button class="step ${i<stepIndex?'done':''} ${i===stepIndex?'next':''}"
+      data-step="${i}" ${i===stepIndex?'':'disabled'}>${i+1}. ${s[0]}</button>`).join('');
+  $('steps').querySelectorAll('[data-step]').forEach(b => b.onclick = () => {
+    const fn = SCENARIOS[activeScenario].steps[+b.dataset.step][1];
+    stepIndex++; act(fn);
+  });
+}
+
+renderOdds(); renderChase(); render();
+</script>
+</body>
+</html>

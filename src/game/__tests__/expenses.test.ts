@@ -33,11 +33,12 @@ function cfoWithBurnCut(multiplier: number): CLevels {
     name: 'Pat',
     personality: 'frugal',
     exEmployer: 'ex-Netflex',
+    tier: 'mid',
     salary: 6_000,
     perk: { id: 'cfo-burnCut', label: 'Burn cut', axis: 'cfo-burnCut', multiplier },
     quirk: null,
   };
-  return { ...base, cfo: { hired: candidate, candidates: [] } };
+  return { ...base, cfo: { hired: candidate, offer: null } };
 }
 
 describe('weeklyExpensesFor', () => {

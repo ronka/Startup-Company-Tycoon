@@ -26,11 +26,13 @@ import {
   weeklyBurnFor,
 } from '@/game/balance';
 import { CLevelRole, ROLES, Role } from '@/game/types';
+import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 import { moraleTone } from '@/lib/stat-colors';
 import { teamContributionsFor } from '@/lib/team-contributions';
 import { useGame } from '@/state/game-store';
+import { isRollBudgetExhausted } from '@/state/roll-budget';
 
 const ROLE_LABEL: Record<Role, string> = {
   devs: 'Developers',
@@ -44,8 +46,18 @@ const C_LEVEL_TITLE: Record<CLevelRole, string> = {
   cfo: 'CFO',
 };
 
+/**
+ * Runway a hire has to leave behind to be offerable. A legend at $70k/wk can
+ * roll at Seed, where taking them ends the run in a month — the design doc's
+ * call is to show that candidate with the price visible rather than hide them
+ * or let the hire quietly kill the save.
+ */
+const MIN_RUNWAY_WEEKS_AFTER_CLEVEL_HIRE = 4;
+
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
 export default function TeamScreen() {
-  const { state, dispatch } = useGame();
+  const { state, dispatch, rollBudget, devFreePlay } = useGame();
   const theme = useTheme();
   const [confirmRole, setConfirmRole] = useState<Role | null>(null);
   const [confirmFireRole, setConfirmFireRole] = useState<CLevelRole | null>(null);
@@ -73,6 +85,7 @@ export default function TeamScreen() {
     fixedBurnMultiplier: cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-burnCut'),
     moraleLeverCost,
   });
+  const { revenue } = deriveWeeklyStats(state);
   const contributions = teamContributionsFor(state);
   const supportShortfall = contributions.supportCovered < contributions.supportTotal;
   const ROLE_CONTRIBUTION: Record<Role, string> = {
@@ -85,6 +98,57 @@ export default function TeamScreen() {
 
   const hireCLevel = (role: CLevelRole, candidateId: string) =>
     dispatch({ type: 'HIRE_CLEVEL', role, candidateId });
+
+  // Mirrors the store's own gate, so the wall and the swallowed dispatch can
+  // never disagree — same reason `isWeekBudgetExhausted` is shared.
+  const rollState: 'ready' | 'loading' | 'empty' = isRollBudgetExhausted(rollBudget, devFreePlay)
+    ? 'empty'
+    : !devFreePlay && rollBudget === null
+      ? 'loading'
+      : 'ready';
+
+  /**
+   * A seat with no offer and a spin in hand rolls on the same tap: a button
+   * saying "Spin" that only opens a sheet saying "spin to see who's available"
+   * is a wasted tap and tells the player nothing in between.
+   */
+  const openSearch = (role: CLevelRole) => {
+    track(EVENTS.CANDIDATES_VIEWED, { role });
+    if (!state.cLevels[role].offer && rollState === 'ready') {
+      dispatch({ type: 'ROLL_CANDIDATES', role });
+    }
+    pickerRefs[role].current?.present();
+  };
+
+  const searchLabel = (role: CLevelRole): string => {
+    if (state.cLevels[role].hired) return 'Look at the market';
+    if (state.cLevels[role].offer) return 'View candidates';
+    return rollState === 'ready' ? 'Spin' : 'View candidates';
+  };
+
+  /**
+   * Candidates this run cannot pay for. A hire is refused if it would drop
+   * runway below `MIN_RUNWAY_WEEKS_AFTER_CLEVEL_HIRE` — the case the design
+   * doc flags, where a legend rolls at Seed and hiring them bankrupts the run
+   * in four weeks. They stay visible; only the Hire button goes.
+   */
+  const unaffordable = (role: CLevelRole): ReadonlySet<string> => {
+    const offer = state.cLevels[role].offer;
+    if (!offer) return EMPTY_SET;
+    // On a swap the incumbent's salary leaves with them, and `currentBurn`
+    // already carries it — netting it out is what stops an affordable
+    // replacement from being marked unaffordable by its predecessor's cost.
+    const outgoingSalary = state.cLevels[role].hired?.salary ?? 0;
+    return new Set(
+      offer.candidates
+        .filter((candidate) => {
+          const netBurn = currentBurn - outgoingSalary + candidate.salary - revenue;
+          if (netBurn <= 0) return false; // revenue covers them outright
+          return state.cash / netBurn < MIN_RUNWAY_WEEKS_AFTER_CLEVEL_HIRE;
+        })
+        .map((candidate) => candidate.id),
+    );
+  };
 
   const requestFire = (role: CLevelRole) => setConfirmFireRole(role);
 
@@ -184,11 +248,10 @@ export default function TeamScreen() {
                 key={role}
                 title={C_LEVEL_TITLE[role]}
                 hired={state.cLevels[role].hired}
+                hasOffer={state.cLevels[role].offer !== null}
+                searchLabel={searchLabel(role)}
                 onFire={() => requestFire(role)}
-                onViewCandidates={() => {
-                  track(EVENTS.CANDIDATES_VIEWED, { role });
-                  pickerRefs[role].current?.present();
-                }}
+                onViewCandidates={() => openSearch(role)}
               />
             ))}
           </View>
@@ -234,7 +297,11 @@ export default function TeamScreen() {
           key={role}
           ref={pickerRefs[role]}
           title={C_LEVEL_TITLE[role]}
-          candidates={state.cLevels[role].candidates}
+          offer={state.cLevels[role].offer}
+          rollState={rollState}
+          rollsRemaining={devFreePlay ? null : (rollBudget?.rollsRemaining ?? null)}
+          unaffordable={unaffordable(role)}
+          onRoll={() => dispatch({ type: 'ROLL_CANDIDATES', role })}
           onHire={(candidateId) => hireCLevel(role, candidateId)}
         />
       ))}

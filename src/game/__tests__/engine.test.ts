@@ -84,7 +84,8 @@ describe('newGame', () => {
     expect(s.marketShare).toBe(STARTING_MARKET_SHARE);
     expect(s.valuationHistory).toEqual([]);
     expect(s.cLevels.cto.hired).toBeNull();
-    expect(s.cLevels.cto.candidates).toHaveLength(6);
+    // Every seat starts empty with no offer — leadership is spun for, not served.
+    expect(s.cLevels.cto.offer).toBeNull();
   });
 
   it('carries the founding logo, and leaves it unset when none is picked', () => {
@@ -243,12 +244,12 @@ describe('tickMany (fast-forward)', () => {
   });
 
   it('stops the moment a decision card is drawn, without answering it', () => {
-    // Seed 5 lands a decision card (not a news card) on the very first draw
-    // under the current RNG stream. Note candidate offers, the trend phase
-    // machine, and per-rival focus assignment all draw ahead of this one in
-    // `newGame`/`tick`, so the exact seed that draws a decision card shifts
-    // whenever any of those change.
-    const s0: GameState = { ...newGame('Acme', 5), cash: 50_000_000, weeksUntilNextEvent: 1 };
+    // Seed 1 lands a decision card (not a news card) on the very first draw
+    // under the current RNG stream. Note the trend phase machine and per-rival
+    // focus assignment both draw ahead of this one in `newGame`/`tick`, so the
+    // exact seed that draws a decision card shifts whenever either changes —
+    // as it did when the standing candidate offers left `newGame`.
+    const s0: GameState = { ...newGame('Acme', 1), cash: 50_000_000, weeksUntilNextEvent: 1 };
     const result = tickMany(s0, 10);
     expect(result.pendingEvent).not.toBeNull();
     expect(result.week).toBeLessThan(10);
