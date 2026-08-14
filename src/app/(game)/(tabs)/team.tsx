@@ -7,8 +7,8 @@ import { useTabView } from '@/analytics/use-tab-view';
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { CandidatePicker, type CandidatePickerHandle } from '@/components/game/candidate-picker';
 import { Card } from '@/components/game/card';
-import { CLevelCard } from '@/components/game/clevel-card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
+import { LeadershipRoster } from '@/components/game/leadership-roster';
 import { MoraleBar } from '@/components/game/morale-bar';
 import { RingGauge } from '@/components/game/ring-gauge';
 import { SectionHeader } from '@/components/game/section-header';
@@ -17,7 +17,6 @@ import { Stepper } from '@/components/game/stepper';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import {
-  C_LEVEL_DEPARTURE_MORALE_HIT,
   LAYOFF_CONFIRM_THRESHOLD,
   MORALE_LEVER_BOOST,
   MORALE_LEVER_WEEKLY_COST,
@@ -60,7 +59,6 @@ export default function TeamScreen() {
   const { state, dispatch, rollBudget, devFreePlay } = useGame();
   const theme = useTheme();
   const [confirmRole, setConfirmRole] = useState<Role | null>(null);
-  const [confirmFireRole, setConfirmFireRole] = useState<CLevelRole | null>(null);
   const ctoPickerRef = useRef<CandidatePickerHandle>(null);
   const cmoPickerRef = useRef<CandidatePickerHandle>(null);
   const cfoPickerRef = useRef<CandidatePickerHandle>(null);
@@ -120,12 +118,6 @@ export default function TeamScreen() {
     pickerRefs[role].current?.present();
   };
 
-  const searchLabel = (role: CLevelRole): string => {
-    if (state.cLevels[role].hired) return 'Look at the market';
-    if (state.cLevels[role].offer) return 'View candidates';
-    return rollState === 'ready' ? 'Spin' : 'View candidates';
-  };
-
   /**
    * Candidates this run cannot pay for. A hire is refused if it would drop
    * runway below `MIN_RUNWAY_WEEKS_AFTER_CLEVEL_HIRE` — the case the design
@@ -148,13 +140,6 @@ export default function TeamScreen() {
         })
         .map((candidate) => candidate.id),
     );
-  };
-
-  const requestFire = (role: CLevelRole) => setConfirmFireRole(role);
-
-  const confirmFire = () => {
-    if (confirmFireRole) dispatch({ type: 'FIRE_CLEVEL', role: confirmFireRole });
-    setConfirmFireRole(null);
   };
 
   const toggleMoraleLever = () => dispatch({ type: 'SET_MORALE_LEVER', active: !state.moraleLeverActive });
@@ -242,19 +227,16 @@ export default function TeamScreen() {
 
         <View style={styles.cLevelSection}>
           <SectionHeader label="Leadership" />
-          <View style={styles.cLevelGrid}>
-            {(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => (
-              <CLevelCard
-                key={role}
-                title={C_LEVEL_TITLE[role]}
-                hired={state.cLevels[role].hired}
-                hasOffer={state.cLevels[role].offer !== null}
-                searchLabel={searchLabel(role)}
-                onFire={() => requestFire(role)}
-                onViewCandidates={() => openSearch(role)}
-              />
-            ))}
-          </View>
+          <LeadershipRoster
+            seats={(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => ({
+              role,
+              title: C_LEVEL_TITLE[role],
+              hired: state.cLevels[role].hired,
+              hasOffer: state.cLevels[role].offer !== null,
+              rollState,
+            }))}
+            onOpenSeat={openSearch}
+          />
         </View>
       </ScrollView>
 
@@ -275,34 +257,19 @@ export default function TeamScreen() {
         </View>
       </BottomSheet>
 
-      <BottomSheet visible={confirmFireRole !== null} onClose={() => setConfirmFireRole(null)} title="Let them go?">
-        <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
-          {confirmFireRole
-            ? `Firing your ${C_LEVEL_TITLE[confirmFireRole]} costs the team ${C_LEVEL_DEPARTURE_MORALE_HIT} morale.`
-            : ''}
-        </ThemedText>
-        <View style={styles.modalActions}>
-          <PrimaryButton
-            variant="secondary"
-            label="Cancel"
-            onPress={() => setConfirmFireRole(null)}
-            style={styles.modalButton}
-          />
-          <PrimaryButton variant="primary" label="Confirm" onPress={confirmFire} style={styles.modalButton} />
-        </View>
-      </BottomSheet>
-
       {(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => (
         <CandidatePicker
           key={role}
           ref={pickerRefs[role]}
           title={C_LEVEL_TITLE[role]}
+          hired={state.cLevels[role].hired}
           offer={state.cLevels[role].offer}
           rollState={rollState}
           rollsRemaining={devFreePlay ? null : (rollBudget?.rollsRemaining ?? null)}
           unaffordable={unaffordable(role)}
           onRoll={() => dispatch({ type: 'ROLL_CANDIDATES', role })}
           onHire={(candidateId) => hireCLevel(role, candidateId)}
+          onFire={() => dispatch({ type: 'FIRE_CLEVEL', role })}
         />
       ))}
     </View>
@@ -345,11 +312,6 @@ const styles = StyleSheet.create({
   },
   cLevelSection: {
     gap: Spacing.two,
-  },
-  cLevelGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.three,
   },
   modalBody: {
     lineHeight: 20,

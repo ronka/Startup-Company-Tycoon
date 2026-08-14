@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leadership cards — UI prototype</title>
+<style>
+  /* Real app tokens, lifted from src/constants/theme.ts */
+  :root{
+    --bg:#0A0A0A; --surface:#161616; --raised:#1F1F1F; --line:#262626;
+    --text:#FAFAFA; --dim:#A1A1A1; --muted:#6B6B6B;
+    --accent:#3C87F7; --accent-ink:#FFFFFF; --accent-surface:#10243F;
+    --danger:#FF6B5E; --danger-bg:#2A1210; --warning:#F59E0B; --success:#4ADE80;
+    --r-sm:10px; --r-md:14px; --r-lg:20px; --r-pill:999px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:40px 24px 120px;background:#050505;color:var(--text);
+    font-family:var(--font);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1240px;margin:0 auto}
+
+  h1{font-size:28px;margin:0 0 8px;letter-spacing:-.02em}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);
+     font-weight:700;margin:56px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  h3{font-size:18px;margin:0 0 4px;letter-spacing:-.01em}
+  p.lede{color:var(--dim);margin:0 0 4px;max-width:76ch}
+  .note{color:var(--dim);font-size:13.5px;max-width:72ch;margin:6px 0 0}
+  .cost{font-size:12.5px;color:var(--muted);margin:8px 0 0;max-width:72ch}
+  .cost b{color:var(--dim);font-weight:600}
+  ul.diag{color:var(--dim);max-width:76ch;margin:10px 0 0;padding-left:20px;font-size:14px}
+  ul.diag li{margin-bottom:5px}
+  ul.diag code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--warning)}
+  .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 9px;border-radius:var(--r-pill);vertical-align:middle;margin-left:8px}
+  .tag.rec{background:var(--accent-surface);color:var(--accent);border:1px solid var(--accent)}
+  .tag.cheap{background:#132B1D;color:var(--success);border:1px solid rgba(74,222,128,.4)}
+  .tag.big{background:#2A1B04;color:var(--warning);border:1px solid rgba(245,158,11,.4)}
+
+  /* ---- phone frame ---- */
+  .frames{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;margin-top:20px}
+  .phone{width:390px;flex:0 0 390px;background:var(--bg);border:1px solid var(--line);
+    border-radius:32px;padding:20px 16px 28px;overflow:hidden}
+  .phone.wide{width:100%;flex:1 1 700px;max-width:840px}
+  .caption{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;
+    font-weight:700;margin:0 0 8px}
+  .screen{display:flex;flex-direction:column;gap:24px}
+  .sheet-title{font-size:24px;font-weight:700;letter-spacing:-.4px;margin:0}
+  .section-label{font-size:12px;font-weight:600;letter-spacing:1.2px;color:var(--muted);margin:0}
+
+  /* ---- app primitives ---- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:16px;display:flex;flex-direction:column;gap:8px}
+  .btn{font-family:inherit;font-size:17px;font-weight:700;padding:16px 24px;border-radius:var(--r-md);
+    border:1px solid transparent;cursor:pointer;text-align:center;line-height:1.2;display:block}
+  .btn.primary{background:var(--accent);color:var(--accent-ink)}
+  .btn.secondary{background:var(--raised);color:var(--text)}
+  .btn.ghost{background:transparent;color:var(--accent)}
+  .btn.disabled{background:var(--surface);color:var(--muted);border-color:var(--line);cursor:default}
+  .btn.full{width:100%}
+  /* the compact size that does NOT exist in primary-button.tsx today */
+  .btn.sm{font-size:14px;font-weight:700;padding:9px 14px;border-radius:var(--r-sm)}
+  .btn.sm.danger{background:transparent;color:var(--danger)}
+
+  .small{font-size:14px;font-weight:500;color:var(--dim);margin:0}
+  .smallbold{font-size:14px;font-weight:700;color:var(--text);margin:0}
+  .footnote{font-size:12px;font-weight:500;color:var(--muted);margin:0}
+  .quirk{font-style:italic}
+
+  /* ---- context stack (static, low-fi) ---- */
+  .ctx{opacity:.5;pointer-events:none}
+  .ring{width:80px;height:80px;border-radius:50%;flex:0 0 80px;
+    background:conic-gradient(var(--success) 0 72%, var(--line) 72% 100%);
+    display:grid;place-items:center}
+  .ring::after{content:"72";width:62px;height:62px;border-radius:50%;background:var(--surface);
+    display:grid;place-items:center;font-size:20px;font-weight:700;color:var(--text)}
+  .bar{height:8px;border-radius:var(--r-pill);background:var(--raised);overflow:hidden}
+  .bar i{display:block;height:100%;width:72%;background:var(--success)}
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .stepper{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .stepbtn{width:44px;height:44px;border-radius:var(--r-md);background:var(--raised);border:1px solid var(--line);
+    display:grid;place-items:center;font-size:20px;font-weight:700;color:var(--text)}
+  .cardvalue{font-size:26px;font-weight:700;letter-spacing:-.5px;margin:0}
+
+  /* ---- shared new bits ---- */
+  .tier{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;
+    letter-spacing:.07em;text-transform:uppercase;padding:3px 8px;border-radius:var(--r-pill);
+    border:1px solid var(--line);background:var(--raised);color:var(--muted);white-space:nowrap}
+  .tier.elite{background:var(--accent-surface);border-color:rgba(60,135,247,.55);color:var(--accent)}
+  .tier.legend{background:#2A1B04;border-color:rgba(245,158,11,.6);color:var(--warning)}
+  .perk{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;
+    padding:5px 10px;border-radius:var(--r-sm);background:#132B1D;color:var(--success);
+    border:1px solid rgba(74,222,128,.28);line-height:1.25}
+  .salary{font-size:13px;font-weight:600;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .mono{width:44px;height:44px;flex:0 0 44px;border-radius:50%;display:grid;place-items:center;
+    font-size:15px;font-weight:700;letter-spacing:.02em;background:var(--raised);color:var(--dim);
+    border:1px solid var(--line)}
+  .mono.elite{background:var(--accent-surface);color:var(--accent);border-color:rgba(60,135,247,.5)}
+  .mono.legend{background:#2A1B04;color:var(--warning);border-color:rgba(245,158,11,.55)}
+  .empty-slot{border:1px dashed var(--line);border-radius:var(--r-md);padding:14px;
+    display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+
+  .grid3{display:flex;flex-wrap:wrap;gap:16px}
+  .grid3 > *{flex:1 1 30%;min-width:200px}
+
+  .states{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px}
+  .state{width:358px;flex:0 0 358px}
+  .state .caption{margin-bottom:6px}
+
+  .kicker{color:var(--warning);font-weight:600}
+  .verdict{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:0 12px 12px 0;padding:16px 20px;margin-top:16px;max-width:82ch}
+  .verdict p{margin:0 0 8px;color:var(--dim);font-size:14px}
+  .verdict p:last-child{margin:0}
+  .verdict b{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Leadership cards — UI prototype</h1>
+<p class="lede">Three redesign options for the C-level seat cards on the Team tab
+(<code>src/components/game/clevel-card.tsx</code>). Nothing is implemented yet — pick one and I'll build it.</p>
+
+<h2>What's wrong with the card today</h2>
+<ul class="diag">
+  <li><b>The hierarchy is inverted.</b> On a seat that is already filled, the loudest thing on the card is a
+      full-width blue button that only <em>browses</em> the market. The person you hired is 14px grey text above it.</li>
+  <li><b>The Fire button is a broken-looking stub.</b> <code>styles.filled</code> sets
+      <code>alignItems:'flex-start'</code>, so both buttons shrink-wrap their label — "Look at the market" comes out
+      wide and "Fire" comes out narrow. It reads as a layout bug, not a choice.</li>
+  <li><b>Three seats × two 56px-tall buttons</b> = ~340px of button at the bottom of an already-long screen.</li>
+  <li><b>All the character is thrown away on hire.</b> <code>hired</code> already carries <code>tier</code>,
+      <code>exEmployer</code> and <code>personality</code> — the picker shows them, the card renders none of them.
+      An elite ex-Foogle CFO looks identical to a bootcamp grad.</li>
+  <li><b>Empty and filled seats weigh the same.</b> An empty seat is the only one where acting is the point,
+      and it gets the same treatment as a settled one.</li>
+</ul>
+
+<h2>Where the cards sit on the screen</h2>
+<p class="note">The leadership grid is the last of five blocks. Whatever we choose has to sit under the payroll
+card without out-shouting it — that context is the dim part of the frame below.</p>
+<div class="frames">
+  <div>
+    <p class="caption">Today — full Team tab</p>
+    <div class="phone"><div class="screen" id="ctx-today"></div></div>
+  </div>
+  <div>
+    <p class="caption">Today — every card state</p>
+    <div class="states" id="states-current"></div>
+  </div>
+</div>
+
+<h2>Variant A — Roster row <span class="tag cheap">cheapest</span></h2>
+<h3>Keep the full-size buttons, fix the hierarchy and the widths</h3>
+<p class="note">Person first: a tier-tinted monogram, the name at full size, the tier badge, the ex-employer.
+The perk becomes a green chip so the thing you're paying for reads as a benefit rather than as more grey text.
+Both buttons go full-width in a row — primary flexes, Fire is fixed — so the stub disappears.
+Empty seats keep the loud blue CTA; filled seats demote it to secondary, because on a filled seat browsing is
+the quieter action.</p>
+<div class="frames">
+  <div>
+    <p class="caption">Phone — every card state</p>
+    <div class="states" id="states-a"></div>
+  </div>
+</div>
+<p class="cost"><b>Implementation:</b> <code>clevel-card.tsx</code> only. No changes to
+<code>primary-button.tsx</code>, no changes to <code>searchLabel()</code>, no new state fields.</p>
+
+<h2>Variant B — Portrait card <span class="tag rec">recommended</span></h2>
+<h3>The exec is the card; the actions are a quiet footer</h3>
+<p class="note">A filled seat becomes a small dossier — monogram, name, tier, ex-employer, the personality line
+that currently dies inside the picker, then perk and salary as a chip row. Actions drop to a compact footer:
+"Market" as a small secondary, "Fire" as a small danger-ghost. That reclaims about 90px per filled seat and
+makes a legend hire actually look like a trophy — gold badge and gold monogram, echoing the picker's
+<code>★ legend</code> banner. Empty seats invert it: dashed placeholder plus one full-size blue CTA, so the
+seats that still need you are the loudest thing in the section.</p>
+<div class="frames">
+  <div>
+    <p class="caption">Phone — every card state</p>
+    <div class="states" id="states-b"></div>
+  </div>
+</div>
+<p class="cost"><b>Implementation:</b> <code>clevel-card.tsx</code>, plus a <code>size="sm"</code> variant on
+<code>primary-button.tsx</code> (shared component — small additive change, no call sites break), plus shortening
+<code>searchLabel()</code> in <code>team.tsx</code>: "Look at the market" → <b>"Market"</b>,
+"View candidates" → <b>"Candidates"</b>, "Spin" stays. <code>danger</code> button variant needed for Fire.</p>
+
+<h2>Variant C — One leadership card, three rows <span class="tag big">biggest change</span></h2>
+<h3>Collapse three cards into one roster</h3>
+<p class="note">The three seats stop being three cards and become three rows of one card, the way a real org chart
+reads. Tapping a row opens that seat's picker — the whole row is the button, so there's no CTA at all on filled
+seats. Fire moves into the picker sheet (it belongs next to "hire", not on the roster). This is the most compact
+by a wide margin and the section stops competing with payroll. The cost is that Fire gets buried a tap deeper and
+we lose the wide 2–3-across layout entirely.</p>
+<div class="frames">
+  <div>
+    <p class="caption">Phone — mixed states in one card</p>
+    <div class="phone"><div class="screen" id="c-phone"></div></div>
+  </div>
+  <div>
+    <p class="caption">Full Team tab with Variant C</p>
+    <div class="phone"><div class="screen" id="ctx-c"></div></div>
+  </div>
+</div>
+<p class="cost"><b>Implementation:</b> rewrite <code>clevel-card.tsx</code> into a
+<code>LeadershipRoster</code> component, change the render loop in <code>team.tsx</code>, move
+<code>onFire</code> + the confirm sheet into <code>candidate-picker.tsx</code>. Largest diff, most test churn.</p>
+
+<h2>Wide layout check (tablet / 800px content cap)</h2>
+<p class="note"><code>styles.card</code> is <code>flexBasis:'30%'</code> with <code>minWidth:200</code> inside a
+wrapping row, so above ~700px the three seats go side by side. A and B both have to survive at 200px wide —
+this is the failure mode a phone-only mockup hides.</p>
+<div class="frames">
+  <div style="flex:1 1 100%">
+    <p class="caption">Variant A — 3-across</p>
+    <div class="phone wide"><div class="screen"><p class="section-label">LEADERSHIP</p><div class="grid3" id="wide-a"></div></div></div>
+  </div>
+  <div style="flex:1 1 100%">
+    <p class="caption">Variant B — 3-across</p>
+    <div class="phone wide"><div class="screen"><p class="section-label">LEADERSHIP</p><div class="grid3" id="wide-b"></div></div></div>
+  </div>
+</div>
+
+<h2>One decision baked into all three</h2>
+<div class="verdict">
+  <p><b>Only elite and legend get colour.</b> There are six tiers (desperate, personal, scrappy, mid, elite,
+  legend). Giving each its own colour turns the Team tab into a rainbow and makes a bootcamp grad look
+  as decorated as a legend. So: <b>legend = gold</b> (matching the picker's <code>★</code> banner),
+  <b>elite = accent blue</b>, and everything below is a plain grey badge. Rarity stays rare.</p>
+  <p>If you'd rather every tier be individually colour-coded, say so — it's a one-line map change, but I'd
+  argue against it.</p>
+</div>
+
+<h2>My recommendation</h2>
+<div class="verdict">
+  <p><b>Variant B.</b> It fixes all five problems, it's the only one that surfaces <code>tier</code> /
+  <code>exEmployer</code> / <code>personality</code> — data you already generate and currently throw away the
+  moment someone is hired — and it makes the legend hire feel earned. The extra cost over A is one additive
+  <code>size</code> prop and three shorter button labels.</p>
+  <p><b>Variant A</b> if you want the smallest possible diff. <b>Variant C</b> if the screen length is the thing
+  bothering you most and you're happy for Fire to live inside the picker.</p>
+</div>
+
+</div>
+
+<script>
+/* ------------------------------------------------------------------ data */
+const S = {
+  filledElite: {
+    role:'CFO', label:'Look at the market', short:'Market',
+    hired:{ name:'Christine Lagardde', tier:'elite', from:'ex-Foogle',
+      personality:'Reads the cap table for fun.', perk:'−10% fixed burn',
+      salary:'$5.6K/wk', quirk:'Negotiates hard.' }
+  },
+  filledLegend: {
+    role:'CTO', label:'Look at the market', short:'Market',
+    hired:{ name:'Linus Torvold', tier:'legend', from:'the kernel',
+      personality:'Ships at 2am, apologizes never.', perk:'+90% dev productivity',
+      salary:'$21.4K/wk', quirk:null }
+  },
+  filledScrappy: {
+    role:'CMO', label:'Look at the market', short:'Market',
+    hired:{ name:'Rand Fishkinn', tier:'scrappy', from:'bootcamp grad',
+      personality:'Speaks fluent buzzword.', perk:'+4% hype impact',
+      salary:'$1.8K/wk', quirk:'Took the job for the mission, not the money.' }
+  },
+  emptyFresh:  { role:'CTO', hired:null, hasOffer:false, roll:'ready',   label:'Spin',            short:'Spin' },
+  emptyOffer:  { role:'CMO', hired:null, hasOffer:true,  roll:'ready',   label:'View candidates', short:'Candidates' },
+  emptyOut:    { role:'CFO', hired:null, hasOffer:false, roll:'empty',   label:'View candidates', short:'Candidates' },
+  loading:     { role:'CTO', hired:null, hasOffer:false, roll:'loading', label:'View candidates', short:'Candidates' },
+};
+const MATRIX = [
+  ['filledElite',   'Filled · elite · with quirk'],
+  ['filledLegend',  'Filled · legend · no quirk'],
+  ['filledScrappy', 'Filled · scrappy · long quirk'],
+  ['emptyFresh',    'Empty · never spun'],
+  ['emptyOffer',    'Empty · standing offer'],
+  ['emptyOut',      'Empty · out of spins'],
+  ['loading',       'Loading · budget not read yet'],
+];
+
+const el = (tag, cls, html) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+};
+const initials = (name) => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+const tierClass = (t) => (t === 'legend' || t === 'elite') ? t : '';
+const tierLabel = (t) => t === 'legend' ? '★ Legend' : t.charAt(0).toUpperCase() + t.slice(1);
+
+/* --------------------------------------------------------- variant CURRENT */
+function cardCurrent(s){
+  const c = el('div','card');
+  c.appendChild(el('p','section-label', s.role));
+  const box = el('div');
+  box.style.cssText = 'display:flex;flex-direction:column;gap:8px;align-items:flex-start';
+  if (s.hired){
+    box.appendChild(el('p','smallbold', s.hired.name));
+    box.appendChild(el('p','small', s.hired.perk + ' · ' + s.hired.salary));
+    if (s.hired.quirk) box.appendChild(el('p','small quirk','Quirk: ' + s.hired.quirk));
+    box.appendChild(el('button','btn primary', s.label));
+    box.appendChild(el('button','btn secondary','Fire'));
+  } else {
+    box.appendChild(el('p','small', s.hasOffer ? 'Seat open' : 'Empty — spin to see who’s available'));
+    box.appendChild(el('button','btn primary' + (s.roll==='loading'?' disabled':''), s.label));
+  }
+  c.appendChild(box);
+  return c;
+}
+
+/* --------------------------------------------------------------- variant A */
+function cardA(s){
+  const c = el('div','card');
+  c.style.gap = '12px';
+  if (s.hired){
+    const h = el('div');
+    h.style.cssText = 'display:flex;gap:12px;align-items:flex-start';
+    h.appendChild(el('div','mono ' + tierClass(s.hired.tier), initials(s.hired.name)));
+    const t = el('div'); t.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:3px';
+    t.appendChild(el('p','section-label', s.role));
+    const nameRow = el('div');
+    nameRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+    const nm = el('p','', s.hired.name);
+    nm.style.cssText = 'margin:0;font-size:17px;font-weight:700;letter-spacing:-.2px';
+    nameRow.appendChild(nm);
+    nameRow.appendChild(el('span','tier ' + tierClass(s.hired.tier), tierLabel(s.hired.tier)));
+    t.appendChild(nameRow);
+    t.appendChild(el('p','footnote', s.hired.from));
+    h.appendChild(t);
+    c.appendChild(h);
+
+    const chips = el('div');
+    chips.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+    chips.appendChild(el('span','perk', s.hired.perk));
+    chips.appendChild(el('span','salary', s.hired.salary));
+    c.appendChild(chips);
+    if (s.hired.quirk) c.appendChild(el('p','small quirk', s.hired.quirk));
+
+    const acts = el('div');
+    acts.style.cssText = 'display:flex;gap:8px;margin-top:2px';
+    const b1 = el('button','btn secondary', s.label); b1.style.flex = '1'; b1.style.minWidth = '0';
+    const b2 = el('button','btn secondary','Fire');
+    b2.style.cssText = 'flex:0 0 auto;color:var(--danger)';
+    acts.appendChild(b1); acts.appendChild(b2);
+    c.appendChild(acts);
+  } else {
+    c.appendChild(el('p','section-label', s.role));
+    c.appendChild(el('p','small', s.hasOffer ? 'Seat open — candidates waiting'
+      : s.roll === 'empty' ? 'Empty — out of spins for today'
+      : 'Empty — spin to see who’s available'));
+    c.appendChild(el('button','btn primary full' + (s.roll==='loading'?' disabled':''), s.label));
+  }
+  return c;
+}
+
+/* --------------------------------------------------------------- variant B */
+function cardB(s){
+  const c = el('div','card');
+  c.style.gap = '12px';
+  if (s.hired){
+    const isLegend = s.hired.tier === 'legend';
+    if (isLegend){ c.style.background = 'var(--accent-surface)'; c.style.background = '#170F02';
+                   c.style.borderColor = 'rgba(245,158,11,.35)'; }
+    const top = el('div');
+    top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px';
+    top.appendChild(el('p','section-label', s.role));
+    top.appendChild(el('span','tier ' + tierClass(s.hired.tier), tierLabel(s.hired.tier)));
+    c.appendChild(top);
+
+    const h = el('div');
+    h.style.cssText = 'display:flex;gap:12px;align-items:center';
+    h.appendChild(el('div','mono ' + tierClass(s.hired.tier), initials(s.hired.name)));
+    const t = el('div'); t.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:2px';
+    const nm = el('p','', s.hired.name);
+    nm.style.cssText = 'margin:0;font-size:17px;font-weight:700;letter-spacing:-.2px';
+    t.appendChild(nm);
+    t.appendChild(el('p','footnote', s.hired.from));
+    h.appendChild(t);
+    c.appendChild(h);
+
+    const pers = el('p','small quirk', '“' + s.hired.personality + '”');
+    pers.style.color = 'var(--muted)';
+    c.appendChild(pers);
+
+    const chips = el('div');
+    chips.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+    chips.appendChild(el('span','perk', s.hired.perk));
+    chips.appendChild(el('span','salary', s.hired.salary));
+    c.appendChild(chips);
+    if (s.hired.quirk){
+      const q = el('p','footnote quirk', s.hired.quirk);
+      c.appendChild(q);
+    }
+
+    const hr = el('div');
+    hr.style.cssText = 'height:1px;background:var(--line);margin:2px -16px 0';
+    c.appendChild(hr);
+
+    const acts = el('div');
+    acts.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:-2px';
+    acts.appendChild(el('button','btn sm secondary', s.short));
+    acts.appendChild(el('button','btn sm danger','Fire'));
+    c.appendChild(acts);
+  } else {
+    const top = el('div');
+    top.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px';
+    top.appendChild(el('p','section-label', s.role));
+    if (s.hasOffer) top.appendChild(el('span','tier elite','Offer waiting'));
+    if (s.roll === 'empty') top.appendChild(el('span','tier','No spins left'));
+    c.appendChild(top);
+
+    const slot = el('div','empty-slot');
+    slot.appendChild(el('p','small', s.hasOffer ? 'Two candidates are still on the table.'
+      : s.roll === 'empty' ? 'Out of spins today — more tomorrow.'
+      : 'Nobody in this seat yet.'));
+    slot.appendChild(el('p','footnote', s.roll === 'loading' ? 'Checking your spins…' : 'Spin the market to see who’s available.'));
+    c.appendChild(slot);
+    c.appendChild(el('button','btn primary full' + (s.roll==='loading'?' disabled':''), s.label));
+  }
+  return c;
+}
+
+/* --------------------------------------------------------------- variant C */
+function rowC(s){
+  const r = el('div');
+  r.style.cssText = 'display:flex;gap:12px;align-items:center;padding:14px 16px;cursor:pointer';
+  if (s.hired){
+    r.appendChild(el('div','mono ' + tierClass(s.hired.tier), initials(s.hired.name)));
+    const t = el('div'); t.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:3px';
+    const nameRow = el('div');
+    nameRow.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+    const nm = el('p','', s.hired.name);
+    nm.style.cssText = 'margin:0;font-size:16px;font-weight:700;letter-spacing:-.2px';
+    nameRow.appendChild(nm);
+    nameRow.appendChild(el('span','tier ' + tierClass(s.hired.tier), tierLabel(s.hired.tier)));
+    t.appendChild(nameRow);
+    const meta = el('div');
+    meta.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+    const pk = el('span','', s.hired.perk);
+    pk.style.cssText = 'font-size:13px;font-weight:600;color:var(--success)';
+    meta.appendChild(pk);
+    meta.appendChild(el('span','salary','· ' + s.hired.salary));
+    t.appendChild(meta);
+    r.appendChild(t);
+  } else {
+    const ph = el('div','mono','—');
+    ph.style.borderStyle = 'dashed';
+    r.appendChild(ph);
+    const t = el('div'); t.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:3px';
+    const nm = el('p','', 'Seat open');
+    nm.style.cssText = 'margin:0;font-size:16px;font-weight:700;color:var(--dim)';
+    t.appendChild(nm);
+    const sub = el('p','footnote', s.hasOffer ? 'Candidates waiting'
+      : s.roll === 'empty' ? 'Out of spins today'
+      : 'Tap to spin the market');
+    if (s.hasOffer) sub.style.color = 'var(--accent)';
+    t.appendChild(sub);
+    r.appendChild(t);
+  }
+  const rolePill = el('span','tier', s.role);
+  rolePill.style.cssText += ';background:transparent;border-color:transparent;color:var(--muted);font-size:11px';
+  r.appendChild(rolePill);
+  const chev = el('span','', '›');
+  chev.style.cssText = 'font-size:22px;color:var(--muted);line-height:1;padding-left:2px';
+  r.appendChild(chev);
+  return r;
+}
+function cardC(states){
+  const c = el('div','card');
+  c.style.cssText += ';padding:0;gap:0';
+  states.forEach((s,i) => {
+    if (i) { const hr = el('div'); hr.style.cssText = 'height:1px;background:var(--line);margin-left:72px'; c.appendChild(hr); }
+    c.appendChild(rowC(s));
+  });
+  return c;
+}
+
+/* --------------------------------------------------- static screen context */
+function contextBlocks(){
+  const out = [];
+  const morale = el('div','card ctx');
+  morale.style.cssText += ';flex-direction:row;align-items:center;gap:16px';
+  morale.appendChild(el('div','ring'));
+  const mt = el('div'); mt.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:8px';
+  mt.appendChild(el('p','section-label','MORALE'));
+  const bar = el('div','bar'); bar.appendChild(el('i')); mt.appendChild(bar);
+  mt.appendChild(el('p','small','Below 60 the team slows down; below 40 people start leaving.'));
+  morale.appendChild(mt);
+  out.push(morale);
+
+  const lever = el('div','card ctx');
+  lever.style.cssText += ';flex-direction:row;align-items:center;justify-content:space-between';
+  const lt = el('div'); lt.style.cssText = 'display:flex;flex-direction:column;gap:2px';
+  lt.appendChild(el('p','smallbold','Team offsite &amp; perks'));
+  lt.appendChild(el('p','small','$4.0K/wk · +6 morale/wk'));
+  lever.appendChild(lt);
+  lever.appendChild(el('button','btn primary','Turn on'));
+  out.push(lever);
+
+  const steps = el('div','ctx');
+  steps.style.cssText = 'display:flex;flex-direction:column;gap:16px';
+  [['Developers','6'],['Sales','3'],['Support','2']].forEach(([label,val]) => {
+    const s = el('div','stepper');
+    const st = el('div'); st.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex:1';
+    st.appendChild(el('p','smallbold', label));
+    st.appendChild(el('p','footnote', label === 'Developers' ? '6 devs → +18 quality/wk' : '—'));
+    s.appendChild(st);
+    const g = el('div'); g.style.cssText = 'display:flex;gap:8px;align-items:center';
+    g.appendChild(el('div','stepbtn','−'));
+    const v = el('p','', val); v.style.cssText = 'margin:0;font-size:20px;font-weight:700;min-width:24px;text-align:center';
+    g.appendChild(v);
+    g.appendChild(el('div','stepbtn','+'));
+    s.appendChild(g);
+    steps.appendChild(s);
+  });
+  out.push(steps);
+
+  const pay = el('div','card ctx');
+  pay.appendChild(el('p','section-label','NEXT WEEK’S PAYROLL'));
+  pay.appendChild(el('p','cardvalue','$34.2K'));
+  pay.appendChild(el('p','small','+$2.8K vs. this week'));
+  out.push(pay);
+  return out;
+}
+
+function fullScreen(host, leadershipNode){
+  host.appendChild(el('p','sheet-title','Team'));
+  contextBlocks().forEach(n => host.appendChild(n));
+  const sec = el('div');
+  sec.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  sec.appendChild(el('p','section-label','LEADERSHIP'));
+  sec.appendChild(leadershipNode);
+  host.appendChild(sec);
+}
+
+/* -------------------------------------------------------------- rendering */
+function renderMatrix(host, fn){
+  MATRIX.forEach(([key, caption]) => {
+    const wrap = el('div','state');
+    wrap.appendChild(el('p','caption', caption));
+    const shell = el('div');
+    shell.style.cssText = 'background:var(--bg);border-radius:24px;padding:16px';
+    shell.appendChild(fn(S[key]));
+    wrap.appendChild(shell);
+    host.appendChild(wrap);
+  });
+}
+
+renderMatrix(document.getElementById('states-current'), cardCurrent);
+renderMatrix(document.getElementById('states-a'), cardA);
+renderMatrix(document.getElementById('states-b'), cardB);
+
+// today's full screen
+(function(){
+  const grid = el('div');
+  grid.style.cssText = 'display:flex;flex-direction:column;gap:16px';
+  [S.filledElite, S.emptyFresh, S.filledLegend].forEach(s => grid.appendChild(cardCurrent(s)));
+  fullScreen(document.getElementById('ctx-today'), grid);
+})();
+
+// variant C
+(function(){
+  const host = document.getElementById('c-phone');
+  host.appendChild(el('p','section-label','LEADERSHIP'));
+  host.appendChild(cardC([S.filledLegend, S.filledElite, S.emptyOffer]));
+  const spare = el('p','footnote','Tap a seat to spin or swap. Firing lives inside the seat’s sheet.');
+  spare.style.marginTop = '-14px';
+  host.appendChild(spare);
+})();
+fullScreen(document.getElementById('ctx-c'), cardC([S.filledLegend, S.filledElite, S.emptyFresh]));
+
+// wide 3-across
+[['wide-a', cardA], ['wide-b', cardB]].forEach(([id, fn]) => {
+  const host = document.getElementById(id);
+  [S.filledLegend, S.filledElite, S.emptyFresh].forEach(s => host.appendChild(fn(s)));
+});
+</script>
+</body>
+</html>

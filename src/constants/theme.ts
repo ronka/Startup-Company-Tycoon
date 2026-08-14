@@ -36,6 +36,8 @@ const Palette = {
   dangerBackground: '#2A1210',
   /** Risky / run-ending choices, mid-range morale. */
   warning: '#F59E0B',
+  /** Tinted background for warning pills/badges — the legend-tier treatment. */
+  warningBackground: '#2A1B04',
   /** Value moving the right way — deltas, healthy morale. Never an action colour. */
   success: '#4ADE80',
   successBackground: '#132B1D',

@@ -13,13 +13,18 @@ export function PrimaryButton({
   ...rest
 }: PressableProps & {
   label: string;
-  /** `ghost` has no fill and no visible border — for tertiary actions that shouldn't compete with the CTA. */
-  variant?: 'primary' | 'secondary' | 'ghost';
+  /**
+   * `ghost` has no fill and no visible border — for tertiary actions that shouldn't compete with the CTA.
+   * `danger` is a filled destructive confirm, for when the action sits next to a blue CTA and must not
+   * be mistaken for it.
+   */
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   loading?: boolean;
 }) {
   const theme = useTheme();
   const isPrimary = variant === 'primary';
   const isGhost = variant === 'ghost';
+  const isDanger = variant === 'danger';
   const isDisabled = !!disabled || !!loading;
 
   // Ghost keeps the shared hairline border so every variant occupies the same
@@ -30,15 +35,17 @@ export function PrimaryButton({
     ? 'transparent'
     : isDisabled
       ? theme.surface
-      : isPrimary
-        ? theme.accent
-        : theme.surfaceRaised;
+      : isDanger
+        ? theme.danger
+        : isPrimary
+          ? theme.accent
+          : theme.surfaceRaised;
   const borderColor = isGhost ? 'transparent' : isDisabled ? theme.border : background;
   const labelColor = isDisabled
     ? theme.textMuted
     : isGhost
       ? theme.accent
-      : isPrimary
+      : isPrimary || isDanger
         ? theme.accentInk
         : theme.text;
 

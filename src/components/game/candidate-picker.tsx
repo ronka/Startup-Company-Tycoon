@@ -1,12 +1,13 @@
 import { BottomSheetModal, BottomSheetScrollView } from '@expo/ui/community/bottom-sheet';
-import { useImperativeHandle, useRef, type Ref } from 'react';
-import { StyleSheet } from 'react-native';
+import { useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
+import { C_LEVEL_DEPARTURE_MORALE_HIT } from '@/game/balance';
 import type { CLevelCandidate, CLevelOffer } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
@@ -32,15 +33,19 @@ export interface CandidatePickerHandle {
  */
 export function CandidatePicker({
   title,
+  hired,
   offer,
   rollState,
   rollsRemaining,
   unaffordable,
   onRoll,
   onHire,
+  onFire,
   ref,
 }: {
   title: string;
+  /** Who holds the seat right now, if anyone — the sheet is also where you let them go. */
+  hired: CLevelCandidate | null;
   offer: CLevelOffer | null;
   /**
    * `loading` is the window before the budget read lands, where the store
@@ -53,17 +58,39 @@ export function CandidatePicker({
   unaffordable: ReadonlySet<string>;
   onRoll: () => void;
   onHire: (candidateId: string) => void;
+  onFire: () => void;
   ref?: Ref<CandidatePickerHandle>;
 }) {
   const sheetRef = useRef<BottomSheetModal>(null);
   const theme = useTheme();
+  /**
+   * Firing confirms *inside* this sheet rather than in a second modal. The tab
+   * already stacks several RN `<Modal>`s, and presenting one into another's
+   * dismiss frame is what `docs/bug-stuck-decision-modal.md` is about — an
+   * inline step removes a modal instead of adding a fourth.
+   */
+  const [confirmingFire, setConfirmingFire] = useState(false);
 
   useImperativeHandle(ref, () => ({
-    present: () => sheetRef.current?.present(),
+    // Reset on the way *in*, not on dismiss: `enablePanDownToClose` lets the
+    // player leave without going through `dismiss()`, and these sheets stay
+    // mounted, so a stale flag would reopen straight onto the confirm step.
+    present: () => {
+      setConfirmingFire(false);
+      sheetRef.current?.present();
+    },
     dismiss: () => sheetRef.current?.dismiss(),
   }));
 
   const isLegend = offer?.tier === 'legend';
+  /**
+   * `HIRE_CLEVEL` keeps the offer, so the person you just hired stays in their
+   * own candidate list. Re-hiring your own incumbent is a no-op that still
+   * charges the departure morale hit (`engine.ts`, `HIRE_CLEVEL`), and with the
+   * "currently in the seat" block above they'd appear twice in one sheet — the
+   * second time with a live Hire button. Drop them from the list instead.
+   */
+  const candidates = offer ? offer.candidates.filter((candidate) => candidate.id !== hired?.id) : [];
 
   return (
     <BottomSheetModal
@@ -74,7 +101,23 @@ export function CandidatePicker({
       <BottomSheetScrollView style={styles.scroll} contentContainerStyle={styles.sheet}>
         <ThemedText type="sectionLabel">{title} search</ThemedText>
 
-        {offer ? (
+        {hired ? (
+          // Who you'd be replacing. On a filled seat every hire below is a
+          // swap, and the salary you stop paying is half of that decision.
+          <ThemedView type="backgroundElement" style={styles.incumbent}>
+            <ThemedText type="footnote" themeColor="textMuted">
+              CURRENTLY IN THE SEAT
+            </ThemedText>
+            <ThemedText type="smallBold">
+              {hired.name} · {hired.exEmployer}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {hired.perk.label} · {formatMoney(hired.salary)}/wk
+            </ThemedText>
+          </ThemedView>
+        ) : null}
+
+        {offer && candidates.length > 0 ? (
           // The reveal: the wheel settles on the source, *then* the candidates
           // arrive. Keyed on the first candidate's id — which carries the rng
           // counter, so it is unique per spin — the entering animations replay
@@ -94,7 +137,7 @@ export function CandidatePicker({
               </ThemedText>
             </Animated.View>
 
-            {offer.candidates.map((candidate, i) => (
+            {candidates.map((candidate, i) => (
               <Animated.View
                 key={candidate.id}
                 entering={FadeInDown.delay(BANNER_SETTLE_MS + i * CANDIDATE_STAGGER_MS).duration(260)}>
@@ -136,6 +179,50 @@ export function CandidatePicker({
             onPress={onRoll}
           />
         )}
+
+        {hired ? (
+          confirmingFire ? (
+            <ThemedView type="backgroundElement" style={styles.fireConfirm}>
+              <ThemedText type="smallBold">Let {hired.name} go?</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Losing your {title} costs the team {C_LEVEL_DEPARTURE_MORALE_HIT} morale, and the seat
+                goes back to empty.
+              </ThemedText>
+              <View style={styles.fireActions}>
+                <PrimaryButton
+                  variant="secondary"
+                  label="Cancel"
+                  onPress={() => setConfirmingFire(false)}
+                  style={styles.fireButton}
+                />
+                {/* Filled danger, not the usual blue: this button sits a few
+                    pixels under "Spin again", and two identical blues would
+                    make the destructive one a mis-tap away. */}
+                <PrimaryButton
+                  variant="danger"
+                  label="Fire them"
+                  onPress={() => {
+                    setConfirmingFire(false);
+                    onFire();
+                    sheetRef.current?.dismiss();
+                  }}
+                  style={styles.fireButton}
+                />
+              </View>
+            </ThemedView>
+          ) : (
+            <Pressable
+              onPress={() => setConfirmingFire(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Fire ${hired.name}`}
+              hitSlop={8}
+              style={styles.fireLink}>
+              <ThemedText type="small" style={{ color: theme.danger }}>
+                Fire {hired.name}
+              </ThemedText>
+            </Pressable>
+          )
+        ) : null}
       </BottomSheetScrollView>
     </BottomSheetModal>
   );
@@ -224,5 +311,28 @@ const styles = StyleSheet.create({
   },
   quirk: {
     fontStyle: 'italic',
+  },
+  incumbent: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.half,
+    alignItems: 'flex-start',
+  },
+  fireConfirm: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  fireActions: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+    paddingTop: Spacing.one,
+  },
+  fireButton: {
+    flex: 1,
+  },
+  fireLink: {
+    alignSelf: 'center',
+    paddingVertical: Spacing.two,
   },
 });
