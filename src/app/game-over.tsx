@@ -1,19 +1,20 @@
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
 import { retireAllHints } from '@/components/game/first-run-hint';
-import { LINK_HIT_SLOP } from '@/components/game/legal-links-row';
 import { PaywallFooter } from '@/components/game/paywall-footer';
 import { PrimaryButton } from '@/components/game/primary-button';
+import { Sparkline } from '@/components/game/sparkline';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { randomReviveReason } from '@/game/revive-reasons';
-import type { GameOverReason } from '@/game/types';
+import type { GameOverReason, GameState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/lib/format';
+import { formatCount, formatMoney } from '@/lib/format';
 import { buildShareText } from '@/lib/share-card';
 import { shareRunText } from '@/lib/share-run';
 import { purchasesClient, purchasesAvailable, REVIVE_PRICE_LABEL, type PurchaseErrorCode } from '@/purchases';
@@ -37,28 +38,72 @@ const REVIEW_ARM_MS = 1200;
  */
 const OFFER_ARM_MS = 700;
 
-const HEADLINE: Record<GameOverReason, string> = {
+/** Height of the valuation curve. Dropped to `CHART_HEIGHT_COMPACT` beside the bailout offer. */
+const CHART_HEIGHT = 132;
+const CHART_HEIGHT_COMPACT = 88;
+
+const OUTCOME_WORD: Record<GameOverReason, string> = {
   bankruptcy: 'Bankrupt',
   acquired: 'Acquired',
   ipo: 'IPO',
 };
 
 /**
- * One line, under the score. Short on purpose: the long form ("Cash stayed
- * negative too long — out of runway after 36 weeks.") wrapped to two lines on
- * the narrowest phones and pushed the result off its own beat.
+ * SF Symbols with the Android/web fallbacks this app pairs them with (same
+ * shape `StatTile` takes). Equity is the Money tab's pie chart and customers
+ * are HQ's two-person glyph on purpose: the ending should read as the same app
+ * the run was played in.
  */
-const TAGLINE: Record<GameOverReason, (weeks: number) => string> = {
-  bankruptcy: (weeks) => `Out of runway in week ${weeks}`,
-  acquired: (weeks) => `Acquired in week ${weeks}`,
-  ipo: (weeks) => `Rang the bell in week ${weeks}`,
+const OUTCOME_ICON: Record<GameOverReason, SymbolViewProps['name']> = {
+  ipo: { ios: 'bell.fill', android: 'notifications_active', web: 'notifications_active' },
+  acquired: { ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' },
+  bankruptcy: { ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' },
 };
+
+const STAT_ICON = {
+  valuation: { ios: 'building.columns.fill', android: 'account_balance', web: 'account_balance' },
+  cash: { ios: 'banknote.fill', android: 'payments', web: 'payments' },
+  stake: { ios: 'chart.pie.fill', android: 'pie_chart', web: 'pie_chart' },
+  customers: { ios: 'person.2.fill', android: 'groups', web: 'groups' },
+  team: { ios: 'briefcase.fill', android: 'work', web: 'work' },
+} satisfies Record<string, SymbolViewProps['name']>;
+
+/**
+ * What the ending was, in numbers.
+ *
+ * The engine stores only the product (`finalScore` = founder equity × exit
+ * valuation, see `scoreFor`), so the exit price is recovered by dividing —
+ * the same inversion run history does. That also picks up an acquisition's
+ * premium over the live valuation for free.
+ *
+ * `exitValuation` is null where there isn't one: a bankruptcy has no exit
+ * price and scores a flat zero, and a founder diluted to nothing has no stake
+ * to divide by.
+ */
+function exitFacts(state: GameState) {
+  const take = state.finalScore ?? 0;
+  const isBankruptcy = state.gameOver === 'bankruptcy';
+  const exitValuation = isBankruptcy || state.founderEquity <= 0 ? null : take / state.founderEquity;
+  const percent = state.founderEquity * 100;
+  return {
+    take,
+    isBankruptcy,
+    exitValuation,
+    // A sliver of a stake rounds to "0%", which would read as owning nothing.
+    stakeLabel: percent < 0.5 ? '<1%' : `${Math.round(percent)}%`,
+  };
+}
+
+function headcountTotal(state: GameState): number {
+  return Object.values(state.headcount).reduce((sum, n) => sum + n, 0);
+}
 
 export default function GameOverScreen() {
   const { state, revivePool, creditRevivePurchase, redeemRevive, runHistory, lastRunWasBest } = useGame();
   const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const [chartWidth, setChartWidth] = useState(0);
 
   const reason = state?.gameOver ?? null;
   const isBankruptcy = reason === 'bankruptcy';
@@ -269,44 +314,95 @@ export default function GameOverScreen() {
       });
   };
 
+  const { take, exitValuation, stakeLabel } = exitFacts(state);
+  /**
+   * The offer owns the bottom of the screen when it's up, so the recap gives
+   * ground: no stat grid, shorter curve. Without this the grid renders behind
+   * the bailout card and its bottom row is simply cut off.
+   */
+  const compact = canBailout;
+  // `?? []` for saves written before the series existed — same guard HQ uses.
+  const history = state.valuationHistory ?? [];
+  // The curve needs two points to be a line. In practice only a week-1
+  // bankruptcy lands here, and its caption carries the week instead.
+  const hasChart = history.length > 1;
+  /** Green for an exit, red for a company that ran out of cash. */
+  const curveColor = isBankruptcy ? theme.danger : theme.success;
+  const caption = isBankruptcy
+    ? `Out of runway in week ${state.week}`
+    : `Your ${stakeLabel} of a ${exitValuation === null ? '—' : formatMoney(exitValuation)} exit`;
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       {/*
-        Beat one: the result, alone, with the whole screen to land in. Nothing
-        here asks the player for anything — the only control is the share link,
-        and it sits well below the score.
+        Beat one: the run, then what it paid. The curve is the recap — 30-odd
+        weeks of decisions the player actually made — and the money below it is
+        its caption. Scrolls so a long stat grid can't be clipped by a short
+        screen or a large text size.
       */}
-      <View style={styles.result}>
-        <ThemedText type="title" style={styles.centered}>
-          {HEADLINE[state.gameOver]}
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.result, { paddingTop: insets.top + Spacing.five }]}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.titleRow}>
+          <SymbolView name={OUTCOME_ICON[state.gameOver]} size={14} tintColor={theme.textMuted} />
+          <ThemedText type="sectionLabel" themeColor="textMuted" numberOfLines={1} style={styles.flex}>
+            {state.companyName} · {OUTCOME_WORD[state.gameOver]}
+          </ThemedText>
+        </View>
+
+        {hasChart ? (
+          <View style={styles.chartBlock} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
+            {chartWidth > 0 ? (
+              <Sparkline
+                data={history}
+                width={chartWidth}
+                height={compact ? CHART_HEIGHT_COMPACT : CHART_HEIGHT}
+                color={curveColor}
+              />
+            ) : null}
+            <View style={styles.axisRow}>
+              <ThemedText type="small" themeColor="textMuted">
+                Week 0
+              </ThemedText>
+              <ThemedText type="small" themeColor="textMuted">
+                Week {state.week}
+              </ThemedText>
+            </View>
+          </View>
+        ) : null}
+
+        <ThemedText type="small" themeColor="textSecondary">
+          {caption}
         </ThemedText>
-        <ThemedText type="hero" style={[styles.centered, styles.score]}>
-          {formatMoney(state.finalScore ?? 0)}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textMuted" style={styles.centered}>
-          {TAGLINE[state.gameOver](state.week)}
-        </ThemedText>
+        <ThemedText type="hero">{formatMoney(take)}</ThemedText>
         {lastRunWasBest ? (
-          <ThemedText type="smallBold" themeColor="success" style={[styles.centered, styles.personalBest]}>
+          <ThemedText type="smallBold" themeColor="success">
             New personal best!
           </ThemedText>
         ) : best !== null && best > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary" style={[styles.centered, styles.personalBest]}>
+          <ThemedText type="small" themeColor="textMuted">
             Personal best {formatMoney(best)}
           </ThemedText>
         ) : null}
-        <Pressable
-          onPress={handleShare}
-          disabled={sharing || pending}
-          hitSlop={LINK_HIT_SLOP}
-          accessibilityRole="button"
-          accessibilityState={{ busy: sharing, disabled: sharing || pending }}
-          style={styles.share}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.shareLabel}>
-            {sharing ? 'Sharing…' : 'Share result'}
-          </ThemedText>
-        </Pressable>
-      </View>
+
+        {compact ? null : (
+          <View style={styles.grid}>
+            {isBankruptcy ? (
+              <StatTile icon={STAT_ICON.cash} label="Cash at the end" value={formatMoney(state.cash)} tone="danger" />
+            ) : (
+              <StatTile
+                icon={STAT_ICON.valuation}
+                label="Exit valuation"
+                value={exitValuation === null ? '—' : formatMoney(exitValuation)}
+              />
+            )}
+            <StatTile icon={STAT_ICON.stake} label="Your stake" value={stakeLabel} />
+            <StatTile icon={STAT_ICON.customers} label="Customers" value={formatCount(state.customers)} />
+            <StatTile icon={STAT_ICON.team} label="Team" value={formatCount(headcountTotal(state))} />
+          </View>
+        )}
+      </ScrollView>
 
       {canBailout ? (
         /*
@@ -350,10 +446,50 @@ export default function GameOverScreen() {
           {hasToken ? null : <PaywallFooter source="game_over" disclosure="One-time purchase" />}
         </Animated.View>
       ) : (
-        <View style={[styles.plainActions, { paddingBottom: insets.bottom + Spacing.four }]}>
-          <PrimaryButton label="New Game" onPress={startFresh} />
+        // Share sits beside New Game rather than under the score: on a recap
+        // worth showing off it's a real action, not a footnote.
+        <View style={[styles.actions, { paddingBottom: insets.bottom + Spacing.four }]}>
+          <PrimaryButton
+            label={sharing ? 'Sharing…' : 'Share'}
+            variant="secondary"
+            disabled={sharing}
+            accessibilityState={{ busy: sharing, disabled: sharing }}
+            onPress={handleShare}
+            style={styles.flex}
+          />
+          <PrimaryButton label="New Game" onPress={startFresh} style={styles.flex} />
         </View>
       )}
+    </View>
+  );
+}
+
+/** One number from the run, with the same icon treatment the HQ tiles use. */
+function StatTile({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: SymbolViewProps['name'];
+  label: string;
+  value: string;
+  tone?: 'danger';
+}) {
+  const theme = useTheme();
+  const labelColor = tone === 'danger' ? theme.danger : theme.textMuted;
+
+  return (
+    <View style={[styles.tile, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <View style={styles.tileLabelRow}>
+        <SymbolView name={icon} size={16} tintColor={labelColor} />
+        <ThemedText type="small" themeColor={tone === 'danger' ? 'danger' : 'textMuted'} numberOfLines={1}>
+          {label}
+        </ThemedText>
+      </View>
+      <ThemedText type="cardValue" themeColor={tone === 'danger' ? 'danger' : 'text'} numberOfLines={1}>
+        {value}
+      </ThemedText>
     </View>
   );
 }
@@ -362,28 +498,62 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  flex: {
+    flex: 1,
+  },
   centered: {
     textAlign: 'center',
   },
-  /** Takes the whole screen when there's no offer, and the space above it when there is. */
+  /**
+   * `flexGrow` + centring so a short recap (the compact bankruptcy one, or a
+   * run too young to have a curve) sits in the middle of the space it has
+   * rather than leaving a void above the buttons. Content taller than the
+   * viewport has no slack to distribute, so it simply scrolls.
+   */
   result: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.four,
+    gap: Spacing.two,
+  },
+  titleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.four,
+    gap: Spacing.two,
+  },
+  chartBlock: {
+    marginTop: Spacing.three,
+    marginBottom: Spacing.three,
+  },
+  axisRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Spacing.one,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    marginTop: Spacing.three,
+  },
+  tile: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.md,
+    padding: Spacing.three,
+    gap: Spacing.half,
+  },
+  tileLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.one,
   },
-  score: {
-    marginVertical: Spacing.two,
-  },
-  personalBest: {
-    marginTop: Spacing.two,
-  },
-  share: {
-    marginTop: Spacing.four,
-  },
-  shareLabel: {
-    textDecorationLine: 'underline',
+  actions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.four,
   },
   offer: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -391,8 +561,5 @@ const styles = StyleSheet.create({
     borderTopRightRadius: Radius.sheet,
     padding: Spacing.four,
     gap: Spacing.two,
-  },
-  plainActions: {
-    paddingHorizontal: Spacing.four,
   },
 });
