@@ -84,7 +84,7 @@ describe('canSpendWeek / spendWeek', () => {
 
 describe('purchased-weeks pool', () => {
   it('starts empty', () => {
-    expect(initialPurchasedWeeksPool()).toEqual({ weeksRemaining: 0, grantedTransactionIds: [] });
+    expect(initialPurchasedWeeksPool()).toEqual({ weeksRemaining: 0, grantedTransactionIds: [], weeksSpent: 0 });
   });
 
   it('grantPurchasedWeeks credits the pool additively', () => {
@@ -112,12 +112,28 @@ describe('purchased-weeks pool', () => {
     const afterFirst = spendWeekFromPools(budget, purchased);
     expect(afterFirst.budget.weeksRemaining).toBe(0);
     expect(afterFirst.purchased.weeksRemaining).toBe(5);
+    // Spending from the free budget must never bump the purchased-pool spend counter.
+    expect(afterFirst.purchased.weeksSpent ?? 0).toBe(0);
 
     const afterSecond = spendWeekFromPools(afterFirst.budget, afterFirst.purchased);
     expect(afterSecond.budget.weeksRemaining).toBe(0);
     expect(afterSecond.purchased.weeksRemaining).toBe(4);
+    expect(afterSecond.purchased.weeksSpent).toBe(1);
     // Spending never touches the transaction ledger.
     expect(afterSecond.purchased.grantedTransactionIds).toEqual(['tx1']);
+  });
+
+  it('spendWeekFromPools increments weeksSpent on the purchased pool, defaulting an unset counter to 0', () => {
+    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 0 };
+    // Simulates a pre-existing install's persisted pool, saved before this field existed.
+    const legacyPurchased = { weeksRemaining: 3, grantedTransactionIds: ['tx1'] } as PurchasedWeeksPool;
+
+    const once = spendWeekFromPools(budget, legacyPurchased);
+    expect(once.purchased.weeksSpent).toBe(1);
+
+    const twice = spendWeekFromPools(once.budget, once.purchased);
+    expect(twice.purchased.weeksSpent).toBe(2);
+    expect(twice.purchased.weeksRemaining).toBe(1);
   });
 
   it('spendWeekFromPools is a no-op once both pools are empty', () => {
@@ -166,7 +182,19 @@ describe('creditTransaction / creditTransactions', () => {
     // grantedTransactionIds in sync by construction — there is no
     // intermediate state where one field reflects the credit and the other
     // doesn't, because both are set in the same object literal.
-    expect(pool).toEqual({ weeksRemaining: 20, grantedTransactionIds: ['tx1'] });
+    expect(pool).toEqual({ weeksRemaining: 20, grantedTransactionIds: ['tx1'], weeksSpent: 0 });
+  });
+
+  it('preserves weeksSpent across a credit — a purchase must never reset how much was already spent', () => {
+    const spent = spendWeekFromPools(
+      { lastSessionDate: 'x', weeksRemaining: 0 },
+      { weeksRemaining: 1, grantedTransactionIds: [], weeksSpent: 0 },
+    ).purchased;
+    expect(spent.weeksSpent).toBe(1);
+
+    const credited = creditTransaction(spent, 'tx1', 20);
+    expect(credited.weeksSpent).toBe(1);
+    expect(credited.weeksRemaining).toBe(20);
   });
 
   it('creditTransactions applies a batch, skipping already-granted ones', () => {

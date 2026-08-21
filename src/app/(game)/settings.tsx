@@ -5,6 +5,7 @@ import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
+import { AccountSettingsSection } from '@/components/game/account-settings-section';
 import { resetAllHints } from '@/components/game/first-run-hint';
 import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
@@ -270,6 +271,7 @@ export default function SettingsScreen() {
             <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
               Purchases
             </ThemedText>
+            <AccountSettingsSection />
             {/*
               Apple expects a restore control in Settings as well as on the
               paywalls themselves — it's the first place a reviewer checks, and

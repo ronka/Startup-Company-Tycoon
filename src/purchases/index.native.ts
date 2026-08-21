@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import * as fallback from './fallback';
-import type { LaunchReconciliation, RestoreResult } from './reconciliation';
+import type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 import { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
 import type {
   PaywallOutcome,
@@ -44,8 +44,9 @@ export const restorePurchases: (
 ) => Promise<RestoreResult> = impl.restorePurchases;
 export const syncPostHogAttribute: (distinctId: string) => Promise<void> = impl.syncPostHogAttribute;
 export const presentWeeksPaywall: () => Promise<PaywallOutcome> = impl.presentWeeksPaywall;
+export const getStoreTransactions: () => Promise<PurchaseTransaction[]> = impl.getStoreTransactions;
 export { REVIVE_PRICE_LABEL, WEEK_PACKS };
-export type { LaunchReconciliation, RestoreResult };
+export type { LaunchReconciliation, PurchaseTransaction, RestoreResult };
 export type {
   PaywallOutcome,
   PurchaseErrorCode,

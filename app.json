@@ -19,6 +19,7 @@
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.ronkaa.startuptycoon",
       "appStoreUrl": "https://apps.apple.com/app/id6787488376",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -28,11 +29,16 @@
       "package": "com.ronkaa.startuptycoon"
     },
     "web": {
-      "output": "single",
+      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "origin": "https://startup-tycoon.expo.app"
+        }
+      ],
       "expo-notifications",
       [
         "expo-splash-screen",
@@ -59,7 +65,8 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

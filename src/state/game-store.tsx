@@ -7,6 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useReducer,
@@ -15,6 +16,14 @@ import {
   type ReactNode,
 } from 'react';
 
+import {
+  accountAvailable,
+  deleteAccount as deleteAccountRequest,
+  hasSessionToken,
+  signInWithApple as signInWithAppleRequest,
+  signOut as signOutOfAccount,
+  syncEntitlements as syncEntitlementsRequest,
+} from '@/account';
 import { EVENTS, gameProps, track } from '@/analytics/events';
 import { posthog } from '@/analytics/posthog';
 import { totalHeadcount } from '@/game/balance';
@@ -24,12 +33,14 @@ import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/ga
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import {
   configurePurchases,
+  getStoreTransactions,
   reconcileOnLaunch,
   restorePurchases as restorePurchasesFromStore,
   syncPostHogAttribute,
   type LaunchReconciliation,
   type RestoreOutcome,
 } from '@/purchases';
+import { buildSyncPayload, mergeEntitlements, type ServerEntitlements } from '@/purchases/entitlement-sync';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import {
   initialRollBudget,
@@ -89,6 +100,19 @@ export interface PlayerProfile {
    * full story sequence plays instead of jumping straight to name entry.
    */
   onboardingVersion?: number;
+}
+
+/**
+ * Cross-device purchase recovery (Sign in with Apple + the Neon entitlement
+ * ledger). `appleUserId` is only ever populated by a *fresh* sign-in in this
+ * session — a relaunch that finds a persisted session token sets `signed-in`
+ * without it, since our own opaque session token doesn't carry it. That's
+ * fine: the UI only needs to know *whether* an account is linked, never the
+ * id itself.
+ */
+export interface AccountState {
+  status: 'signed-out' | 'signed-in';
+  appleUserId?: string;
 }
 
 type StoreAction =
@@ -156,6 +180,18 @@ function armFundingRoundReviewAsk(state: GameState): void {
   setTimeout(() => {
     requestReviewOnce('funding_round');
   }, FUNDING_REVIEW_ARM_MS);
+}
+
+/**
+ * Fast-path guard for the debounced auto-sync effect: a stand-in for "has
+ * anything worth pushing changed" without needing a `getStoreTransactions()`
+ * round trip just to find out. `weeksSpent`/`revivesSpent` plus the sorted
+ * union of both pools' locally-known transaction ids is the entire payload
+ * that can change between two pool states (see the plan's Task 7 guard note).
+ */
+function pushSignature(purchased: PurchasedWeeksPool, revives: RevivePool): string {
+  const ids = [...new Set([...purchased.grantedTransactionIds, ...revives.grantedTransactionIds])].sort();
+  return JSON.stringify({ weeksSpent: purchased.weeksSpent ?? 0, revivesSpent: revives.tokensSpent ?? 0, ids });
 }
 
 function captureAction(action: GameAction, state: GameState): void {
@@ -317,6 +353,24 @@ interface GameContextValue {
    */
   reconcileAfterPaywall: () => Promise<{ weeks: number; revives: number }>;
   /**
+   * Cross-device purchase recovery (Sign in with Apple): `signed-out` until
+   * the initial load resolves *and* on every platform where it isn't
+   * available (`accountAvailable` is false off iOS custom builds).
+   */
+  account: AccountState;
+  /**
+   * Native Apple sign-in, then `/api/auth/apple`, then an immediate sync
+   * pass (`firstLink: true`) so a device that's been playing signed-out
+   * doesn't lose local purchases to a server that's never heard of them.
+   * Resolves to the outcome rather than throwing — a cancelled sign-in is
+   * not an error.
+   */
+  signInWithApple: () => Promise<'signed-in' | 'cancelled' | 'error'>;
+  /** Clears the local session token and local `account` state only — the server account and its balance survive (see the plan). */
+  signOut: () => void;
+  /** Deletes the server account (Guideline 5.1.1(v)), then signs out locally. No-op (returns `'error'`) if not signed in. */
+  deleteAccount: () => Promise<'ok' | 'error'>;
+  /**
    * Redeem one revive token: consume it and dispatch the `REVIVE` engine action
    * (restore cash, clear the fuse, un-end the run) with the given windfall
    * `reason` flavor. No-op if no token is available or no run is active.
@@ -368,6 +422,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // re-renders) reads the just-credited token instead of a stale value. Kept
   // in sync on commit below, and updated eagerly by `applyRevivePool`.
   const revivePoolRef = useRef<RevivePool | null>(null);
+  const [accountState, setAccountState] = useState<AccountState>({ status: 'signed-out' });
+  // Synchronous mirror, same reason as `purchasedWeeksRef`/`revivePoolRef`:
+  // `performSync` needs the *current* signed-in status, and reading committed
+  // React state could race a sign-in/sign-out that just happened in the same
+  // handler.
+  const accountStateRef = useRef<AccountState>({ status: 'signed-out' });
+  // The serialized signature (weeksSpent, revivesSpent, sorted union of both
+  // pools' granted-tx ids) of the last entitlements push that actually
+  // landed. The debounced auto-sync effect below fires on every pool change
+  // — including the one *this* sync's own merge just wrote back — so without
+  // this guard it would loop forever. A ref, not state, so back-to-back
+  // changes within one handler compare against the truth (see the plan).
+  const lastPushedPayloadRef = useRef<string | null>(null);
   const [devFreePlay, setDevFreePlay] = useState(false);
   // Null (not `initialStreak`) until the load resolves: null also doubles as
   // "no streak was ever saved", which the standup-injection effect below
@@ -382,6 +449,89 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // a new personal best. Set in the game-over transition below; cleared on
   // `NEW_GAME` so it never bleeds into the next run's game-over screen.
   const [lastRunWasBest, setLastRunWasBest] = useState(false);
+
+  // Updates the revive pool through both the synchronous ref mirror and React
+  // state, so back-to-back reads within one handler (credit → redeem) are
+  // consistent. Declared ahead of the mount effect (and every other effect)
+  // below: both `performSync` and the debounced auto-sync effect need it —
+  // and the same declared-before-use requirement — before they're defined.
+  // `useCallback` with an empty dep array: it closes over only refs and a
+  // `useState` setter, both stable across renders, so the identity genuinely
+  // never needs to change — which is what lets `performSync` below (and the
+  // effects that call it) list it as a dependency without re-running on
+  // every render.
+  const applyRevivePool = useCallback((updater: (prev: RevivePool) => RevivePool) => {
+    const next = updater(revivePoolRef.current ?? initialRevivePool());
+    revivePoolRef.current = next;
+    setRevivePool(next);
+  }, []);
+
+  // The purchased-weeks counterpart to `applyRevivePool`, so a credit is
+  // visible to the very next read in the same handler — which is exactly what
+  // a "buy, then restore" sequence does.
+  const applyPurchasedWeeks = useCallback((updater: (prev: PurchasedWeeksPool) => PurchasedWeeksPool) => {
+    const next = updater(purchasedWeeksRef.current ?? initialPurchasedWeeksPool());
+    purchasedWeeksRef.current = next;
+    setPurchasedWeeks(next);
+  }, []);
+
+  /**
+   * The single entitlements-sync pass every caller funnels through — launch,
+   * sign-in, the debounced auto-sync effect, and restore — mirroring why
+   * `applyReconciliation` further below is the one place a reconciliation
+   * pass turns into credited pools.
+   *
+   * `skipIfUnchanged` is only ever `true` for the passive auto-sync trigger:
+   * forced triggers (sign-in, restore) always hit the network, since they're
+   * explicit player actions expecting a round trip. The guard runs *before*
+   * `getStoreTransactions()` — a native round trip — so an unrelated pool
+   * change (spending a week) doesn't cost one every time the debounce fires.
+   *
+   * Reads the *fresh* refs after the network call, not the pre-call
+   * snapshot, before merging — the 8s request timeout is long enough for a
+   * TICK to land in between, and merging against a stale snapshot would
+   * silently drop a transaction id it added in that window (the exact
+   * replace-instead-of-union failure `entitlement-sync.ts` warns about,
+   * reintroduced through a different door). The *payload* pushed is still
+   * built from the pre-call snapshot — an under-counted `weeksSpent` in that
+   * race errs in the player's favour, same as the plan's sync-model note.
+   */
+  const performSync = useCallback(
+    async (opts: { firstLink: boolean; skipIfUnchanged: boolean }): Promise<boolean> => {
+      if (!accountAvailable || accountStateRef.current.status !== 'signed-in') return false;
+      const purchasedBefore = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
+      const revivesBefore = revivePoolRef.current ?? initialRevivePool();
+      const signature = pushSignature(purchasedBefore, revivesBefore);
+      if (opts.skipIfUnchanged && lastPushedPayloadRef.current === signature) return false;
+
+      const storeTransactions = await getStoreTransactions();
+      const payload = buildSyncPayload(purchasedBefore, revivesBefore, storeTransactions);
+      const result = await syncEntitlementsRequest(payload);
+      if (result.status !== 'ok') return false;
+
+      const purchasedNow = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
+      const revivesNow = revivePoolRef.current ?? initialRevivePool();
+      const merged = mergeEntitlements(purchasedNow, revivesNow, result.entitlements, { firstLink: opts.firstLink });
+      applyPurchasedWeeks(() => merged.purchased);
+      applyRevivePool(() => merged.revives);
+      lastPushedPayloadRef.current = pushSignature(merged.purchased, merged.revives);
+      track(EVENTS.ENTITLEMENTS_SYNCED, {
+        weeks: merged.purchased.weeksRemaining,
+        revives: merged.revives.tokensRemaining,
+      });
+      return true;
+    },
+    [applyPurchasedWeeks, applyRevivePool],
+  );
+
+  /** Merges a bare `ServerEntitlements` (e.g. the `/api/auth/apple` response) without a network round trip — the sign-in fallback when the immediate post-auth sync fails. */
+  const mergeServerEntitlements = (server: ServerEntitlements, opts: { firstLink: boolean }): void => {
+    const purchasedNow = purchasedWeeksRef.current ?? initialPurchasedWeeksPool();
+    const revivesNow = revivePoolRef.current ?? initialRevivePool();
+    const merged = mergeEntitlements(purchasedNow, revivesNow, server, opts);
+    applyPurchasedWeeks(() => merged.purchased);
+    applyRevivePool(() => merged.revives);
+  };
 
   // Load the autosave (and the daily week budget + streak, refreshed against
   // "now") once on mount.
@@ -443,6 +593,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
         console.warn('[game-store] failed to load revive pool', err);
         if (!cancelled) setRevivePool(loadedRevivePool);
       }
+      // Reconciled locally (not via functional setState updates) because the
+      // account sync pass below needs the *result* synchronously, in the same
+      // pass — and because `purchasedWeeksRef`/`revivePoolRef` are otherwise
+      // still null at this point (they're only assigned by the persistence
+      // effects, after commit), which would make a `performSync` call here
+      // read `initialPurchasedWeeksPool()` instead of what was just loaded.
+      let reconciledPurchasedWeeks = loadedPurchasedWeeks;
+      let reconciledRevivePool = loadedRevivePool;
       try {
         // No-ops off iOS / in Expo Go (see src/purchases/index.native.ts).
         // Crash-safe delivery (Task 5): diffs RC's transaction history against
@@ -458,14 +616,45 @@ export function GameProvider({ children }: { children: ReactNode }) {
           new Set(loadedPurchasedWeeks.grantedTransactionIds),
           new Set(loadedRevivePool.grantedTransactionIds),
         );
-        if (!cancelled && newlyGrantedWeeks.length > 0) {
-          setPurchasedWeeks((prev) => creditTransactions(prev ?? loadedPurchasedWeeks, newlyGrantedWeeks));
+        if (newlyGrantedWeeks.length > 0) {
+          reconciledPurchasedWeeks = creditTransactions(loadedPurchasedWeeks, newlyGrantedWeeks);
         }
-        if (!cancelled && newlyGrantedRevives.length > 0) {
-          setRevivePool((prev) => creditReviveTransactions(prev ?? loadedRevivePool, newlyGrantedRevives));
+        if (newlyGrantedRevives.length > 0) {
+          reconciledRevivePool = creditReviveTransactions(loadedRevivePool, newlyGrantedRevives);
         }
       } catch (err) {
         console.warn('[game-store] failed to reconcile purchases', err);
+      }
+      if (!cancelled) {
+        purchasedWeeksRef.current = reconciledPurchasedWeeks;
+        revivePoolRef.current = reconciledRevivePool;
+        setPurchasedWeeks(reconciledPurchasedWeeks);
+        setRevivePool(reconciledRevivePool);
+      }
+      // Cross-device purchase recovery: order matters here — RC reconciliation
+      // (just above) credits any pending local transactions first, then this
+      // sync pushes them up and pulls the server's truth down. `firstLink:
+      // false` because this is a *returning* signed-in device, not a fresh
+      // link — see `performSync`.
+      //
+      // `performSync` is deliberately NOT awaited: it can involve an 8s
+      // network timeout, and this whole IIFE still has to reach the
+      // `finally` below that flips `loading` false. Awaiting it here would
+      // hold every `loading`-gated effect — the autosave effect included —
+      // hostage to that round trip, breaking exactly the offline guarantee
+      // the plan calls out in §12 ("nothing blocks, nothing throws").
+      // `hasSessionToken()` is a local SecureStore read, not a network call,
+      // so it's fine to await.
+      try {
+        if (!cancelled && accountAvailable && (await hasSessionToken())) {
+          accountStateRef.current = { status: 'signed-in' };
+          if (!cancelled) setAccountState(accountStateRef.current);
+          performSync({ firstLink: false, skipIfUnchanged: false }).catch((err) =>
+            console.warn('[game-store] failed to sync entitlements on launch', err),
+          );
+        }
+      } catch (err) {
+        console.warn('[game-store] failed to check for a session on launch', err);
       }
       try {
         const raw = await AsyncStorage.getItem(STREAK_STORAGE_KEY);
@@ -492,7 +681,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // `performSync` is stable (see its own `useCallback`), so including it
+    // doesn't turn this into a run-on-every-render effect — it still only
+    // ever runs once, on mount.
+  }, [performSync]);
 
   // Autosave after every change (once the initial load has settled).
   useEffect(() => {
@@ -568,6 +760,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
       console.warn('[game-store] failed to save revive pool', err),
     );
   }, [revivePool, loading]);
+
+  // Debounced auto-sync: any purchased-pool or revive-pool change (a
+  // purchase or a spend) pushes and pulls entitlements, ~2s after the last
+  // change settles. `performSync`'s own `skipIfUnchanged` guard (via
+  // `lastPushedPayloadRef`) is what actually breaks the feedback loop this
+  // sync's own merge would otherwise cause — see the plan's Task 7 note.
+  useEffect(() => {
+    if (loading || accountState.status !== 'signed-in' || purchasedWeeks === null || revivePool === null) return;
+    const timer = setTimeout(() => {
+      performSync({ firstLink: false, skipIfUnchanged: true }).catch((err) =>
+        console.warn('[game-store] auto-sync failed', err),
+      );
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [purchasedWeeks, revivePool, accountState.status, loading, performSync]);
 
   // Persist the streak whenever it changes.
   useEffect(() => {
@@ -778,24 +985,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch(action);
   };
 
-  // Updates the revive pool through both the synchronous ref mirror and React
-  // state, so back-to-back reads within one handler (credit → redeem) are
-  // consistent.
-  const applyRevivePool = (updater: (prev: RevivePool) => RevivePool) => {
-    const next = updater(revivePoolRef.current ?? initialRevivePool());
-    revivePoolRef.current = next;
-    setRevivePool(next);
-  };
-
-  // The purchased-weeks counterpart to `applyRevivePool`, so a credit is
-  // visible to the very next read in the same handler — which is exactly what
-  // a "buy, then restore" sequence does.
-  const applyPurchasedWeeks = (updater: (prev: PurchasedWeeksPool) => PurchasedWeeksPool) => {
-    const next = updater(purchasedWeeksRef.current ?? initialPurchasedWeeksPool());
-    purchasedWeeksRef.current = next;
-    setPurchasedWeeks(next);
-  };
-
   /**
    * The one place a reconciliation pass turns into credited weeks and revives.
    *
@@ -877,6 +1066,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // clearing the ledger let the next launch pass re-credit the player's
       // entire purchase history for free.
       track(EVENTS.APP_RESET);
+      // Also clears the session token (see the plan: "Reset app" signs out
+      // locally; the server account and its balance survive — deletion is
+      // the separate, explicit `deleteAccount` action). Fire-and-forget:
+      // `signOutOfAccount` never rejects (see `session-store.ts`).
+      signOutOfAccount().catch(() => {});
+      accountStateRef.current = { status: 'signed-out' };
+      setAccountState(accountStateRef.current);
+      lastPushedPayloadRef.current = null;
       // New anonymous identity so a fresh setup isn't attributed to the old player.
       posthog.reset();
       // State→null lets the autosave effect remove the save key, and the fresh
@@ -917,12 +1114,77 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return result.reconciliation;
       });
       if (failed) return { status: 'error' };
+      // While signed in, also run a server sync pass — this is what actually
+      // recovers cross-device purchases, since consumables drop off the
+      // StoreKit receipt once finished (the RC-based reconciliation above can
+      // only ever recover a purchase *this install* never finished
+      // crediting). Diffed against the pre-sync remaining counts so the
+      // outcome tally covers both sources honestly.
+      let serverWeeks = 0;
+      let serverRevives = 0;
+      if (accountStateRef.current.status === 'signed-in') {
+        const weeksBefore = purchasedWeeksRef.current?.weeksRemaining ?? 0;
+        const revivesBefore = revivePoolRef.current?.tokensRemaining ?? 0;
+        const synced = await performSync({ firstLink: false, skipIfUnchanged: false });
+        if (synced) {
+          serverWeeks = Math.max(0, (purchasedWeeksRef.current?.weeksRemaining ?? 0) - weeksBefore);
+          serverRevives = Math.max(0, (revivePoolRef.current?.tokensRemaining ?? 0) - revivesBefore);
+        }
+      }
+      const totalWeeks = weeks + serverWeeks;
+      const totalRevives = revives + serverRevives;
       // "Nothing to restore" is a success, not a failure — consumables usually
       // leave nothing to recover (see `revenuecat.ts`'s `restorePurchases`).
-      if (weeks === 0 && revives === 0) return { status: 'nothing' };
-      return { status: 'restored', weeks, revives };
+      if (totalWeeks === 0 && totalRevives === 0) return { status: 'nothing' };
+      return { status: 'restored', weeks: totalWeeks, revives: totalRevives };
     },
     reconcileAfterPaywall: () => applyReconciliation(reconcileOnLaunch),
+    account: accountState,
+    signInWithApple: async (): Promise<'signed-in' | 'cancelled' | 'error'> => {
+      track(EVENTS.ACCOUNT_SIGN_IN_STARTED);
+      const result = await signInWithAppleRequest();
+      if (result.status !== 'signed-in') {
+        track(EVENTS.ACCOUNT_SIGN_IN_FAILED, { reason: result.status });
+        return result.status;
+      }
+      // Marked signed-in *before* syncing: `performSync` gates on this, so
+      // the immediate push/pull below (and the debounced auto-sync effect it
+      // can trigger indirectly) are allowed to actually run.
+      accountStateRef.current = { status: 'signed-in', appleUserId: result.appleUserId };
+      setAccountState(accountStateRef.current);
+      // `firstLink: true` — push this device's local state and pull the
+      // authoritative balance in one round trip, so a device that's been
+      // playing signed-out never loses balance to a server that hasn't heard
+      // of its transactions yet.
+      const synced = await performSync({ firstLink: true, skipIfUnchanged: false });
+      if (!synced) {
+        // The sync round-trip failed right after auth — fall back to the
+        // bare `/api/auth/apple` response's entitlements so sign-in still
+        // lands something reasonable. The debounced auto-sync effect (or the
+        // next launch) retries the full push/pull once connectivity allows.
+        mergeServerEntitlements(result.entitlements, { firstLink: true });
+      }
+      track(EVENTS.ACCOUNT_SIGN_IN_COMPLETED);
+      return 'signed-in';
+    },
+    signOut: () => {
+      // Fire-and-forget: `signOutOfAccount` never rejects (see `session-store.ts`).
+      signOutOfAccount().catch(() => {});
+      accountStateRef.current = { status: 'signed-out' };
+      setAccountState(accountStateRef.current);
+      lastPushedPayloadRef.current = null;
+      track(EVENTS.ACCOUNT_SIGNED_OUT);
+    },
+    deleteAccount: async (): Promise<'ok' | 'error'> => {
+      const result = await deleteAccountRequest();
+      if (result.status !== 'ok') return 'error';
+      await signOutOfAccount();
+      accountStateRef.current = { status: 'signed-out' };
+      setAccountState(accountStateRef.current);
+      lastPushedPayloadRef.current = null;
+      track(EVENTS.ACCOUNT_DELETED);
+      return 'ok';
+    },
     redeemRevive: (reason: string) => {
       if (!state) return;
       // Read the synchronous mirror, so a credit in this same handler (the

@@ -20,6 +20,7 @@ import {
   reconcilePurchases,
   reconcileRevivePurchases,
   type LaunchReconciliation,
+  type PurchaseTransaction,
   type RestoreResult,
 } from './reconciliation';
 import { WEEK_PACKS } from './stub';
@@ -104,6 +105,25 @@ export async function restorePurchases(
   } catch (err) {
     console.warn('[purchases] restore failed', err);
     return { status: 'error' };
+  }
+}
+
+/**
+ * The store transaction history behind the entitlement sync (the Sign in
+ * with Apple purchase-recovery feature): RC keeps this server-side per
+ * customer with `productIdentifier` attached, which is what `/sync` needs to
+ * price a transaction — the local granted-tx ledger stores only ids, no
+ * product, so it can't price itself. Same defensive shape as
+ * `reconcileOnLaunch`: never throws, empty on failure or when unconfigured.
+ */
+export async function getStoreTransactions(): Promise<PurchaseTransaction[]> {
+  if (!configured) return [];
+  try {
+    const customerInfo = await Purchases.getCustomerInfo();
+    return customerInfo.nonSubscriptionTransactions;
+  } catch (err) {
+    console.warn('[purchases] failed to load store transactions', err);
+    return [];
   }
 }
 

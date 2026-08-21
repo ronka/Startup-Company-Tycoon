@@ -125,6 +125,16 @@ export const EVENTS = {
   /** The store couldn't be reached for a restore — `{ source }`. */
   PURCHASE_RESTORE_FAILED: 'purchase_restore_failed',
 
+  // Sign in with Apple / cross-device purchase recovery
+  ACCOUNT_SIGN_IN_STARTED: 'account_sign_in_started',
+  ACCOUNT_SIGN_IN_COMPLETED: 'account_sign_in_completed',
+  /** Includes a cancelled sign-in — `{ reason }` is `cancelled` or `error`. */
+  ACCOUNT_SIGN_IN_FAILED: 'account_sign_in_failed',
+  ACCOUNT_SIGNED_OUT: 'account_signed_out',
+  ACCOUNT_DELETED: 'account_deleted',
+  /** A sync round trip landed a merged balance — `{ weeks, revives }` is the post-merge remaining count, not a delta. */
+  ENTITLEMENTS_SYNCED: 'entitlements_synced',
+
   // Legal / support
   /** A privacy, terms, or support link was opened — `{ link, source }`. */
   LEGAL_LINK_OPENED: 'legal_link_opened',

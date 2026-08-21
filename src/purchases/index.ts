@@ -7,6 +7,7 @@
  */
 export {
   configurePurchases,
+  getStoreTransactions,
   presentWeeksPaywall,
   purchasesAvailable,
   purchasesClient,
@@ -15,7 +16,7 @@ export {
   syncPostHogAttribute,
 } from './fallback';
 export { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
-export type { LaunchReconciliation, RestoreResult } from './reconciliation';
+export type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 export type {
   PaywallOutcome,
   PurchaseErrorCode,

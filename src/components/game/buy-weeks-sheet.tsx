@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { accountAvailable } from '@/account';
 import { EVENTS, track, type EventName, type Props } from '@/analytics/events';
 import { BottomSheet } from '@/components/game/bottom-sheet';
-import { LegalLinksRow } from '@/components/game/legal-links-row';
+import { AccountSignInHint, LegalLinksRow } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
+import { useGame } from '@/state/game-store';
 import { notePurchaseFailed } from '@/state/store-review';
 
 /**
@@ -47,13 +49,21 @@ export function BuyWeeksSheet({
   onClose: () => void;
   onPurchased: (weeksGranted: number, transactionId: string) => void;
 }) {
+  const { account, signInWithApple } = useGame();
   const [packs, setPacks] = useState<WeekPack[]>([]);
   const [pendingPackId, setPendingPackId] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<PurchaseErrorCode | null>(null);
+  // Set instead of closing immediately, when the purchase completed while
+  // signed out — "the success state offers sign-in once" (the plan). Reset
+  // on every open so a later, unrelated open of this sheet doesn't inherit a
+  // stale offer from a previous purchase.
+  const [postPurchaseSignInOffer, setPostPurchaseSignInOffer] = useState(false);
+  const [signInPending, setSignInPending] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
     setErrorCode(null);
+    setPostPurchaseSignInOffer(false);
     trackSheet(EVENTS.PAYWALL_SHOWN, { trigger });
     purchasesClient.getPacks().then(setPacks);
   }, [visible, trigger]);
@@ -74,7 +84,11 @@ export function BuyWeeksSheet({
             price_label: pack.priceLabel,
           });
           onPurchased(weeksGranted, result.transactionId);
-          onClose();
+          if (accountAvailable && account.status === 'signed-out') {
+            setPostPurchaseSignInOffer(true);
+          } else {
+            onClose();
+          }
         } else {
           trackSheet(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code });
           notePurchaseFailed();
@@ -88,6 +102,32 @@ export function BuyWeeksSheet({
         setErrorCode('unknown');
       });
   };
+
+  /** Dismissible, not blocking — signs in if it can, but closes either way. */
+  const handleOfferSignIn = () => {
+    setSignInPending(true);
+    signInWithApple().finally(() => {
+      setSignInPending(false);
+      onClose();
+    });
+  };
+
+  if (postPurchaseSignInOffer) {
+    return (
+      <BottomSheet visible={visible} onClose={onClose} title="Weeks added!">
+        <ThemedText type="small" themeColor="textSecondary">
+          Keep these weeks safe — sign in with Apple to restore them on your other devices.
+        </ThemedText>
+        <PrimaryButton
+          label={signInPending ? 'Signing in…' : 'Sign in with Apple'}
+          loading={signInPending}
+          disabled={signInPending}
+          onPress={handleOfferSignIn}
+        />
+        <PrimaryButton label="Not now" variant="secondary" disabled={signInPending} onPress={onClose} />
+      </BottomSheet>
+    );
+  }
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Buy weeks">
@@ -130,6 +170,8 @@ export function BuyWeeksSheet({
       <PrimaryButton label="Not now" variant="secondary" onPress={onClose} />
 
       <RestorePurchasesButton source="buy_weeks_sheet" onRestored={onClose} />
+
+      <AccountSignInHint />
 
       <LegalLinksRow source="buy_weeks_sheet" />
     </BottomSheet>

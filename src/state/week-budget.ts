@@ -71,11 +71,13 @@ export function spendWeek(budget: WeekBudget): WeekBudget {
 export interface PurchasedWeeksPool {
   weeksRemaining: number;
   grantedTransactionIds: string[];
+  /** Cumulative weeks spent from this pool, ever. Optional: installs that predate this field read it as `?? 0`. */
+  weeksSpent?: number;
 }
 
 /** The pool as it stands before any purchase has ever been made. */
 export function initialPurchasedWeeksPool(): PurchasedWeeksPool {
-  return { weeksRemaining: 0, grantedTransactionIds: [] };
+  return { weeksRemaining: 0, grantedTransactionIds: [], weeksSpent: 0 };
 }
 
 /** Credit `amount` weeks with no transaction ledger involved (dev grant, stub purchases). */
@@ -94,6 +96,7 @@ export function grantPurchasedWeeks(pool: PurchasedWeeksPool, amount: number): P
 export function creditTransaction(pool: PurchasedWeeksPool, transactionId: string, weeks: number): PurchasedWeeksPool {
   if (pool.grantedTransactionIds.includes(transactionId)) return pool;
   return {
+    ...pool,
     weeksRemaining: pool.weeksRemaining + weeks,
     grantedTransactionIds: [...pool.grantedTransactionIds, transactionId],
   };
@@ -145,7 +148,14 @@ export function spendWeekFromPools(
 ): { budget: WeekBudget; purchased: PurchasedWeeksPool } {
   if (canSpendWeek(budget)) return { budget: spendWeek(budget), purchased };
   if (purchased.weeksRemaining > 0) {
-    return { budget, purchased: { ...purchased, weeksRemaining: purchased.weeksRemaining - 1 } };
+    return {
+      budget,
+      purchased: {
+        ...purchased,
+        weeksRemaining: purchased.weeksRemaining - 1,
+        weeksSpent: (purchased.weeksSpent ?? 0) + 1,
+      },
+    };
   }
   return { budget, purchased };
 }

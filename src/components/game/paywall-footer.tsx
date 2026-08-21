@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { LegalLinkText } from '@/components/game/legal-links-row';
+import { AccountSignInHint, LegalLinkText } from '@/components/game/legal-links-row';
 import { RestorePurchasesButton, type PurchaseSurface } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -24,32 +24,44 @@ export function PaywallFooter({
   source,
   disclosure,
   onRestored,
+  noun = 'purchases',
 }: {
   source: PurchaseSurface;
   /** What the money buys, e.g. "One-time purchase". Kept short — this is one line. */
   disclosure: string;
   /** Forwarded to the restore control, for a paywall that closes itself once something lands. */
   onRestored?: (weeks: number, revives: number) => void;
+  /**
+   * Forwarded to `AccountSignInHint` — the noun the surface actually sells.
+   * Defaults to `'purchases'` since this component's one call site today
+   * (`game-over.tsx`'s bailout paywall) sells a revive, not weeks; "these
+   * weeks" would be wrong copy there.
+   */
+  noun?: 'weeks' | 'purchases';
 }) {
   return (
-    <View style={styles.row}>
-      <ThemedText type="footnote">{disclosure}</ThemedText>
-      {purchasesAvailable ? (
-        <Fragment>
-          <Separator />
-          {/*
-            Returns its own outcome message as a sibling here. The row is full
-            by this point, so every message ("Restored 1 bailout.", "Couldn't
-            reach the App Store — try again.") wraps onto a line of its own
-            rather than trailing the links.
-          */}
-          <RestorePurchasesButton source={source} appearance="link" onRestored={onRestored} />
-        </Fragment>
-      ) : null}
-      <Separator />
-      <LegalLinkText link="privacy" source={source} type="footnote" />
-      <Separator />
-      <LegalLinkText link="terms" source={source} type="footnote" />
+    <View>
+      {/* Its own line, above the disclosure row — see `AccountSignInHint`. */}
+      <AccountSignInHint type="footnote" noun={noun} />
+      <View style={styles.row}>
+        <ThemedText type="footnote">{disclosure}</ThemedText>
+        {purchasesAvailable ? (
+          <Fragment>
+            <Separator />
+            {/*
+              Returns its own outcome message as a sibling here. The row is full
+              by this point, so every message ("Restored 1 bailout.", "Couldn't
+              reach the App Store — try again.") wraps onto a line of its own
+              rather than trailing the links.
+            */}
+            <RestorePurchasesButton source={source} appearance="link" onRestored={onRestored} />
+          </Fragment>
+        ) : null}
+        <Separator />
+        <LegalLinkText link="privacy" source={source} type="footnote" />
+        <Separator />
+        <LegalLinkText link="terms" source={source} type="footnote" />
+      </View>
     </View>
   );
 }

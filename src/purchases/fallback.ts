@@ -1,4 +1,4 @@
-import type { LaunchReconciliation, RestoreResult } from './reconciliation';
+import type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 import { stubPurchasesClient } from './stub';
 import type { PaywallOutcome, PurchasesClient } from './types';
 
@@ -50,3 +50,8 @@ export async function restorePurchases(
 }
 
 export async function syncPostHogAttribute(_distinctId: string): Promise<void> {}
+
+/** No store history without the native SDK. `index.native.ts` overrides it. */
+export async function getStoreTransactions(): Promise<PurchaseTransaction[]> {
+  return [];
+}

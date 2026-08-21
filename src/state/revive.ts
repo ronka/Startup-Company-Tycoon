@@ -14,11 +14,13 @@
 export interface RevivePool {
   tokensRemaining: number;
   grantedTransactionIds: string[];
+  /** Cumulative tokens spent from this pool, ever. Optional: installs that predate this field read it as `?? 0`. */
+  tokensSpent?: number;
 }
 
 /** The pool before any revive has been bought. */
 export function initialRevivePool(): RevivePool {
-  return { tokensRemaining: 0, grantedTransactionIds: [] };
+  return { tokensRemaining: 0, grantedTransactionIds: [], tokensSpent: 0 };
 }
 
 /** Grant one token with no transaction ledger (dev grant / debug menu). */
@@ -35,6 +37,7 @@ export function grantReviveToken(pool: RevivePool): RevivePool {
 export function creditReviveTransaction(pool: RevivePool, transactionId: string): RevivePool {
   if (pool.grantedTransactionIds.includes(transactionId)) return pool;
   return {
+    ...pool,
     tokensRemaining: pool.tokensRemaining + 1,
     grantedTransactionIds: [...pool.grantedTransactionIds, transactionId],
   };
@@ -52,5 +55,10 @@ export function canRedeemRevive(pool: RevivePool): boolean {
 
 /** Consume one token (redeemed into a `REVIVE` dispatch). Never goes below 0. */
 export function consumeReviveToken(pool: RevivePool): RevivePool {
-  return { ...pool, tokensRemaining: Math.max(0, pool.tokensRemaining - 1) };
+  if (pool.tokensRemaining <= 0) return pool;
+  return {
+    ...pool,
+    tokensRemaining: pool.tokensRemaining - 1,
+    tokensSpent: (pool.tokensSpent ?? 0) + 1,
+  };
 }
