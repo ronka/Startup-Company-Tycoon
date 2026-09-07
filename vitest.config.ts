@@ -12,6 +12,9 @@ export default defineConfig({
       // posthog-react-native package needs React Native infra the node test
       // env lacks. Swap in a no-op stub for tests.
       'posthog-react-native': path.resolve(__dirname, './src/analytics/__tests__/posthog-stub.ts'),
+      // Reading the OTA update ID is native-only; tests only need its null
+      // development fallback while exercising modules that import analytics.
+      'expo-updates': path.resolve(__dirname, './src/analytics/__tests__/expo-updates-stub.ts'),
     },
   },
   test: {

@@ -12,8 +12,9 @@ function incrementUpdateVersion() {
   if (customPath) {
     settingsPath = path.resolve(customPath);
   } else {
-    // Search common locations for the settings file with UPDATE_VERSION
+    // Search the shared release module, then legacy settings locations.
     const candidates = [
+      path.join(process.cwd(), 'src', 'constants', 'app-release.ts'),
       path.join(process.cwd(), 'app', 'settings.tsx'),
       path.join(process.cwd(), 'src', 'screens', 'settings.tsx'),
       path.join(process.cwd(), 'src', 'screens', 'Settings.tsx'),

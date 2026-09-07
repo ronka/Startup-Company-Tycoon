@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,6 +9,7 @@ import { resetAllHints } from '@/components/game/first-run-hint';
 import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { APP_RELEASE } from '@/constants/app-release';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { LEGAL_LINK_LABELS, openLegalLink, type LegalLink } from '@/lib/open-legal-link';
@@ -25,15 +25,6 @@ import { forceReviewForDev, resetReviewGateForDev, storeListingUrl } from '@/sta
  * three, and the one place a reviewer will look for them.
  */
 const LEGAL_LINKS: LegalLink[] = ['privacy', 'terms', 'support'];
-
-/**
- * OTA update counter, bumped by `scripts/increment-update-version.js` before
- * each `eas update`. Combined with the semver `version` from app.json, it
- * gives a unique build+update stamp (e.g. `1.0.0-3`) so we can tell exactly
- * which JS bundle a device is running.
- */
-const UPDATE_VERSION = 16;
-
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -51,7 +42,7 @@ export default function SettingsScreen() {
     replayOnboarding,
   } = useGame();
 
-  const appVersion = (Constants.expoConfig?.version ?? '1.0.0') + '-' + UPDATE_VERSION;
+  const appVersion = APP_RELEASE;
 
   // Read once — it comes from static app config, not from device state. Null on
   // web and on any build where `ios.appStoreUrl` is missing, in which case the row

@@ -25,7 +25,7 @@ import {
   syncEntitlements as syncEntitlementsRequest,
 } from '@/account';
 import { EVENTS, gameProps, track } from '@/analytics/events';
-import { posthog } from '@/analytics/posthog';
+import { posthog, registerAnalyticsRelease } from '@/analytics/posthog';
 import { totalHeadcount } from '@/game/balance';
 import { newGame, normalizeSave, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
@@ -1076,6 +1076,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       lastPushedPayloadRef.current = null;
       // New anonymous identity so a fresh setup isn't attributed to the old player.
       posthog.reset();
+      registerAnalyticsRelease();
       // State→null lets the autosave effect remove the save key, and the fresh
       // week budget / run history are written by their own effects. Profile
       // and streak are guarded against null-persist, so their keys never
