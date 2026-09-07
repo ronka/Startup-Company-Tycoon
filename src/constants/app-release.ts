@@ -3,7 +3,7 @@ import * as Updates from 'expo-updates';
 import appConfig from '../../app.json';
 
 /** Incremented by `npm run update` before each OTA publish. */
-export const UPDATE_VERSION = 16;
+export const UPDATE_VERSION = 17;
 
 /** Human-readable identifier for the native app version plus OTA revision. */
 export const APP_RELEASE = `${appConfig.expo.version}-${UPDATE_VERSION}`;
