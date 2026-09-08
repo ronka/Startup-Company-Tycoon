@@ -10,6 +10,7 @@ import {
   initialPurchasedWeeksPool,
   initialWeekBudget,
   isWeekBudgetExhausted,
+  nextWeekRefillAt,
   refreshWeekBudget,
   spendWeek,
   spendWeekFromPools,
@@ -33,6 +34,24 @@ describe('initialWeekBudget', () => {
     const budget = initialWeekBudget(day(2026, 7, 3));
     expect(budget.weeksRemaining).toBe(WEEKS_PER_DAY);
     expect(budget.lastSessionDate).toBe(dateKey(day(2026, 7, 3)));
+  });
+
+  it('accepts an experiment grant but never exceeds the bank cap', () => {
+    expect(initialWeekBudget(day(2026, 7, 3), 10).weeksRemaining).toBe(10);
+    expect(initialWeekBudget(day(2026, 7, 3), 50).weeksRemaining).toBe(WEEKS_BANK_CAP);
+  });
+});
+
+describe('nextWeekRefillAt', () => {
+  it('returns the next local midnight', () => {
+    const next = nextWeekRefillAt(day(2026, 7, 3, 23));
+    expect(next.getFullYear()).toBe(2026);
+    expect(next.getMonth()).toBe(6);
+    expect(next.getDate()).toBe(4);
+    expect(next.getHours()).toBe(0);
+    expect(next.getMinutes()).toBe(0);
+    expect(next.getSeconds()).toBe(0);
+    expect(next.getMilliseconds()).toBe(0);
   });
 });
 

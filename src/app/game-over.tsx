@@ -188,16 +188,20 @@ export default function GameOverScreen() {
           damping: 18,
           stiffness: 140,
         }).start();
+        if (!hasToken) {
+          track(EVENTS.PAYWALL_SHOWN, { trigger: 'bankruptcy', surface: 'game_over' });
+        }
       },
       hasToken ? 0 : OFFER_ARM_MS,
     );
     return () => clearTimeout(timer);
   }, [canBailout, hasToken, offerSlide]);
 
-  // Load the live store price and log the bailout paywall impression.
+  // Load the live store price and record the bailout paywall attempt. Its
+  // confirmed impression is emitted above only when the delayed card appears.
   useEffect(() => {
-    if (!canBailout) return;
-    track(EVENTS.PAYWALL_SHOWN, { trigger: 'bankruptcy' });
+    if (!canBailout || hasToken) return;
+    track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger: 'bankruptcy', surface: 'game_over' });
     let cancelled = false;
     purchasesClient
       .getRevivePrice()
@@ -210,7 +214,7 @@ export default function GameOverScreen() {
     return () => {
       cancelled = true;
     };
-  }, [canBailout]);
+  }, [canBailout, hasToken]);
 
   // Reached only when a run has actually ended — but not while we're redeeming
   // (gameOver has just cleared and we're already navigating to `/hq` ourselves).
@@ -225,6 +229,13 @@ export default function GameOverScreen() {
     // while a bailout is still being offered). A no-op when that effect has
     // already run.
     retireAllHints();
+    if (canBailout && !hasToken) {
+      track(EVENTS.PAYWALL_DISMISSED, {
+        trigger: 'bankruptcy',
+        surface: 'game_over',
+        outcome: 'dismissed',
+      });
+    }
     // This screen is presented as a modal (see app/_layout.tsx). *Pushing*
     // onboarding would stack it inside this modal's sheet container, so it
     // would open in a bottom sheet instead of full screen — hence a replace,
@@ -291,24 +302,48 @@ export default function GameOverScreen() {
       return;
     }
     setPending(true);
-    track(EVENTS.PURCHASE_STARTED, { pack_id: 'revive' });
+    track(EVENTS.PURCHASE_STARTED, { pack_id: 'revive', surface: 'game_over', trigger: 'bankruptcy' });
     purchasesClient
       .purchaseRevive()
       .then((result) => {
         setPending(false);
         if (result.status === 'success') {
-          track(EVENTS.PURCHASE_COMPLETED, { pack_id: 'revive', price_label: revivePrice ?? REVIVE_PRICE_LABEL });
+          track(EVENTS.PURCHASE_COMPLETED, {
+            pack_id: 'revive',
+            price_label: revivePrice ?? REVIVE_PRICE_LABEL,
+            outcome: 'purchased',
+            surface: 'game_over',
+            trigger: 'bankruptcy',
+            revives_granted: 1,
+          });
           creditRevivePurchase(result.transactionId);
           finishRevive();
+        } else if (result.code === 'cancelled') {
+          track(EVENTS.PURCHASE_CANCELLED, {
+            pack_id: 'revive',
+            surface: 'game_over',
+            trigger: 'bankruptcy',
+          });
+          setErrorCode(result.code);
         } else {
-          track(EVENTS.PURCHASE_FAILED, { pack_id: 'revive', error_code: result.code });
+          track(EVENTS.PURCHASE_FAILED, {
+            pack_id: 'revive',
+            error_code: result.code,
+            surface: 'game_over',
+            trigger: 'bankruptcy',
+          });
           notePurchaseFailed();
           setErrorCode(result.code);
         }
       })
       .catch(() => {
         setPending(false);
-        track(EVENTS.PURCHASE_FAILED, { pack_id: 'revive', error_code: 'unknown' });
+        track(EVENTS.PURCHASE_FAILED, {
+          pack_id: 'revive',
+          error_code: 'unknown',
+          surface: 'game_over',
+          trigger: 'bankruptcy',
+        });
         notePurchaseFailed();
         setErrorCode('unknown');
       });

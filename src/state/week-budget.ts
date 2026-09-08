@@ -27,8 +27,18 @@ export function dateKey(now: Date): string {
 }
 
 /** A brand-new budget, as granted on first install. */
-export function initialWeekBudget(now: Date): WeekBudget {
-  return { lastSessionDate: dateKey(now), weeksRemaining: WEEKS_PER_DAY };
+export function initialWeekBudget(now: Date, initialWeeks = WEEKS_PER_DAY): WeekBudget {
+  return {
+    lastSessionDate: dateKey(now),
+    weeksRemaining: Math.max(0, Math.min(WEEKS_BANK_CAP, initialWeeks)),
+  };
+}
+
+/** Exact local-midnight instant when the next daily allowance becomes available. */
+export function nextWeekRefillAt(now: Date): Date {
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return next;
 }
 
 /**

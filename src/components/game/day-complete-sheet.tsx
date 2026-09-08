@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
 import type { TomorrowAgenda } from '@/state/day-close';
+import { WEEKS_PER_DAY } from '@/state/week-budget';
 
 /**
  * The end-of-day beat: shown once per local day when the week budget runs out,
@@ -63,8 +64,12 @@ export function DayCompleteSheet({
         </View>
       ) : null}
 
+      <ThemedText type="small" themeColor="textSecondary">
+        {WEEKS_PER_DAY} free weeks refill at local midnight.
+      </ThemedText>
+
       <PrimaryButton label="See you tomorrow" onPress={onDismiss} />
-      {onBuyWeeks ? <PrimaryButton label="Keep playing" variant="secondary" onPress={onBuyWeeks} /> : null}
+      {onBuyWeeks ? <PrimaryButton label="Get more weeks" variant="secondary" onPress={onBuyWeeks} /> : null}
     </BottomSheet>
   );
 }

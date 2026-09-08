@@ -43,7 +43,7 @@ export const restorePurchases: (
   grantedReviveTransactionIds: ReadonlySet<string>,
 ) => Promise<RestoreResult> = impl.restorePurchases;
 export const syncPostHogAttribute: (distinctId: string) => Promise<void> = impl.syncPostHogAttribute;
-export const presentWeeksPaywall: () => Promise<PaywallOutcome> = impl.presentWeeksPaywall;
+export const presentWeeksPaywall: (onPresented?: () => void) => Promise<PaywallOutcome> = impl.presentWeeksPaywall;
 export const getStoreTransactions: () => Promise<PurchaseTransaction[]> = impl.getStoreTransactions;
 export { REVIVE_PRICE_LABEL, WEEK_PACKS };
 export type { LaunchReconciliation, PurchaseTransaction, RestoreResult };

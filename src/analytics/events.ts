@@ -107,8 +107,14 @@ export const EVENTS = {
   DEV_FREE_PLAY_TOGGLED: 'dev_free_play_toggled',
 
   // IAP week packs + revive
+  /** A buy surface was requested. A later `paywall_shown` confirms it actually rendered. */
+  PAYWALL_PRESENTATION_ATTEMPTED: 'paywall_presentation_attempted',
   PAYWALL_SHOWN: 'paywall_shown',
+  /** A rendered paywall closed without a purchase or restore. */
+  PAYWALL_DISMISSED: 'paywall_dismissed',
   PURCHASE_STARTED: 'purchase_started',
+  PURCHASE_CANCELLED: 'purchase_cancelled',
+  /** A new charge completed. Restores use `purchase_restore_completed` instead. */
   PURCHASE_COMPLETED: 'purchase_completed',
   PURCHASE_FAILED: 'purchase_failed',
   /** A revive token was consumed to un-end a bankrupt run (bought or dev-granted). */
@@ -157,6 +163,10 @@ export const EVENTS = {
   REVIEW_PROMPT_SUPPRESSED: 'review_prompt_suppressed',
   /** The Settings "Rate this game" row was tapped — opens the store listing, not the native sheet. */
   REVIEW_LINK_OPENED: 'review_link_opened',
+
+  // Experiments
+  /** The persisted 5-vs-10 initial-week grant was applied, immediately before flag exposure. */
+  INITIAL_WEEK_ALLOWANCE_APPLIED: 'initial_week_allowance_applied',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

@@ -25,7 +25,7 @@ export function configurePurchases(): void {}
  * caller to the in-app `BuyWeeksSheet`, which is the only thing that can work
  * on web, in tests, and in Expo Go anyway.
  */
-export async function presentWeeksPaywall(): Promise<PaywallOutcome> {
+export async function presentWeeksPaywall(_onPresented?: () => void): Promise<PaywallOutcome> {
   return 'not_presented';
 }
 

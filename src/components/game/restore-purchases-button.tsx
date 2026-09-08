@@ -58,22 +58,29 @@ export function RestorePurchasesButton({
   const handlePress = () => {
     setMessage(null);
     setPending(true);
-    track(EVENTS.PURCHASE_RESTORE_STARTED, { source });
+    track(EVENTS.PURCHASE_RESTORE_STARTED, { source, surface: source });
     restorePurchases()
       .then((outcome) => {
         setPending(false);
         if (outcome.status === 'error') {
-          track(EVENTS.PURCHASE_RESTORE_FAILED, { source });
+          track(EVENTS.PURCHASE_RESTORE_FAILED, { source, surface: source });
           setMessage({ text: "Couldn't reach the App Store — try again.", tone: 'danger' });
           return;
         }
         if (outcome.status === 'nothing') {
-          track(EVENTS.PURCHASE_RESTORE_COMPLETED, { source, outcome: 'nothing', weeks: 0, revives: 0 });
+          track(EVENTS.PURCHASE_RESTORE_COMPLETED, {
+            source,
+            surface: source,
+            outcome: 'nothing',
+            weeks: 0,
+            revives: 0,
+          });
           setMessage({ text: 'No purchases to restore on this Apple ID.', tone: 'muted' });
           return;
         }
         track(EVENTS.PURCHASE_RESTORE_COMPLETED, {
           source,
+          surface: source,
           outcome: 'restored',
           weeks: outcome.weeks,
           revives: outcome.revives,
@@ -83,7 +90,7 @@ export function RestorePurchasesButton({
       })
       .catch(() => {
         setPending(false);
-        track(EVENTS.PURCHASE_RESTORE_FAILED, { source });
+        track(EVENTS.PURCHASE_RESTORE_FAILED, { source, surface: source });
         setMessage({ text: "Couldn't reach the App Store — try again.", tone: 'danger' });
       });
   };

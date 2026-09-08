@@ -207,7 +207,7 @@ const PAYWALL_OUTCOMES: Record<PAYWALL_RESULT, PaywallOutcome> = {
  * `getCustomerInfo()`-against-the-ledger pass that already guarantees a paid
  * purchase can't be lost or granted twice. One crediting path, one ledger.
  */
-export async function presentWeeksPaywall(): Promise<PaywallOutcome> {
+export async function presentWeeksPaywall(onPresented?: () => void): Promise<PaywallOutcome> {
   if (!configured) return 'not_presented';
   const ui = loadPaywallUI();
   if (!ui) return 'not_presented';
@@ -217,6 +217,10 @@ export async function presentWeeksPaywall(): Promise<PaywallOutcome> {
     // `not_presented` so the caller falls back to the sheet, which carries its
     // own hardcoded `WEEK_PACKS` catalog and still works offline.
     if (!offering) return 'not_presented';
+    // This is the first point at which the hosted surface is known to be
+    // available. The SDK returns only after it closes, so the caller cannot
+    // honestly infer an impression from the eventual outcome.
+    onPresented?.();
     const result = await ui.presentPaywall({ offering });
     // `?? 'error'` guards the runtime case this table can't: a future SDK
     // returning a member this build has never heard of.

@@ -23,6 +23,12 @@ export default class PostHog {
   getDistinctId(): string {
     return 'test-distinct-id';
   }
+  getFeatureFlag(): boolean | string | undefined {
+    return undefined;
+  }
+  reloadFeatureFlagsAsync(): Promise<Record<string, boolean | string> | undefined> {
+    return Promise.resolve(undefined);
+  }
   flush(): Promise<void> {
     return Promise.resolve();
   }

@@ -25,7 +25,7 @@ import { useGame } from '@/state/game-store';
 import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
 import { notificationAskSettled } from '@/state/review-ask';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
-import { WEEKS_BANK_CAP, dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
+import { WEEKS_BANK_CAP, WEEKS_PER_DAY, dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
 
 /** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
 const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
@@ -216,7 +216,13 @@ export function GameChrome() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={budgetExhausted ? 'That’s the week — see you tomorrow' : 'Next Week →'}
+            label={
+              budgetExhausted
+                ? purchasesAvailable
+                  ? 'Get more weeks'
+                  : 'See you tomorrow'
+                : 'Next Week →'
+            }
             onPress={() => {
               if (spotlight.visible) spotlight.dismiss();
               // Dispatched even when the daily budget is spent: the store's TICK
@@ -243,29 +249,14 @@ export function GameChrome() {
             },
             {
               id: 'out-of-weeks',
-              text: `Out of weeks for today. Come back tomorrow — ${state.companyName} will be waiting.`,
+              text: `${WEEKS_PER_DAY} free weeks refill at local midnight. Come back tomorrow — ${state.companyName} will be waiting.`,
               when: budgetExhausted && !spotlight.visible,
             },
           ]}
         />
 
         <View style={styles.budgetRow}>
-          {budgetExhausted ? (
-            purchasesAvailable ? (
-              <Pressable onPress={() => buyWeeks.open('out_of_weeks')} accessibilityRole="button">
-                <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
-                  That&apos;s the week planned out — the team gets to work.{' '}
-                  <ThemedText type="smallBold" themeColor="text">
-                    Buy more weeks →
-                  </ThemedText>
-                </ThemedText>
-              </Pressable>
-            ) : (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.budgetCopy}>
-                That&apos;s the week planned out — the team gets to work. Come back tomorrow.
-              </ThemedText>
-            )
-          ) : weekBudget ? (
+          {!budgetExhausted && weekBudget ? (
             purchasesAvailable ? (
               <Pressable onPress={() => buyWeeks.open('hud')} accessibilityRole="button">
                 <WeekBudgetDots
@@ -437,10 +428,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.two,
-  },
-  budgetCopy: {
-    flexShrink: 1,
-    lineHeight: 18,
   },
   dotsRow: {
     flexDirection: 'row',

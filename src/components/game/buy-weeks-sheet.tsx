@@ -34,8 +34,8 @@ import { notePurchaseFailed } from '@/state/store-review';
  * place rather than spelled at each call site, where it was five chances to
  * forget.
  */
-function trackSheet(event: EventName, props: Props): void {
-  track(event, { ...props, surface: 'sheet' });
+function trackSheet(event: EventName, trigger: BuyWeeksTrigger, props: Props = {}): void {
+  track(event, { ...props, surface: 'sheet', trigger });
 }
 
 export function BuyWeeksSheet({
@@ -64,22 +64,28 @@ export function BuyWeeksSheet({
     if (!visible) return;
     setErrorCode(null);
     setPostPurchaseSignInOffer(false);
-    trackSheet(EVENTS.PAYWALL_SHOWN, { trigger });
+    trackSheet(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, trigger);
+    trackSheet(EVENTS.PAYWALL_SHOWN, trigger);
     purchasesClient.getPacks().then(setPacks);
   }, [visible, trigger]);
 
   const handlePurchase = (pack: WeekPack) => {
     setErrorCode(null);
     setPendingPackId(pack.id);
-    trackSheet(EVENTS.PURCHASE_STARTED, { pack_id: pack.id, weeks: pack.weeks, price_label: pack.priceLabel });
+    trackSheet(EVENTS.PURCHASE_STARTED, trigger, {
+      pack_id: pack.id,
+      weeks: pack.weeks,
+      price_label: pack.priceLabel,
+    });
     purchasesClient
       .purchasePack(pack.id)
       .then((result) => {
         setPendingPackId(null);
         if (result.status === 'success') {
           const weeksGranted = result.reward.kind === 'weeks' ? result.reward.weeks : 0;
-          trackSheet(EVENTS.PURCHASE_COMPLETED, {
+          trackSheet(EVENTS.PURCHASE_COMPLETED, trigger, {
             pack_id: pack.id,
+            outcome: 'purchased',
             weeks_granted: weeksGranted,
             price_label: pack.priceLabel,
           });
@@ -89,18 +95,26 @@ export function BuyWeeksSheet({
           } else {
             onClose();
           }
+        } else if (result.code === 'cancelled') {
+          trackSheet(EVENTS.PURCHASE_CANCELLED, trigger, { pack_id: pack.id });
+          setErrorCode(result.code);
         } else {
-          trackSheet(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: result.code });
+          trackSheet(EVENTS.PURCHASE_FAILED, trigger, { pack_id: pack.id, error_code: result.code });
           notePurchaseFailed();
           setErrorCode(result.code);
         }
       })
       .catch(() => {
         setPendingPackId(null);
-        trackSheet(EVENTS.PURCHASE_FAILED, { pack_id: pack.id, error_code: 'unknown' });
+        trackSheet(EVENTS.PURCHASE_FAILED, trigger, { pack_id: pack.id, error_code: 'unknown' });
         notePurchaseFailed();
         setErrorCode('unknown');
       });
+  };
+
+  const handleDismiss = () => {
+    trackSheet(EVENTS.PAYWALL_DISMISSED, trigger, { outcome: 'dismissed' });
+    onClose();
   };
 
   /** Dismissible, not blocking — signs in if it can, but closes either way. */
@@ -130,7 +144,7 @@ export function BuyWeeksSheet({
   }
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Buy weeks">
+    <BottomSheet visible={visible} onClose={handleDismiss} title="Buy weeks">
       <ThemedText type="small" themeColor="textSecondary">
         {trigger === 'out_of_weeks'
           ? "That's the free weeks planned out — grab more to keep going today."
@@ -167,7 +181,7 @@ export function BuyWeeksSheet({
         weeks run out.
       </ThemedText>
 
-      <PrimaryButton label="Not now" variant="secondary" onPress={onClose} />
+      <PrimaryButton label="Not now" variant="secondary" onPress={handleDismiss} />
 
       <RestorePurchasesButton source="buy_weeks_sheet" onRestored={onClose} />
 

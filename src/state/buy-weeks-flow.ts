@@ -91,7 +91,10 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
     (trigger: BuyWeeksTrigger) => {
       if (flowRef.current.kind !== 'idle') return;
       enter({ kind: 'paywall', trigger });
-      presentWeeksPaywall()
+      track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger, surface: 'revenuecat' });
+      presentWeeksPaywall(() => {
+        track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'revenuecat' });
+      })
         .then(async (outcome) => {
           if (outcome === 'not_presented') {
             // Offerings failed to load, no paywall is attached, or this binary
@@ -101,7 +104,6 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
             enter(runIsLiveRef.current ? { kind: 'sheet', trigger } : IDLE);
             return;
           }
-          track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'revenuecat' });
           if (outcome === 'purchased' || outcome === 'restored') {
             let { weeks, revives } = await reconcileAfterPaywall();
             if (weeks === 0 && outcome === 'purchased') {
@@ -113,13 +115,26 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
               weeks += retry.weeks;
               revives += retry.revives;
             }
-            track(EVENTS.PURCHASE_COMPLETED, {
-              trigger,
-              surface: 'revenuecat',
-              outcome,
-              weeks_granted: weeks,
-              revives_granted: revives,
-            });
+            if (outcome === 'purchased') {
+              track(EVENTS.PURCHASE_COMPLETED, {
+                trigger,
+                surface: 'revenuecat',
+                outcome: 'purchased',
+                weeks_granted: weeks,
+                revives_granted: revives,
+              });
+            } else {
+              track(EVENTS.PURCHASE_RESTORE_COMPLETED, {
+                source: 'revenuecat_paywall',
+                surface: 'revenuecat',
+                trigger,
+                outcome: 'restored',
+                weeks,
+                revives,
+              });
+            }
+          } else if (outcome === 'cancelled') {
+            track(EVENTS.PAYWALL_DISMISSED, { trigger, surface: 'revenuecat', outcome });
           } else if (outcome === 'error') {
             track(EVENTS.PURCHASE_FAILED, { trigger, surface: 'revenuecat', error_code: 'unknown' });
             // Only a genuine failure suppresses the review ask — deliberately

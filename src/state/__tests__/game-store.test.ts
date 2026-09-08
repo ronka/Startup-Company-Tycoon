@@ -1,9 +1,59 @@
-import { describe, expect, it } from 'vitest';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { posthog } from '@/analytics/posthog';
 import { newGame } from '@/game/engine';
 
-import { storeReducer } from '../game-store';
+import { loadWeekBudget, storeReducer, WEEK_BUDGET_STORAGE_KEY } from '../game-store';
+import {
+  createInitialWeeksEnrollment,
+  INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY,
+} from '../initial-weeks-experiment';
 import { isRollBudgetExhausted, spendRoll, type RollBudget } from '../roll-budget';
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('initial free-weeks enrollment', () => {
+  it('persists assignment before the treatment budget and exposes only afterward', async () => {
+    vi.spyOn(AsyncStorage, 'getItem').mockResolvedValue(null);
+    const setItem = vi.spyOn(AsyncStorage, 'setItem').mockResolvedValue();
+    vi.spyOn(posthog, 'reloadFeatureFlagsAsync').mockResolvedValue({ 'initial-free-weeks-v1': 'test' });
+    const getFlag = vi.spyOn(posthog, 'getFeatureFlag').mockReturnValue('test');
+
+    const budget = await loadWeekBudget(true);
+
+    expect(budget.weeksRemaining).toBe(10);
+    expect(setItem.mock.calls[0][0]).toBe(INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY);
+    expect(setItem.mock.calls[1][0]).toBe(WEEK_BUDGET_STORAGE_KEY);
+    expect(getFlag.mock.calls[0][1]).toEqual({ sendEvent: false });
+    expect(getFlag.mock.calls[1][1]).toBeUndefined();
+  });
+
+  it('does not re-award treatment when an assignment marker survives without a budget', async () => {
+    const enrollment = createInitialWeeksEnrollment('test', new Date('2026-09-08T10:00:00.000Z'));
+    vi.spyOn(AsyncStorage, 'getItem').mockImplementation((key) =>
+      Promise.resolve(key === INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY ? JSON.stringify(enrollment) : null),
+    );
+    const reload = vi.spyOn(posthog, 'reloadFeatureFlagsAsync');
+
+    const budget = await loadWeekBudget(true);
+
+    expect(budget.weeksRemaining).toBe(5);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('keeps existing installs and failed flag requests on the ordinary five-week grant', async () => {
+    vi.spyOn(AsyncStorage, 'getItem').mockResolvedValue(null);
+    const reload = vi.spyOn(posthog, 'reloadFeatureFlagsAsync').mockRejectedValue(new Error('offline'));
+    const setItem = vi.spyOn(AsyncStorage, 'setItem');
+
+    expect((await loadWeekBudget(false)).weeksRemaining).toBe(5);
+    expect(reload).not.toHaveBeenCalled();
+
+    expect((await loadWeekBudget(true)).weeksRemaining).toBe(5);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+});
 
 describe('storeReducer — SET_FOCUS dispatch path', () => {
   it('switches focus, stamps the week, and appends a news entry', () => {
