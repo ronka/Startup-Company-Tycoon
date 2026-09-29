@@ -17,6 +17,10 @@ export const EVENTS = {
   MENU_OPENED: 'menu_opened',
   HELP_VIEWED: 'help_viewed',
   HISTORY_VIEWED: 'history_viewed',
+  /** The community leaderboard screen was opened from the drawer. */
+  LEADERBOARD_VIEWED: 'leaderboard_viewed',
+  /** A leaderboard status chip was tapped — `{ filter }` is all/running/exited/bankrupt. */
+  LEADERBOARD_FILTERED: 'leaderboard_filtered',
   SETTINGS_VIEWED: 'settings_viewed',
 
   // Onboarding / identity

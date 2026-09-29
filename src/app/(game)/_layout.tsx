@@ -5,7 +5,7 @@ import { useTheme } from '@/hooks/use-theme';
 /**
  * Drawer that wraps the whole in-game experience. The `(tabs)` group (HQ /
  * Team / Money / Market, plus the persistent Hud + Next Week chrome) is the
- * main screen; `history`, `help`, and `settings` are plain screens reachable
+ * main screen; `history`, `leaderboard`, `help`, and `settings` are plain screens reachable
  * only from the drawer.
  *
  * Routes are unaffected by this nesting — `(tabs)` is a group, so `/hq`,
@@ -26,6 +26,7 @@ export default function GameDrawerLayout() {
       }}>
       <Drawer.Screen name="(tabs)" options={{ drawerLabel: 'Startup Empire Tycoon' }} />
       <Drawer.Screen name="history" options={{ drawerLabel: 'History' }} />
+      <Drawer.Screen name="leaderboard" options={{ drawerLabel: 'Leaderboard' }} />
       <Drawer.Screen name="help" options={{ drawerLabel: 'Help' }} />
       <Drawer.Screen name="settings" options={{ drawerLabel: 'Settings' }} />
     </Drawer>
