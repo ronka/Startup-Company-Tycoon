@@ -11,6 +11,13 @@
 export const WEEKS_PER_DAY = 5;
 /** The budget never banks past this many weeks, no matter how many days are skipped. */
 export const WEEKS_BANK_CAP = 10;
+/**
+ * Free weeks on a brand-new install's first day — double the daily refill, so
+ * a first session isn't walled after ~2 minutes. Shipped from the
+ * `initial-free-weeks-v1` experiment (Sep 2026): players advanced ~80% more
+ * weeks with no drop in next-day return. Clamped to `WEEKS_BANK_CAP`.
+ */
+export const INITIAL_FREE_WEEKS = 10;
 
 export interface WeekBudget {
   /** Local calendar date (YYYY-MM-DD) the budget was last refreshed for. */
@@ -39,6 +46,19 @@ export function nextWeekRefillAt(now: Date): Date {
   const next = new Date(now);
   next.setHours(24, 0, 0, 0);
   return next;
+}
+
+/**
+ * Compact "time until refill" label for the wall's countdown: `5h 12m`,
+ * `12m`, or `under a minute`. Rounds minutes *up*, so the label never says
+ * `0m` while the wall is still up.
+ */
+export function formatRefillCountdown(msUntilRefill: number): string {
+  if (msUntilRefill < 60_000) return 'under a minute';
+  const totalMinutes = Math.ceil(msUntilRefill / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
 /**

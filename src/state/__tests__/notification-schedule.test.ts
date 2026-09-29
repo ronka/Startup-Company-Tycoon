@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { REENGAGEMENT_HOUR, secondsUntilNextLocalHour } from '../notification-schedule';
+import {
+  REENGAGEMENT_HOUR,
+  REMINDER_SEQUENCE,
+  secondsUntilNextLocalHour,
+  secondsUntilReminder,
+} from '../notification-schedule';
 
 describe('secondsUntilNextLocalHour', () => {
   it('targets today when now is before the hour', () => {
@@ -39,5 +44,32 @@ describe('secondsUntilNextLocalHour', () => {
     for (let h = 0; h < 24; h += 1) {
       expect(secondsUntilNextLocalHour(new Date(2026, 6, 25, h, 0, 0), REENGAGEMENT_HOUR)).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('secondsUntilReminder', () => {
+  const HOUR = 9;
+
+  it('matches the single nudge on day 1', () => {
+    const now = new Date(2026, 8, 29, 22, 15);
+    expect(secondsUntilReminder(now, HOUR, 1)).toBe(secondsUntilNextLocalHour(now, HOUR));
+  });
+
+  it('lands on local 09:00 two and six days after day 1', () => {
+    const now = new Date(2026, 8, 29, 22, 15);
+    const day3 = new Date(now.getTime() + secondsUntilReminder(now, HOUR, 3) * 1000);
+    const day7 = new Date(now.getTime() + secondsUntilReminder(now, HOUR, 7) * 1000);
+    expect([day3.getMonth(), day3.getDate(), day3.getHours(), day3.getMinutes()]).toEqual([9, 2, 9, 0]);
+    expect([day7.getMonth(), day7.getDate(), day7.getHours(), day7.getMinutes()]).toEqual([9, 6, 9, 0]);
+  });
+
+  it('counts day 1 as today when called before 09:00', () => {
+    const now = new Date(2026, 8, 29, 7, 0);
+    const day3 = new Date(now.getTime() + secondsUntilReminder(now, HOUR, 3) * 1000);
+    expect([day3.getDate(), day3.getHours()]).toEqual([1, 9]);
+  });
+
+  it('gives every reminder in the sequence a distinct id', () => {
+    expect(new Set(REMINDER_SEQUENCE.map((r) => r.id)).size).toBe(REMINDER_SEQUENCE.length);
   });
 });

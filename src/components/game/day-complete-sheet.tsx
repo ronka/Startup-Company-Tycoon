@@ -25,6 +25,7 @@ export function DayCompleteSheet({
   stake,
   agenda,
   onBuyWeeks,
+  onRemindMe,
   onDismiss,
 }: {
   visible: boolean;
@@ -35,6 +36,12 @@ export function DayCompleteSheet({
   agenda: TomorrowAgenda | null;
   /** Present only where real purchases work; omit to render no purchase affordance. */
   onBuyWeeks?: () => void;
+  /**
+   * Present only while the one-shot OS permission ask is still unspent. The
+   * system dialog follows this tap and nothing else at the wall, so the player
+   * knows what they're agreeing to before iOS asks.
+   */
+  onRemindMe?: () => void;
   onDismiss: () => void;
 }) {
   return (
@@ -68,7 +75,14 @@ export function DayCompleteSheet({
         {WEEKS_PER_DAY} free weeks refill at local midnight.
       </ThemedText>
 
-      <PrimaryButton label="See you tomorrow" onPress={onDismiss} />
+      {onRemindMe ? (
+        <>
+          <PrimaryButton label="Remind me at 9am" onPress={onRemindMe} />
+          <PrimaryButton label="See you tomorrow" variant="ghost" onPress={onDismiss} />
+        </>
+      ) : (
+        <PrimaryButton label="See you tomorrow" onPress={onDismiss} />
+      )}
       {onBuyWeeks ? <PrimaryButton label="Get more weeks" variant="secondary" onPress={onBuyWeeks} /> : null}
     </BottomSheet>
   );

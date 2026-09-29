@@ -15,10 +15,14 @@ export {
   restorePurchases,
   syncPostHogAttribute,
 } from './fallback';
+export { purchaseErrorDetails, purchaseErrorProps } from './error-details';
 export { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
 export type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 export type {
+  PaywallNotPresentedReason,
   PaywallOutcome,
+  PaywallPresentation,
+  PurchaseErrorDetails,
   PurchaseErrorCode,
   PurchaseResult,
   PurchasesClient,

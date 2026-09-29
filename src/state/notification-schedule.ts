@@ -30,3 +30,32 @@ export function secondsUntilNextLocalHour(now: Date, hour: number): number {
   }
   return Math.round((target.getTime() - now.getTime()) / 1000);
 }
+
+/**
+ * The re-engagement sequence: the next local 09:00 (day 1), then two days and
+ * six days after it (day 3 and day 7). One notification left a player who
+ * skipped day 2 uncontacted for good.
+ *
+ * Each has a fixed identifier, so rescheduling on every backgrounding replaces
+ * the whole set rather than stacking duplicates. `day1` keeps the original
+ * single nudge's identifier, so installs updating from it replace that pending
+ * nudge instead of receiving it alongside the new one.
+ */
+export const REMINDER_SEQUENCE = [
+  { id: 'startup-tycoon-daily-nudge', day: 1 },
+  { id: 'startup-tycoon-reminder-day3', day: 3 },
+  { id: 'startup-tycoon-reminder-day7', day: 7 },
+] as const;
+
+export type ReminderDay = (typeof REMINDER_SEQUENCE)[number]['day'];
+
+/**
+ * Seconds from `now` until local `hour` o'clock on sequence day `day`, where
+ * day 1 is whatever `secondsUntilNextLocalHour` targets. Stepped by calendar
+ * date rather than by 86 400 s, for the same DST reason as that function.
+ */
+export function secondsUntilReminder(now: Date, hour: number, day: number): number {
+  const first = new Date(now.getTime() + secondsUntilNextLocalHour(now, hour) * 1000);
+  const target = new Date(first.getFullYear(), first.getMonth(), first.getDate() + (day - 1), hour, 0, 0, 0);
+  return Math.round((target.getTime() - now.getTime()) / 1000);
+}

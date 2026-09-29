@@ -1,6 +1,6 @@
 import type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 import { stubPurchasesClient } from './stub';
-import type { PaywallOutcome, PurchasesClient } from './types';
+import type { PaywallPresentation, PurchasesClient } from './types';
 
 /**
  * No-native-SDK path: web, vitest, and Expo Go (which can't load the
@@ -25,8 +25,8 @@ export function configurePurchases(): void {}
  * caller to the in-app `BuyWeeksSheet`, which is the only thing that can work
  * on web, in tests, and in Expo Go anyway.
  */
-export async function presentWeeksPaywall(_onPresented?: () => void): Promise<PaywallOutcome> {
-  return 'not_presented';
+export async function presentWeeksPaywall(_onPresented?: () => void): Promise<PaywallPresentation> {
+  return { outcome: 'not_presented', notPresentedReason: 'not_configured' };
 }
 
 export async function reconcileOnLaunch(

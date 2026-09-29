@@ -5,53 +5,46 @@ import { posthog } from '@/analytics/posthog';
 import { newGame } from '@/game/engine';
 
 import { loadWeekBudget, storeReducer, WEEK_BUDGET_STORAGE_KEY } from '../game-store';
-import {
-  createInitialWeeksEnrollment,
-  INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY,
-} from '../initial-weeks-experiment';
 import { isRollBudgetExhausted, spendRoll, type RollBudget } from '../roll-budget';
+import { dateKey, INITIAL_FREE_WEEKS, WEEKS_PER_DAY } from '../week-budget';
 
 afterEach(() => vi.restoreAllMocks());
 
-describe('initial free-weeks enrollment', () => {
-  it('persists assignment before the treatment budget and exposes only afterward', async () => {
+describe('loadWeekBudget — first-day grant', () => {
+  it('grants a brand-new install the larger first-day allowance', async () => {
     vi.spyOn(AsyncStorage, 'getItem').mockResolvedValue(null);
-    const setItem = vi.spyOn(AsyncStorage, 'setItem').mockResolvedValue();
-    vi.spyOn(posthog, 'reloadFeatureFlagsAsync').mockResolvedValue({ 'initial-free-weeks-v1': 'test' });
-    const getFlag = vi.spyOn(posthog, 'getFeatureFlag').mockReturnValue('test');
 
-    const budget = await loadWeekBudget(true);
-
-    expect(budget.weeksRemaining).toBe(10);
-    expect(setItem.mock.calls[0][0]).toBe(INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY);
-    expect(setItem.mock.calls[1][0]).toBe(WEEK_BUDGET_STORAGE_KEY);
-    expect(getFlag.mock.calls[0][1]).toEqual({ sendEvent: false });
-    expect(getFlag.mock.calls[1][1]).toBeUndefined();
+    expect((await loadWeekBudget(true)).weeksRemaining).toBe(INITIAL_FREE_WEEKS);
   });
 
-  it('does not re-award treatment when an assignment marker survives without a budget', async () => {
-    const enrollment = createInitialWeeksEnrollment('test', new Date('2026-09-08T10:00:00.000Z'));
+  it('gives an existing install with no budget only the daily allotment', async () => {
+    vi.spyOn(AsyncStorage, 'getItem').mockResolvedValue(null);
+
+    expect((await loadWeekBudget(false)).weeksRemaining).toBe(WEEKS_PER_DAY);
+  });
+
+  it('never re-grants over a persisted budget, even for a "new" install', async () => {
+    const saved = { lastSessionDate: dateKey(new Date()), weeksRemaining: 0 };
     vi.spyOn(AsyncStorage, 'getItem').mockImplementation((key) =>
-      Promise.resolve(key === INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY ? JSON.stringify(enrollment) : null),
+      Promise.resolve(key === WEEK_BUDGET_STORAGE_KEY ? JSON.stringify(saved) : null),
     );
-    const reload = vi.spyOn(posthog, 'reloadFeatureFlagsAsync');
 
-    const budget = await loadWeekBudget(true);
-
-    expect(budget.weeksRemaining).toBe(5);
-    expect(reload).not.toHaveBeenCalled();
+    expect((await loadWeekBudget(true)).weeksRemaining).toBe(0);
   });
 
-  it('keeps existing installs and failed flag requests on the ordinary five-week grant', async () => {
+  it('clears the retired experiment marker and super properties', async () => {
     vi.spyOn(AsyncStorage, 'getItem').mockResolvedValue(null);
-    const reload = vi.spyOn(posthog, 'reloadFeatureFlagsAsync').mockRejectedValue(new Error('offline'));
-    const setItem = vi.spyOn(AsyncStorage, 'setItem');
+    const removeItem = vi.spyOn(AsyncStorage, 'removeItem').mockResolvedValue();
+    const unregister = vi.spyOn(posthog, 'unregister');
 
-    expect((await loadWeekBudget(false)).weeksRemaining).toBe(5);
-    expect(reload).not.toHaveBeenCalled();
+    await loadWeekBudget(true);
 
-    expect((await loadWeekBudget(true)).weeksRemaining).toBe(5);
-    expect(setItem).not.toHaveBeenCalled();
+    expect(removeItem).toHaveBeenCalledWith('startup-tycoon/experiment/initial-free-weeks-v1');
+    expect(unregister.mock.calls.map((c) => c[0])).toEqual([
+      'initial_weeks_experiment',
+      'initial_weeks_variant',
+      'initial_weeks',
+    ]);
   });
 });
 

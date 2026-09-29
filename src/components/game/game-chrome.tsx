@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { purchasesAvailable } from '@/purchases';
@@ -25,7 +25,20 @@ import { useGame } from '@/state/game-store';
 import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
 import { notificationAskSettled } from '@/state/review-ask';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
-import { WEEKS_BANK_CAP, WEEKS_PER_DAY, dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
+import {
+  WEEKS_BANK_CAP,
+  WEEKS_PER_DAY,
+  dateKey,
+  formatRefillCountdown,
+  isWeekBudgetExhausted,
+  nextWeekRefillAt,
+} from '@/state/week-budget';
+
+/** The budget state the wall was pressed in; see `wallTappedFor`. */
+interface WallKey {
+  weekBudget: unknown;
+  purchasedWeeks: unknown;
+}
 
 /** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
 const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
@@ -82,18 +95,34 @@ export function GameChrome() {
   const [dayCompleteShownFor, setDayCompleteShownFor] = useState<string | null>(null);
   const [dayCompleteLoaded, setDayCompleteLoaded] = useState(false);
   const [dayCompleteVisible, setDayCompleteVisible] = useState(false);
-  // Set when the closing panel is dismissed, which is what mounts the
-  // permission ask below — the player has just read what's waiting tomorrow,
-  // the strongest context there is for allowing a nudge, and asking here also
-  // guarantees the iOS system dialog can never race the sheet's own
-  // presentation.
-  const [askedAtWall, setAskedAtWall] = useState(false);
+  // Whether the closing panel may offer "Remind me at 9am": only while the
+  // install's one OS permission shot is unspent. Checked when the panel opens.
+  const [reminderOfferable, setReminderOfferable] = useState(false);
+  // Set when the player taps "Remind me at 9am", which closes the panel and
+  // then mounts the permission ask below. Asking only after the tap (instead of
+  // on any dismissal, as before) means the system dialog never appears
+  // unannounced; asking after the close keeps it out of the frame the sheet is
+  // dismissing in.
+  const [reminderOptedIn, setReminderOptedIn] = useState(false);
+  // Latched by the first press at the wall, for the budget state it was
+  // pressed in. From then on the Next Week control becomes a refill countdown
+  // rather than a button: on 1.0.4-19, wall players pressed it about 5.3 times
+  // each even after the copy said "come back tomorrow". The first press is
+  // still dispatched, since it's what records `week_advance_blocked`. Keyed
+  // to the two budget objects rather than cleared by an effect, so a refill
+  // or a purchase (each replaces one) hands the button straight back.
+  const [wallTappedFor, setWallTappedFor] = useState<WallKey | null>(null);
 
   // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
   // no-op while either is still resolving (null), so play is never blocked
   // by a slow AsyncStorage read. Derived above the early return below because
   // the closing-panel effects key off it and hooks can't run conditionally.
   const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
+  const wallTapped =
+    budgetExhausted &&
+    wallTappedFor !== null &&
+    wallTappedFor.weekBudget === weekBudget &&
+    wallTappedFor.purchasedWeeks === purchasedWeeks;
 
   // The whole buy-weeks flow — presenting the paywall, falling back to the
   // sheet, crediting and reporting — lives in `useBuyWeeksFlow`. The chrome
@@ -143,6 +172,9 @@ export function GameChrome() {
       AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
       setDayCompleteVisible(true);
       track(EVENTS.DAY_COMPLETE_SHOWN, { agenda_kind: agenda?.kind ?? null, week: dayCompleteWeek });
+      notificationAskSpentOnDateKey()
+        .then((spentOn) => setReminderOfferable(Platform.OS !== 'web' && spentOn === null))
+        .catch(() => {});
     }, DAY_COMPLETE_ARM_MS);
     return () => clearTimeout(timer);
   }, [dayCompleteDue, dayCompleteShownFor, agenda, dayCompleteWeek]);
@@ -205,16 +237,26 @@ export function GameChrome() {
         ) : null}
 
         {/* The daily wall is the one moment the player has just felt why a nudge
-            is worth allowing — ask here rather than on a second launch most
-            players never have. Mounting is the ask, and the condition is now
-            "the closing panel has been read and dismissed" rather than the raw
-            wall edge: the panel has just named what's waiting tomorrow, and
-            waiting for its dismissal keeps the iOS system dialog out of the
-            frame the sheet is presenting into (this repo has a documented hang
-            when modals overlap — see docs/bug-stuck-decision-modal.md). */}
-        {askedAtWall ? <NotificationPermissionAsk trigger="daily_wall" /> : null}
+            is worth allowing. Mounting is the ask, and it waits for both the
+            player's "Remind me at 9am" tap and the panel's dismissal: 24% of
+            players granted the old unannounced dialog here, and presenting it
+            into the sheet's frame hangs iOS (docs/bug-stuck-decision-modal.md). */}
+        {reminderOptedIn ? <NotificationPermissionAsk trigger="reminder_optin" /> : null}
 
         <View style={styles.footer}>
+          {wallTapped ? (
+            <View style={styles.wallFooter}>
+              <RefillCountdown setWallTappedFor={setWallTappedFor} />
+              {purchasesAvailable ? (
+                <PrimaryButton
+                  label="Get more weeks"
+                  variant="secondary"
+                  onPress={() => buyWeeks.open('out_of_weeks')}
+                  style={styles.wallButton}
+                />
+              ) : null}
+            </View>
+          ) : (
           <PrimaryButton
             label={
               budgetExhausted
@@ -231,11 +273,13 @@ export function GameChrome() {
               // drifted off before reaching it. Where purchases exist, the press
               // also opens the week-pack sheet.
               dispatch({ type: 'TICK' });
+              if (budgetExhausted) setWallTappedFor({ weekBudget, purchasedWeeks });
               if (budgetExhausted && purchasesAvailable) buyWeeks.open('out_of_weeks');
             }}
             disabled={!!state.pendingEvent}
             style={styles.nextButton}
           />
+          )}
         </View>
 
         {/* Held back while the spotlight is up, so the chrome never stacks two callouts. */}
@@ -316,10 +360,22 @@ export function GameChrome() {
               }
             : undefined
         }
+        onRemindMe={
+          reminderOfferable
+            ? () => {
+                setDayCompleteVisible(false);
+                track(EVENTS.REMINDER_OPTIN_TAPPED, { agenda_kind: agenda?.kind ?? null });
+                track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'remind_me' });
+                setReminderOptedIn(true);
+                // The review ask reads the permission shot's day and stands
+                // down when it was spent today, so this can't stack two dialogs.
+                maybeAskForReviewAtWall(streak?.streakDays ?? 0, insolvent);
+              }
+            : undefined
+        }
         onDismiss={() => {
           setDayCompleteVisible(false);
           track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'dismiss' });
-          setAskedAtWall(true);
           maybeAskForReviewAtWall(streak?.streakDays ?? 0, insolvent);
         }}
       />
@@ -371,6 +427,44 @@ function maybeAskForReviewAtWall(streakDays: number, insolvent: boolean): void {
 }
 
 /**
+ * Time left until the free weeks refill, shown in place of the Next Week
+ * button once the player has pressed into the wall. Deliberately not
+ * pressable, so there's nothing left to retry.
+ *
+ * The clock is read in effects, never during render (the same rule
+ * `week-budget.ts` follows). Clearing the latch at midnight hands the button
+ * back, so the player can take the refilled weeks without relaunching.
+ */
+function RefillCountdown({ setWallTappedFor }: { setWallTappedFor: Dispatch<SetStateAction<WallKey | null>> }) {
+  const [label, setLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    const refillAt = nextWeekRefillAt(new Date()).getTime();
+    const update = () => {
+      const remaining = refillAt - Date.now();
+      if (remaining <= 0) {
+        setWallTappedFor(null);
+        return;
+      }
+      setLabel(formatRefillCountdown(remaining));
+    };
+    const timer = setInterval(update, 15_000);
+    // First read deferred a tick rather than run synchronously in the effect.
+    const first = setTimeout(update, 0);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(first);
+    };
+  }, [setWallTappedFor]);
+
+  return (
+    <View style={styles.countdown} accessibilityRole="text">
+      <ThemedText type="smallBold">Free weeks refill in {label ?? '…'}</ThemedText>
+    </View>
+  );
+}
+
+/**
  * Diegetic, non-numeric stand-in for a battery/energy meter: one filled dot
  * per free week still available today (banked weeks included), out of the
  * bank cap. Purchased weeks are cap-exempt and shown separately as a "+N"
@@ -413,6 +507,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two,
     paddingHorizontal: Spacing.four,
+  },
+  wallFooter: {
+    flex: 1,
+    gap: Spacing.two,
+  },
+  wallButton: {
+    paddingVertical: Spacing.two,
+  },
+  countdown: {
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
   },
   nextButton: {
     flex: 1,

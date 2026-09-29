@@ -15,6 +15,7 @@ import Purchases, { PURCHASES_ERROR_CODE, type PurchasesError } from 'react-nati
 import type { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
 import { REVENUECAT_IOS_API_KEY } from './config';
+import { purchaseErrorDetails } from './error-details';
 import { isReviveProduct, shortIdFromProductIdentifier, weeksForProduct } from './product-weeks';
 import {
   reconcilePurchases,
@@ -24,7 +25,7 @@ import {
   type RestoreResult,
 } from './reconciliation';
 import { WEEK_PACKS } from './stub';
-import type { PaywallOutcome, PurchaseResult, PurchasesClient, WeekPack } from './types';
+import type { PaywallOutcome, PaywallPresentation, PurchaseResult, PurchasesClient, WeekPack } from './types';
 
 /** Matches the `weeks` offering created in Task 3. */
 const OFFERING_LOOKUP_KEY = 'weeks';
@@ -207,16 +208,24 @@ const PAYWALL_OUTCOMES: Record<PAYWALL_RESULT, PaywallOutcome> = {
  * `getCustomerInfo()`-against-the-ledger pass that already guarantees a paid
  * purchase can't be lost or granted twice. One crediting path, one ledger.
  */
-export async function presentWeeksPaywall(onPresented?: () => void): Promise<PaywallOutcome> {
-  if (!configured) return 'not_presented';
+export async function presentWeeksPaywall(onPresented?: () => void): Promise<PaywallPresentation> {
+  if (!configured) return { outcome: 'not_presented', notPresentedReason: 'not_configured' };
   const ui = loadPaywallUI();
-  if (!ui) return 'not_presented';
+  if (!ui) return { outcome: 'not_presented', notPresentedReason: 'ui_module_missing' };
+  let offering: Awaited<ReturnType<typeof fetchWeeksOffering>>;
   try {
-    const offering = await fetchWeeksOffering();
-    // No offering means no attached paywall to show. Reported as
-    // `not_presented` so the caller falls back to the sheet, which carries its
-    // own hardcoded `WEEK_PACKS` catalog and still works offline.
-    if (!offering) return 'not_presented';
+    offering = await fetchWeeksOffering();
+  } catch (err) {
+    // Split out from the present step below because this is where the
+    // Sep 2026 failure loops actually died: 2 impressions in 109 attempts.
+    console.warn('[purchases] failed to load offerings for paywall', err);
+    return { outcome: 'error', error: purchaseErrorDetails('offerings', err) };
+  }
+  // No offering means no attached paywall to show. Reported as
+  // `not_presented` so the caller falls back to the sheet, which carries its
+  // own hardcoded `WEEK_PACKS` catalog and still works offline.
+  if (!offering) return { outcome: 'not_presented', notPresentedReason: 'no_offering' };
+  try {
     // This is the first point at which the hosted surface is known to be
     // available. The SDK returns only after it closes, so the caller cannot
     // honestly infer an impression from the eventual outcome.
@@ -224,10 +233,14 @@ export async function presentWeeksPaywall(onPresented?: () => void): Promise<Pay
     const result = await ui.presentPaywall({ offering });
     // `?? 'error'` guards the runtime case this table can't: a future SDK
     // returning a member this build has never heard of.
-    return PAYWALL_OUTCOMES[result] ?? 'error';
+    const outcome = PAYWALL_OUTCOMES[result] ?? 'error';
+    // `PAYWALL_RESULT` carries no error object, so the stage is all there is.
+    if (outcome === 'error') return { outcome, error: purchaseErrorDetails('paywall_result', String(result)) };
+    if (outcome === 'not_presented') return { outcome, notPresentedReason: 'sdk_not_presented' };
+    return { outcome };
   } catch (err) {
     console.warn('[purchases] failed to present paywall', err);
-    return 'error';
+    return { outcome: 'error', error: purchaseErrorDetails('present', err) };
   }
 }
 
@@ -261,7 +274,7 @@ export const purchasesClient: PurchasesClient = {
       const pkg = offering?.availablePackages.find(
         (p) => shortIdFromProductIdentifier(p.product.identifier) === packId,
       );
-      if (!pkg) return { status: 'error', code: 'unknown' };
+      if (!pkg) return { status: 'error', code: 'unknown', details: purchaseErrorDetails('no_package') };
 
       const result = await Purchases.purchasePackage(pkg);
       const weeks = weeksForProduct(result.productIdentifier) ?? 0;
@@ -271,24 +284,28 @@ export const purchasesClient: PurchasesClient = {
         transactionId: result.transaction.transactionIdentifier,
       };
     } catch (error) {
-      return { status: 'error', code: isUserCancelled(error) ? 'cancelled' : 'unknown' };
+      if (isUserCancelled(error)) return { status: 'error', code: 'cancelled' };
+      return { status: 'error', code: 'unknown', details: purchaseErrorDetails('purchase', error) };
     }
   },
 
   async purchaseRevive(): Promise<PurchaseResult> {
     try {
       const pkg = await fetchRevivePackage();
-      if (!pkg) return { status: 'error', code: 'unknown' };
+      if (!pkg) return { status: 'error', code: 'unknown', details: purchaseErrorDetails('no_package') };
       const result = await Purchases.purchasePackage(pkg);
       // Only honor a transaction that's actually the revive product.
-      if (!isReviveProduct(result.productIdentifier)) return { status: 'error', code: 'unknown' };
+      if (!isReviveProduct(result.productIdentifier)) {
+        return { status: 'error', code: 'unknown', details: purchaseErrorDetails('wrong_product', result.productIdentifier) };
+      }
       return {
         status: 'success',
         reward: { kind: 'revive' },
         transactionId: result.transaction.transactionIdentifier,
       };
     } catch (error) {
-      return { status: 'error', code: isUserCancelled(error) ? 'cancelled' : 'unknown' };
+      if (isUserCancelled(error)) return { status: 'error', code: 'cancelled' };
+      return { status: 'error', code: 'unknown', details: purchaseErrorDetails('purchase', error) };
     }
   },
 

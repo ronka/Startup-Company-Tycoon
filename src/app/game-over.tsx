@@ -17,7 +17,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatCount, formatMoney } from '@/lib/format';
 import { buildShareText } from '@/lib/share-card';
 import { shareRunText } from '@/lib/share-run';
-import { purchasesClient, purchasesAvailable, REVIVE_PRICE_LABEL, type PurchaseErrorCode } from '@/purchases';
+import {
+  purchaseErrorProps,
+  purchasesClient,
+  purchasesAvailable,
+  REVIVE_PRICE_LABEL,
+  type PurchaseErrorCode,
+} from '@/purchases';
 import { useGame } from '@/state/game-store';
 import { canRedeemRevive } from '@/state/revive';
 import { bestScore } from '@/state/run-history';
@@ -331,6 +337,7 @@ export default function GameOverScreen() {
             error_code: result.code,
             surface: 'game_over',
             trigger: 'bankruptcy',
+            ...purchaseErrorProps(result.details),
           });
           notePurchaseFailed();
           setErrorCode(result.code);

@@ -10,6 +10,7 @@ import {
   initialPurchasedWeeksPool,
   initialWeekBudget,
   isWeekBudgetExhausted,
+  formatRefillCountdown,
   nextWeekRefillAt,
   refreshWeekBudget,
   spendWeek,
@@ -36,9 +37,25 @@ describe('initialWeekBudget', () => {
     expect(budget.lastSessionDate).toBe(dateKey(day(2026, 7, 3)));
   });
 
-  it('accepts an experiment grant but never exceeds the bank cap', () => {
+  it('accepts a larger first-day grant but never exceeds the bank cap', () => {
     expect(initialWeekBudget(day(2026, 7, 3), 10).weeksRemaining).toBe(10);
     expect(initialWeekBudget(day(2026, 7, 3), 50).weeksRemaining).toBe(WEEKS_BANK_CAP);
+  });
+});
+
+describe('formatRefillCountdown', () => {
+  it('shows hours and minutes, rounding minutes up', () => {
+    expect(formatRefillCountdown((5 * 60 + 11) * 60_000 + 1)).toBe('5h 12m');
+    expect(formatRefillCountdown(2 * 3_600_000)).toBe('2h 0m');
+  });
+
+  it('drops the hours under an hour', () => {
+    expect(formatRefillCountdown(12 * 60_000)).toBe('12m');
+  });
+
+  it('never says 0m', () => {
+    expect(formatRefillCountdown(59_000)).toBe('under a minute');
+    expect(formatRefillCountdown(0)).toBe('under a minute');
   });
 });
 

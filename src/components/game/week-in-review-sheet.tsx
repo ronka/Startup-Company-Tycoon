@@ -2,12 +2,14 @@ import { StyleSheet, View } from 'react-native';
 
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { Card } from '@/components/game/card';
-import { FirstRunHint } from '@/components/game/first-run-hint';
+import { FirstRunHint, markHintSeen } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import type { NewsEntry } from '@/game/events/types';
 import { formatMoney } from '@/lib/format';
+
+const FIRST_WEEK_REVIEW_HINT = 'first-week-review';
 
 export interface RivalShareMove {
   name: string;
@@ -44,9 +46,18 @@ export function WeekInReviewSheet({
 }) {
   const isProfitable = revenue >= burn;
 
+  // The hint explains this sheet, so closing the sheet once means it has been
+  // read. Without this it retired only on its own ✕ — which almost nobody
+  // tapped — and reappeared on every week of the first run (492 shows, 3
+  // dismissals in Sep 2026). `markHintSeen` is a no-op once it's retired.
+  const close = () => {
+    markHintSeen(FIRST_WEEK_REVIEW_HINT);
+    onDismiss();
+  };
+
   return (
-    <BottomSheet visible={visible} onClose={onDismiss} title={`Week ${week}`}>
-      <FirstRunHint id="first-week-review" text="Every week ends like this — what changed, and why." />
+    <BottomSheet visible={visible} onClose={close} title={`Week ${week}`}>
+      <FirstRunHint id={FIRST_WEEK_REVIEW_HINT} text="Every week ends like this — what changed, and why." />
 
       <View style={styles.summary}>
         <SummaryRow
@@ -115,7 +126,7 @@ export function WeekInReviewSheet({
         ) : null}
       </View>
 
-      <PrimaryButton label="Continue" onPress={onDismiss} />
+      <PrimaryButton label="Continue" onPress={close} />
     </BottomSheet>
   );
 }

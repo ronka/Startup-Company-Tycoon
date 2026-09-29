@@ -9,7 +9,7 @@ import { PrimaryButton } from '@/components/game/primary-button';
 import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
+import { purchaseErrorProps, purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
 import { notePurchaseFailed } from '@/state/store-review';
@@ -99,7 +99,11 @@ export function BuyWeeksSheet({
           trackSheet(EVENTS.PURCHASE_CANCELLED, trigger, { pack_id: pack.id });
           setErrorCode(result.code);
         } else {
-          trackSheet(EVENTS.PURCHASE_FAILED, trigger, { pack_id: pack.id, error_code: result.code });
+          trackSheet(EVENTS.PURCHASE_FAILED, trigger, {
+            pack_id: pack.id,
+            error_code: result.code,
+            ...purchaseErrorProps(result.details),
+          });
           notePurchaseFailed();
           setErrorCode(result.code);
         }

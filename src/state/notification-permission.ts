@@ -44,7 +44,7 @@ const IS_WEB = Platform.OS === 'web';
  * bare string because the whole point of the prop is comparing grant rates
  * between these two buckets — a typo would silently corrupt that comparison.
  */
-export type PermissionTrigger = 'daily_wall' | 'second_launch';
+export type PermissionTrigger = 'reminder_optin' | 'second_launch';
 
 /** Guards the OS's one-shot dialog against two callers in the same launch —
  * see `requestNotificationPermissionOnce`. */

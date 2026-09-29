@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
-import { presentWeeksPaywall } from '@/purchases';
+import { presentWeeksPaywall, purchaseErrorDetails, purchaseErrorProps } from '@/purchases';
 import { useGame } from '@/state/game-store';
+import { notePurchaseAttemptFailed, notePurchaseSurfaceWorked, purchasesBlocked } from '@/state/purchase-failure-gate';
 import { notePurchaseFailed } from '@/state/store-review';
 
 /** Where the player asked for more weeks from — carried through to analytics. */
@@ -36,6 +38,23 @@ type BuyFlow =
   | { kind: 'sheet'; trigger: BuyWeeksTrigger };
 
 const IDLE: BuyFlow = { kind: 'idle' };
+
+/**
+ * Same arm delay the chrome uses between surfaces: both call sites can run
+ * while another modal is still dismissing (the day-complete sheet's "Get more
+ * weeks", or the RevenueCat paywall that just failed), and presenting into
+ * that frame hangs iOS — see docs/bug-stuck-decision-modal.md.
+ */
+const EXPLAIN_ARM_MS = 350;
+
+function explainPurchasesUnavailable(): void {
+  setTimeout(() => {
+    Alert.alert(
+      "Purchases aren't available right now",
+      'The App Store isn\'t responding. Your free weeks refill at midnight — try again later.',
+    );
+  }, EXPLAIN_ARM_MS);
+}
 
 /**
  * Owns the whole "player wants more weeks" flow: presenting the RevenueCat
@@ -90,13 +109,19 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
   const open = useCallback(
     (trigger: BuyWeeksTrigger) => {
       if (flowRef.current.kind !== 'idle') return;
+      if (purchasesBlocked()) {
+        track(EVENTS.PURCHASE_RETRY_SUPPRESSED, { trigger });
+        explainPurchasesUnavailable();
+        return;
+      }
       enter({ kind: 'paywall', trigger });
       track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger, surface: 'revenuecat' });
       presentWeeksPaywall(() => {
         track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'revenuecat' });
       })
-        .then(async (outcome) => {
+        .then(async ({ outcome, notPresentedReason, error }) => {
           if (outcome === 'not_presented') {
+            track(EVENTS.PAYWALL_NOT_PRESENTED, { trigger, surface: 'revenuecat', reason: notPresentedReason });
             // Offerings failed to load, no paywall is attached, or this binary
             // predates the paywall UI native module. The sheet renders from a
             // hardcoded pack catalog, so it still works where this doesn't —
@@ -104,6 +129,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
             enter(runIsLiveRef.current ? { kind: 'sheet', trigger } : IDLE);
             return;
           }
+          if (outcome !== 'error') notePurchaseSurfaceWorked();
           if (outcome === 'purchased' || outcome === 'restored') {
             let { weeks, revives } = await reconcileAfterPaywall();
             if (weeks === 0 && outcome === 'purchased') {
@@ -136,18 +162,30 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
           } else if (outcome === 'cancelled') {
             track(EVENTS.PAYWALL_DISMISSED, { trigger, surface: 'revenuecat', outcome });
           } else if (outcome === 'error') {
-            track(EVENTS.PURCHASE_FAILED, { trigger, surface: 'revenuecat', error_code: 'unknown' });
+            track(EVENTS.PURCHASE_FAILED, {
+              trigger,
+              surface: 'revenuecat',
+              error_code: 'unknown',
+              ...purchaseErrorProps(error),
+            });
             // Only a genuine failure suppresses the review ask — deliberately
             // *not* `cancelled`. Dismissing a full-screen paywall is ordinary
             // browsing, and treating that as a failed purchase would mute the
             // review prompt for most players who ever glance at this screen.
             notePurchaseFailed();
+            if (notePurchaseAttemptFailed()) explainPurchasesUnavailable();
           }
           enter(IDLE);
         })
-        .catch(() => {
-          track(EVENTS.PURCHASE_FAILED, { trigger, surface: 'revenuecat', error_code: 'unknown' });
+        .catch((err: unknown) => {
+          track(EVENTS.PURCHASE_FAILED, {
+            trigger,
+            surface: 'revenuecat',
+            error_code: 'unknown',
+            ...purchaseErrorProps(purchaseErrorDetails('unexpected', err)),
+          });
           notePurchaseFailed();
+          if (notePurchaseAttemptFailed()) explainPurchasesUnavailable();
           enter(IDLE);
         });
     },

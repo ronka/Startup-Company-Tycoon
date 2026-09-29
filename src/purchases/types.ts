@@ -5,6 +5,10 @@
  * and `game-store.tsx` only ever depend on this file's types.
  */
 
+import type { PurchaseErrorDetails } from './error-details';
+
+export type { PurchaseErrorDetails, PurchaseErrorStage } from './error-details';
+
 export interface WeekPack {
   /** Store product id. */
   id: string;
@@ -31,6 +35,20 @@ export type PurchaseErrorCode = 'cancelled' | 'unknown';
  */
 export type PaywallOutcome = 'purchased' | 'restored' | 'cancelled' | 'not_presented' | 'error';
 
+/** Why the hosted paywall never appeared — the gap between `paywall_presentation_attempted` and `paywall_shown`. */
+export type PaywallNotPresentedReason = 'not_configured' | 'ui_module_missing' | 'no_offering' | 'sdk_not_presented';
+
+/**
+ * `presentWeeksPaywall`'s full answer: the outcome plus, where there is one,
+ * why it wasn't a clean close. Analytics-only — the flow branches on
+ * `outcome` alone.
+ */
+export interface PaywallPresentation {
+  outcome: PaywallOutcome;
+  notPresentedReason?: PaywallNotPresentedReason;
+  error?: PurchaseErrorDetails;
+}
+
 /**
  * What a completed purchase grants. Weeks top up the purchased-weeks pool
  * (`week-budget.ts`); a revive grants one bankruptcy-bailout token
@@ -51,7 +69,12 @@ export type PurchaseResult =
        */
       transactionId: string;
     }
-  | { status: 'error'; code: PurchaseErrorCode };
+  | {
+      status: 'error';
+      code: PurchaseErrorCode;
+      /** What RevenueCat actually said, for `purchase_failed`. Never branched on. */
+      details?: PurchaseErrorDetails;
+    };
 
 /**
  * What a player-initiated restore actually gave back, summarised for the UI.

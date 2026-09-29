@@ -52,14 +52,6 @@ import {
 import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import {
-  createInitialWeeksEnrollment,
-  INITIAL_WEEKS_EXPERIMENT_KEY,
-  INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY,
-  normalizeInitialWeeksVariant,
-  parseInitialWeeksEnrollment,
-  type InitialWeeksEnrollment,
-} from '@/state/initial-weeks-experiment';
-import {
   canRedeemRevive,
   creditReviveTransaction,
   creditReviveTransactions,
@@ -74,6 +66,7 @@ import {
   dateKey,
   grantPurchasedWeeks,
   initialPurchasedWeeksPool,
+  INITIAL_FREE_WEEKS,
   initialWeekBudget,
   isWeekBudgetExhausted,
   nextWeekRefillAt,
@@ -94,78 +87,34 @@ export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
 export const RUN_HISTORY_STORAGE_KEY = 'startup-tycoon/run-history/v1';
 export const ROLL_STORAGE_KEY = 'startup-tycoon/rolls/v1';
 
-const INITIAL_WEEKS_FLAG_TIMEOUT_MS = 2500;
+/**
+ * Leftovers of the `initial-free-weeks-v1` experiment (Sep 2026), which shipped
+ * its 10-week variant as `INITIAL_FREE_WEEKS`. Enrolled installs still carry
+ * the assignment marker and three persisted super properties that would
+ * otherwise tag every future event. Idempotent, so it simply runs every launch.
+ */
+const LEGACY_INITIAL_WEEKS_STORAGE_KEY = 'startup-tycoon/experiment/initial-free-weeks-v1';
+const LEGACY_INITIAL_WEEKS_PROPS = ['initial_weeks_experiment', 'initial_weeks_variant', 'initial_weeks'];
 
-function registerInitialWeeksAssignment(enrollment: InitialWeeksEnrollment): void {
-  posthog
-    .register({
-      initial_weeks_experiment: enrollment.experimentKey,
-      initial_weeks_variant: enrollment.variant,
-      initial_weeks: enrollment.initialWeeks,
-    })
-    .catch(() => {});
+function clearInitialWeeksExperiment(): void {
+  AsyncStorage.removeItem(LEGACY_INITIAL_WEEKS_STORAGE_KEY).catch(() => {});
+  for (const prop of LEGACY_INITIAL_WEEKS_PROPS) posthog.unregister(prop).catch(() => {});
 }
 
 /**
- * Resolve the one-time new-install grant before anything can spend it.
- *
- * The enrollment marker is written before the budget. If the app dies between
- * those writes, the next launch sees that this install already had its one
- * assignment and falls back to five instead of granting the treatment twice.
- * Existing saves are never enrolled, and a slow/offline flag request is capped
- * so analytics cannot hold the game hostage. Exported for storage/flag edge-case
- * tests; application code calls it only during provider hydration.
+ * Load the persisted week budget, refreshed against "now". A brand-new install
+ * (no save, no budget) gets the larger `INITIAL_FREE_WEEKS` first-day grant;
+ * a save without a budget is a legacy/corrupt existing install and gets the
+ * ordinary daily allotment. `resetAll` never comes through here — it resets to
+ * the daily allotment in memory — so resetting can't farm the first-day grant.
+ * Exported for tests; application code calls it only during provider hydration.
  */
-export async function loadWeekBudget(allowExperimentEnrollment: boolean): Promise<WeekBudget> {
+export async function loadWeekBudget(isNewInstall: boolean): Promise<WeekBudget> {
   const now = new Date();
-  const [rawBudget, rawEnrollment] = await Promise.all([
-    AsyncStorage.getItem(WEEK_BUDGET_STORAGE_KEY),
-    AsyncStorage.getItem(INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY),
-  ]);
-  const enrollment = parseInitialWeeksEnrollment(rawEnrollment);
-
-  if (rawBudget) {
-    if (enrollment) registerInitialWeeksAssignment(enrollment);
-    return refreshWeekBudget(JSON.parse(rawBudget) as WeekBudget, now);
-  }
-
-  // A persisted assignment with no budget is the crash-recovery case described
-  // above. A save with no budget is a legacy/corrupt existing install. Neither
-  // is eligible for another first-install grant.
-  if (enrollment || !allowExperimentEnrollment) return initialWeekBudget(now);
-
-  try {
-    await Promise.race([
-      posthog.reloadFeatureFlagsAsync(),
-      new Promise<undefined>((resolve) => setTimeout(resolve, INITIAL_WEEKS_FLAG_TIMEOUT_MS)),
-    ]);
-    const variant = normalizeInitialWeeksVariant(
-      posthog.getFeatureFlag(INITIAL_WEEKS_EXPERIMENT_KEY, { sendEvent: false }),
-    );
-    if (!variant) return initialWeekBudget(now);
-
-    const assigned = createInitialWeeksEnrollment(variant, now);
-    const budget = initialWeekBudget(now, assigned.initialWeeks);
-
-    // Assignment first is deliberate: it turns a mid-write crash into the safe
-    // control fallback instead of a second chance at the larger grant.
-    await AsyncStorage.setItem(INITIAL_WEEKS_EXPERIMENT_STORAGE_KEY, JSON.stringify(assigned));
-    await AsyncStorage.setItem(WEEK_BUDGET_STORAGE_KEY, JSON.stringify(budget));
-
-    registerInitialWeeksAssignment(assigned);
-    track(EVENTS.INITIAL_WEEK_ALLOWANCE_APPLIED, {
-      experiment_key: assigned.experimentKey,
-      variant: assigned.variant,
-      initial_weeks: assigned.initialWeeks,
-      assigned_at: assigned.assignedAt,
-    });
-    // Emit PostHog's canonical exposure only after the assigned grant is durable.
-    posthog.getFeatureFlag(INITIAL_WEEKS_EXPERIMENT_KEY);
-    return budget;
-  } catch (err) {
-    console.warn('[game-store] failed to enroll initial-weeks experiment', err);
-    return initialWeekBudget(now);
-  }
+  clearInitialWeeksExperiment();
+  const raw = await AsyncStorage.getItem(WEEK_BUDGET_STORAGE_KEY);
+  if (raw) return refreshWeekBudget(JSON.parse(raw) as WeekBudget, now);
+  return initialWeekBudget(now, isNewInstall ? INITIAL_FREE_WEEKS : WEEKS_PER_DAY);
 }
 
 /**
@@ -623,11 +572,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       // False until the save read proves this is a new install. A failed read
-      // must never make an existing install eligible for a first-install grant.
-      let allowInitialWeeksExperiment = false;
+      // must never make an existing install eligible for the first-day grant.
+      let isNewInstall = false;
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        allowInitialWeeksExperiment = raw === null;
+        isNewInstall = raw === null;
         if (!cancelled && raw) {
           // Every save goes through `normalizeSave`: there is no version gate,
           // so the only safe assumption is that any save may predate the
@@ -644,7 +593,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setSaveLoaded(true);
       }
       try {
-        const loadedWeekBudget = await loadWeekBudget(allowInitialWeeksExperiment);
+        const loadedWeekBudget = await loadWeekBudget(isNewInstall);
         if (!cancelled) setWeekBudget(loadedWeekBudget);
       } catch (err) {
         console.warn('[game-store] failed to load week budget', err);

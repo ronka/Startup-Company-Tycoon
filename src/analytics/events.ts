@@ -86,17 +86,24 @@ export const EVENTS = {
   DAILY_STANDUP_SHOWN: 'daily_standup_shown',
   /**
    * The OS permission dialog was spent — once per install, so `trigger`
-   * (`daily_wall` | `second_launch`) records which moment spent it. Break the
-   * `granted` rate down by `trigger` to judge whether asking at the wall beats
-   * the second-launch fallback.
+   * records which moment spent it: `reminder_optin` (the player tapped "Remind
+   * me at 9am" on the end-of-day panel) or `second_launch` (the fallback).
+   * Builds up to 1.0.4-19 also sent `daily_wall`, the unannounced ask at the
+   * wall this replaced. Break `granted` down by `trigger` to compare them.
    */
   NOTIFICATION_PERMISSION_REQUESTED: 'notification_permission_requested',
   REENGAGEMENT_NOTIFICATION_SCHEDULED: 'reengagement_notification_scheduled',
   NOTIFICATION_OPENED: 'notification_opened',
   /** The end-of-day panel was shown — `{ agenda_kind }` is the hook it offered. */
   DAY_COMPLETE_SHOWN: 'day_complete_shown',
-  /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks'. */
+  /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me'. */
   DAY_COMPLETE_DISMISSED: 'day_complete_dismissed',
+  /**
+   * "Remind me at 9am" was tapped on the end-of-day panel — `{ agenda_kind }`.
+   * The OS dialog follows as `notification_permission_requested` with
+   * `trigger: reminder_optin`.
+   */
+  REMINDER_OPTIN_TAPPED: 'reminder_optin_tapped',
 
   // First-run hints / debug
   /** A contextual hint became visible (won its screen's single hint slot). */
@@ -117,6 +124,18 @@ export const EVENTS = {
   /** A new charge completed. Restores use `purchase_restore_completed` instead. */
   PURCHASE_COMPLETED: 'purchase_completed',
   PURCHASE_FAILED: 'purchase_failed',
+  /**
+   * The hosted paywall was requested but never appeared, so the in-app sheet
+   * took over — `{ trigger, reason }`. Explains attempts without a matching
+   * RevenueCat `paywall_shown`.
+   */
+  PAYWALL_NOT_PRESENTED: 'paywall_not_presented',
+  /**
+   * A buy tap was answered with "purchases aren't available right now" instead
+   * of another doomed attempt — `{ trigger }`. See
+   * `purchase-failure-gate.ts`.
+   */
+  PURCHASE_RETRY_SUPPRESSED: 'purchase_retry_suppressed',
   /** A revive token was consumed to un-end a bankrupt run (bought or dev-granted). */
   REVIVE_REDEEMED: 'revive_redeemed',
   /** "Restore purchases" was tapped — `{ source }` is which surface it was tapped from. */
@@ -163,10 +182,6 @@ export const EVENTS = {
   REVIEW_PROMPT_SUPPRESSED: 'review_prompt_suppressed',
   /** The Settings "Rate this game" row was tapped — opens the store listing, not the native sheet. */
   REVIEW_LINK_OPENED: 'review_link_opened',
-
-  // Experiments
-  /** The persisted 5-vs-10 initial-week grant was applied, immediately before flag exposure. */
-  INITIAL_WEEK_ALLOWANCE_APPLIED: 'initial_week_allowance_applied',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
