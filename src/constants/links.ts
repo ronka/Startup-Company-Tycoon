@@ -12,9 +12,9 @@
  *   are one tap away.
  */
 
-export const PRIVACY_POLICY_URL = 'https://www.ronka.dev/startup-tycoon/privacy';
+export const PRIVACY_POLICY_URL = 'https://startup-tycoon-website.vercel.app/privacy';
 
-export const SUPPORT_URL = 'https://www.ronka.dev/startup-tycoon/support';
+export const SUPPORT_URL = 'https://startup-tycoon-website.vercel.app/support';
 
 /**
  * Apple's standard EULA. It governs this app because no custom licence

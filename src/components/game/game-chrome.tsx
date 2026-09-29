@@ -24,6 +24,7 @@ import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { actionNowFor, tomorrowAgendaFor, type ActionNow } from '@/state/day-close';
 import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
+import { useLeaderboard } from '@/state/leaderboard-provider';
 import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
 import { notificationAskSettled } from '@/state/review-ask';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
@@ -54,6 +55,12 @@ const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
  * Present-while-dismiss hangs iOS — see docs/bug-stuck-decision-modal.md.
  */
 const DAY_COMPLETE_ARM_MS = 350;
+/**
+ * The week-5 leaderboard ask arms slower than the closing panel, so when both
+ * are due the panel wins the frame (its becoming visible cancels this timer)
+ * and the ask waits for it to close.
+ */
+const LEADERBOARD_ASK_ARM_MS = 700;
 
 /**
  * Streak length at which coming back counts as a genuine "I like this" signal
@@ -82,6 +89,7 @@ export function GameChrome() {
     setDevFreePlay,
     streak,
   } = useGame();
+  const leaderboard = useLeaderboard();
   const insets = useSafeAreaInsets();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
@@ -198,6 +206,25 @@ export function GameChrome() {
     const timer = setTimeout(() => setRecapArmedWeek(pendingWeek), 350);
     return () => clearTimeout(timer);
   }, [pendingWeek]);
+
+  // The week-5 "join the leaderboard" ask. Same rule as every other surface
+  // here: it waits for the decision card, the week's recap, the closing panel,
+  // and any buy-weeks sheet to be off screen before it presents.
+  const leaderboardAskDue =
+    leaderboard.promptDue &&
+    state !== null &&
+    !state.pendingEvent &&
+    leaderboard.joinSource === null &&
+    !buyWeeks.isOpen &&
+    !dayCompleteVisible &&
+    (previousState === null || recapArmedWeek === state.week) &&
+    !(previousState !== null && notable && state.week !== reviewedWeek);
+  const { openJoin } = leaderboard;
+  useEffect(() => {
+    if (!leaderboardAskDue) return;
+    const timer = setTimeout(() => openJoin('week5'), LEADERBOARD_ASK_ARM_MS);
+    return () => clearTimeout(timer);
+  }, [leaderboardAskDue, openJoin]);
 
   if (!state || state.gameOver) return null;
 

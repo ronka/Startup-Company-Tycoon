@@ -36,6 +36,8 @@ export type BoardRow = {
 export type BoardPage = {
   /** `preview` while the board shows fictional samples; `live` once real players are public. */
   mode: 'preview' | 'live';
+  /** True while seeded samples are ranked alongside real players (the website's mixed mode). */
+  samplesIncluded: boolean;
   total: number;
   rows: BoardRow[];
   /** Opaque — pass back as-is to fetch the next page. */
@@ -76,10 +78,25 @@ export function parseBoardPage(raw: unknown): BoardPage | null {
   const rows = body.rows.map(parseBoardRow).filter((row): row is BoardRow => row !== null);
   return {
     mode: body.mode === 'live' ? 'live' : 'preview',
+    samplesIncluded: body.samplesIncluded === true,
     total: isFiniteNumber(body.total) ? body.total : rows.length,
     rows,
     nextCursor: typeof body.nextCursor === 'string' && body.nextCursor.length > 0 ? body.nextCursor : null,
   };
+}
+
+/** `fetch` with the module's timeout, chained to an optional caller signal. */
+async function timedFetch(url: string, init: RequestInit = {}, signal?: AbortSignal): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  signal?.addEventListener('abort', abortFromCaller);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener('abort', abortFromCaller);
+  }
 }
 
 /**
@@ -94,21 +111,105 @@ export async function fetchBoardPage(
 ): Promise<BoardPage> {
   const params = new URLSearchParams({ status: filter, limit: '20' });
   if (cursor) params.set('cursor', cursor);
+  const response = await timedFetch(`${LEADERBOARD_ORIGIN}/api/leaderboard?${params}`, {}, signal);
+  if (!response.ok) throw new Error(`leaderboard ${response.status}`);
+  const page = parseBoardPage(await response.json());
+  if (!page) throw new Error('leaderboard: malformed response');
+  return page;
+}
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const abortFromCaller = () => controller.abort();
-  signal?.addEventListener('abort', abortFromCaller);
+export type BoardRank = {
+  /** 1-based position this stake holds (or would hold) on the public board. */
+  rank: number;
+  /** Everyone on the board, counting this run only when `onBoard`. */
+  total: number;
+  /** Whether the `runId` asked about is itself a public row. */
+  onBoard: boolean;
+};
+
+/** A rank response body, or `null` when it's not one. Off-board runs count themselves into `total`. */
+export function parseBoardRank(raw: unknown): BoardRank | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const body = raw as Record<string, unknown>;
+  if (!isFiniteNumber(body.rank) || !isFiniteNumber(body.total) || body.rank < 1) return null;
+  const onBoard = body.onBoard === true;
+  const total = onBoard ? body.total : body.total + 1;
+  return { rank: body.rank, total: Math.max(total, body.rank), onBoard };
+}
+
+/**
+ * Where `founderStake` ranks on the public board — without uploading anything,
+ * so it works for players who never opted in. Throws on any failure (including
+ * a 404 from a website that doesn't serve the route yet); callers hide the rank.
+ */
+export async function fetchBoardRank(
+  founderStake: number,
+  runId: string | null,
+  signal?: AbortSignal,
+): Promise<BoardRank> {
+  const params = new URLSearchParams({ stake: String(Math.max(0, Math.round(founderStake))) });
+  if (runId) params.set('runId', runId);
+  const response = await timedFetch(`${LEADERBOARD_ORIGIN}/api/leaderboard/rank?${params}`, {}, signal);
+  if (!response.ok) throw new Error(`leaderboard rank ${response.status}`);
+  const rank = parseBoardRank(await response.json());
+  if (!rank) throw new Error('leaderboard rank: malformed response');
+  return rank;
+}
+
+/** The exact body `PUT /api/leaderboard/runs/:runId` accepts — no other keys, or the server rejects it. */
+export type RunUpload = {
+  companyName: string;
+  week: number;
+  stage: string;
+  outcome: BoardOutcome;
+  founderStake: number;
+  valuation: number | null;
+  founderEquity: number | null;
+  revision: number;
+  publish: true;
+};
+
+/**
+ * `ok` landed (or was already there); `conflict` means the server holds a
+ * newer or incompatible snapshot and retrying this one is pointless;
+ * `unauthorized` means the session is gone; `retry` is everything transient.
+ */
+export type WriteResult = 'ok' | 'conflict' | 'unauthorized' | 'retry';
+
+function writeResultFor(status: number): WriteResult {
+  if (status >= 200 && status < 300) return 'ok';
+  if (status === 401) return 'unauthorized';
+  if (status === 409 || status === 400) return 'conflict';
+  return 'retry';
+}
+
+/** The write's outcome plus the raw HTTP status (null when the request never got an answer), for failure analytics. */
+export async function putRun(
+  token: string,
+  runId: string,
+  body: RunUpload,
+): Promise<{ result: WriteResult; status: number | null }> {
   try {
-    const response = await fetch(`${LEADERBOARD_ORIGIN}/api/leaderboard?${params}`, {
-      signal: controller.signal,
+    const response = await timedFetch(`${LEADERBOARD_ORIGIN}/api/leaderboard/runs/${runId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
     });
-    if (!response.ok) throw new Error(`leaderboard ${response.status}`);
-    const page = parseBoardPage(await response.json());
-    if (!page) throw new Error('leaderboard: malformed response');
-    return page;
-  } finally {
-    clearTimeout(timeout);
-    signal?.removeEventListener('abort', abortFromCaller);
+    return { result: writeResultFor(response.status), status: response.status };
+  } catch {
+    return { result: 'retry', status: null };
+  }
+}
+
+/** Unpublish one of this account's runs. A 404 counts as done — there's nothing left to remove. */
+export async function deleteRun(token: string, runId: string): Promise<WriteResult> {
+  try {
+    const response = await timedFetch(`${LEADERBOARD_ORIGIN}/api/leaderboard/runs/${runId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.status === 404 ? 'ok' : writeResultFor(response.status);
+  } catch {
+    return 'retry';
   }
 }

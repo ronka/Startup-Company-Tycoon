@@ -21,6 +21,7 @@ const impl: typeof fallback = canUseAppleAuth ? require('./api') : fallback;
 /** True only on genuine iOS custom builds (see `canUseAppleAuth`); the UI gates account affordances on this. */
 export const accountAvailable = canUseAppleAuth;
 export const hasSessionToken: () => Promise<boolean> = impl.hasSessionToken;
+export const sessionToken: () => Promise<string | null> = impl.sessionToken;
 export const signInWithApple: () => Promise<SignInWithAppleResult> = impl.signInWithApple;
 export const syncEntitlements: (payload: SyncPayload) => Promise<SyncEntitlementsResult> = impl.syncEntitlements;
 export const deleteAccount: () => Promise<DeleteAccountResult> = impl.deleteAccount;

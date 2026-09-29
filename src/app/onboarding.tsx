@@ -266,7 +266,7 @@ export default function OnboardingScreen() {
           <IconCard
             icon={{ ios: 'chart.pie.fill', android: 'pie_chart', web: 'pie_chart' }}
             label="Your score is what you walk away with"
-            text="The slice of the company you still own × what it's worth when you exit. Every round you raise buys time and costs you a piece of that slice."
+            text="The slice of the company you still own × what it's worth when you exit. Every round you raise buys time and costs you a piece of that slice. The best founders make the global leaderboard."
           />
           <IconCard
             tone="alert"

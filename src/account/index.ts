@@ -3,5 +3,5 @@
  * overrides this on iOS/Android native builds. Never import `./api` or
  * `expo-apple-authentication` from here.
  */
-export { accountAvailable, deleteAccount, hasSessionToken, signInWithApple, signOut, syncEntitlements } from './fallback';
+export { accountAvailable, deleteAccount, hasSessionToken, sessionToken, signInWithApple, signOut, syncEntitlements } from './fallback';
 export type { DeleteAccountResult, SignInWithAppleResult, SyncEntitlementsResult } from './types';

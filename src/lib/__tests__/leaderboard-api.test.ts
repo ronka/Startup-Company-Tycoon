@@ -60,7 +60,7 @@ describe('parseBoardPage', () => {
 
   it('reads live mode and a null cursor', () => {
     const page = parseBoardPage({ mode: 'live', total: 0, rows: [], nextCursor: null });
-    expect(page).toEqual({ mode: 'live', total: 0, rows: [], nextCursor: null });
+    expect(page).toEqual({ mode: 'live', samplesIncluded: false, total: 0, rows: [], nextCursor: null });
   });
 
   it('rejects a body that is not a board page', () => {

@@ -32,6 +32,7 @@ import { newGame, normalizeSave, reduce } from '@/game/engine';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
+import { isRunId, newRunId } from '@/lib/run-id';
 import {
   configurePurchases,
   getStoreTransactions,
@@ -184,11 +185,14 @@ type StoreAction =
 export function storeReducer(state: GameState | null, action: StoreAction): GameState | null {
   switch (action.type) {
     case 'HYDRATE':
-      return action.state;
+      // Saves from before the leaderboard have no run id; give them one here,
+      // the single place every loaded save passes through. The autosave then
+      // persists it, so the id is stable from this launch on.
+      return action.state && !isRunId(action.state.runId) ? { ...action.state, runId: newRunId() } : action.state;
     case 'SET_STATE':
       return action.state;
     case 'NEW_GAME':
-      return newGame(action.companyName, action.seed, action.focus, action.logo);
+      return { ...newGame(action.companyName, action.seed, action.focus, action.logo), runId: newRunId() };
     default:
       return state === null ? state : reduce(state, action);
   }

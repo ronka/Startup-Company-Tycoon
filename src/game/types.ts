@@ -179,6 +179,12 @@ export type Stage = (typeof STAGE_ORDER)[number];
 export interface GameState {
   /** The seed the run was created with (for display / reproduction). */
   createdWithSeed: number;
+  /**
+   * Stable identity for this run on the public leaderboard (a UUID v4).
+   * Assigned by the store, never the pure engine — `newGame()` leaves it unset
+   * and saves from before the leaderboard get one on load. Survives revive.
+   */
+  runId?: string;
   /** The company name chosen at onboarding; drives the HQ header. */
   companyName: string;
   /**

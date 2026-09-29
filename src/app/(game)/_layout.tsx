@@ -1,5 +1,6 @@
 import { Drawer } from 'expo-router/drawer';
 
+import { LeaderboardJoinSheet } from '@/components/game/leaderboard-join-sheet';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -10,25 +11,31 @@ import { useTheme } from '@/hooks/use-theme';
  *
  * Routes are unaffected by this nesting — `(tabs)` is a group, so `/hq`,
  * `/team`, etc. still resolve. The drawer is opened from the Hud menu button.
+ *
+ * The leaderboard join sheet lives here, beside the drawer, so every door into
+ * it (week 5, the HQ rank card, Settings, the board) opens the same instance.
  */
 export default function GameDrawerLayout() {
   const theme = useTheme();
 
   return (
-    <Drawer
-      screenOptions={{
-        headerShown: false,
-        drawerType: 'front',
-        drawerStyle: { backgroundColor: theme.background },
-        drawerActiveTintColor: theme.text,
-        drawerInactiveTintColor: theme.textSecondary,
-        drawerActiveBackgroundColor: theme.backgroundElement,
-      }}>
-      <Drawer.Screen name="(tabs)" options={{ drawerLabel: 'Startup Empire Tycoon' }} />
-      <Drawer.Screen name="history" options={{ drawerLabel: 'History' }} />
-      <Drawer.Screen name="leaderboard" options={{ drawerLabel: 'Leaderboard' }} />
-      <Drawer.Screen name="help" options={{ drawerLabel: 'Help' }} />
-      <Drawer.Screen name="settings" options={{ drawerLabel: 'Settings' }} />
-    </Drawer>
+    <>
+      <Drawer
+        screenOptions={{
+          headerShown: false,
+          drawerType: 'front',
+          drawerStyle: { backgroundColor: theme.background },
+          drawerActiveTintColor: theme.text,
+          drawerInactiveTintColor: theme.textSecondary,
+          drawerActiveBackgroundColor: theme.backgroundElement,
+        }}>
+        <Drawer.Screen name="(tabs)" options={{ drawerLabel: 'Startup Empire Tycoon' }} />
+        <Drawer.Screen name="history" options={{ drawerLabel: 'History' }} />
+        <Drawer.Screen name="leaderboard" options={{ drawerLabel: 'Leaderboard' }} />
+        <Drawer.Screen name="help" options={{ drawerLabel: 'Help' }} />
+        <Drawer.Screen name="settings" options={{ drawerLabel: 'Settings' }} />
+      </Drawer>
+      <LeaderboardJoinSheet />
+    </>
   );
 }

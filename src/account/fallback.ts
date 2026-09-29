@@ -13,6 +13,10 @@ export async function hasSessionToken(): Promise<boolean> {
   return false;
 }
 
+export async function sessionToken(): Promise<string | null> {
+  return null;
+}
+
 export async function signInWithApple(): Promise<SignInWithAppleResult> {
   return { status: 'error' };
 }

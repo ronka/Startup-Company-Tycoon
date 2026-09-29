@@ -12,6 +12,7 @@ import { CompanyHeader } from '@/components/game/company-header';
 import { FirstRunHint, HintSlot } from '@/components/game/first-run-hint';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
 import { InsolvencyBanner } from '@/components/game/insolvency-banner';
+import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
 import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
 import { NewsFeed } from '@/components/game/news-feed';
 import { Pill, PillRow } from '@/components/game/pill';
@@ -107,6 +108,8 @@ export default function HqScreen() {
           <Pill label="Share" value={`${Math.round(state.marketShare * 100)}%`} />
           <Pill label={`${ERA_LABEL[state.era]} era`} />
         </PillRow>
+
+        <LeaderboardRankCard />
 
         {/* At most one shows at a time; earlier entries win the slot. */}
         <HintSlot

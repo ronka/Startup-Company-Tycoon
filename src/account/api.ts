@@ -45,6 +45,11 @@ export async function hasSessionToken(): Promise<boolean> {
   return (await getSessionToken()) !== null;
 }
 
+/** The raw bearer token, for the website's leaderboard API — it resolves the same `sessions` table. */
+export async function sessionToken(): Promise<string | null> {
+  return getSessionToken();
+}
+
 /** Native Apple sign-in, then `POST /api/auth/apple`, then persists the returned session token. */
 export async function signInWithApple(): Promise<SignInWithAppleResult> {
   const outcome = await signInAsync();

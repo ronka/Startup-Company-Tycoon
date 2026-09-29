@@ -21,6 +21,22 @@ export const EVENTS = {
   LEADERBOARD_VIEWED: 'leaderboard_viewed',
   /** A leaderboard status chip was tapped — `{ filter }` is all/running/exited/bankrupt. */
   LEADERBOARD_FILTERED: 'leaderboard_filtered',
+  /** The join-the-leaderboard sheet opened — `{ source }` is week5/hq/settings/board. */
+  LEADERBOARD_OPTIN_PROMPT_SHOWN: 'leaderboard_optin_prompt_shown',
+  /** The player joined (signed in if needed, consented) — `{ source }`. */
+  LEADERBOARD_OPTIN_ACCEPTED: 'leaderboard_optin_accepted',
+  /** The join sheet closed without joining — `{ source, reason }` (dismissed/cancelled/error). */
+  LEADERBOARD_OPTIN_DECLINED: 'leaderboard_optin_declined',
+  /** The player turned publishing off; their runs are unpublished. */
+  LEADERBOARD_OPTOUT: 'leaderboard_optout',
+  /** A run snapshot reached the server — `{ outcome, week }`. Once per run, on first publish. */
+  LEADERBOARD_RUN_PUBLISHED: 'leaderboard_run_published',
+  /** A run upload didn't land — `{ status, result }`; `status` is null when offline. Retries follow for transient failures. */
+  LEADERBOARD_PUBLISH_FAILED: 'leaderboard_publish_failed',
+  /** The HQ rank card was closed with its ✕ — `{ opted_in, rank }`. Hidden for the rest of that run. */
+  LEADERBOARD_TEASER_DISMISSED: 'leaderboard_teaser_dismissed',
+  /** The HQ rank card was tapped — `{ opted_in, rank }`. */
+  LEADERBOARD_TEASER_TAPPED: 'leaderboard_teaser_tapped',
   SETTINGS_VIEWED: 'settings_viewed',
 
   // Onboarding / identity

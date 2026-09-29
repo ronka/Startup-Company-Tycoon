@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
@@ -17,7 +17,10 @@ import {
   type BoardOutcome,
   type BoardRow,
 } from '@/lib/leaderboard-api';
+import { openLegalLink } from '@/lib/open-legal-link';
 import { STAGE_LABEL } from '@/lib/strategy-copy';
+import { useGame } from '@/state/game-store';
+import { useLeaderboard } from '@/state/leaderboard-provider';
 
 const FILTER_LABEL: Record<BoardFilter, string> = {
   all: 'All',
@@ -45,34 +48,62 @@ function stageLabel(stage: string): string {
   return STAGE_LABEL[stage as Stage] ?? stage;
 }
 
-function BoardCard({ row, position }: { row: BoardRow; position: number }) {
+/**
+ * Company names are player-written, so every real row can be reported
+ * (App Review Guideline 1.2). Long-press keeps it out of the way; the support
+ * page is where the report lands.
+ */
+function reportRow(row: BoardRow) {
+  Alert.alert(
+    `Report “${row.companyName}”?`,
+    'If this name is offensive, tell us on the support page and we’ll take it down.',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Report', style: 'destructive', onPress: () => openLegalLink('support', 'leaderboard_report') },
+    ],
+    { cancelable: true },
+  );
+}
+
+function BoardCard({ row, position, mine }: { row: BoardRow; position: number; mine: boolean }) {
+  const theme = useTheme();
   const meta = [`Week ${row.week}`, stageLabel(row.stage), row.sector].filter(Boolean).join(' · ');
+  const reportable = !row.sample && !mine;
 
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
-      <View style={styles.cardRow}>
-        <ThemedText type="small" themeColor="textMuted" style={styles.position}>
-          {/* The server leaves seeded rows unranked; the app ranks them by list order. */}
-          #{row.rank ?? position}
-        </ThemedText>
-        <View style={styles.cardBody}>
-          <View style={styles.cardRow}>
-            <ThemedText type="default" numberOfLines={1} style={styles.name}>
-              {row.companyName}
-            </ThemedText>
-            <ThemedText type="cardValue">{formatMoney(row.founderStake)}</ThemedText>
-          </View>
-          <View style={styles.cardRow}>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.name}>
-              {meta}
-            </ThemedText>
-            <ThemedText type="small" themeColor={OUTCOME_COLOR[row.outcome]}>
-              {OUTCOME_LABEL[row.outcome]}
-            </ThemedText>
+    <Pressable
+      onLongPress={reportable ? () => reportRow(row) : undefined}
+      accessibilityHint={reportable ? 'Long press to report this name' : undefined}>
+      <ThemedView type="backgroundElement" style={[styles.card, mine && { borderWidth: 1, borderColor: theme.accent }]}>
+        <View style={styles.cardRow}>
+          <ThemedText type="small" themeColor="textMuted" style={styles.position}>
+            {/* The server leaves seeded rows unranked; the app ranks them by list order. */}
+            #{row.rank ?? position}
+          </ThemedText>
+          <View style={styles.cardBody}>
+            <View style={styles.cardRow}>
+              <ThemedText type="default" numberOfLines={1} style={styles.name}>
+                {row.companyName}
+                {mine ? (
+                  <ThemedText type="small" themeColor="accent">
+                    {'  '}You
+                  </ThemedText>
+                ) : null}
+              </ThemedText>
+              <ThemedText type="cardValue">{formatMoney(row.founderStake)}</ThemedText>
+            </View>
+            <View style={styles.cardRow}>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.name}>
+                {meta}
+              </ThemedText>
+              <ThemedText type="small" themeColor={OUTCOME_COLOR[row.outcome]}>
+                {OUTCOME_LABEL[row.outcome]}
+              </ThemedText>
+            </View>
           </View>
         </View>
-      </View>
-    </ThemedView>
+      </ThemedView>
+    </Pressable>
   );
 }
 
@@ -91,6 +122,10 @@ export default function LeaderboardScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { state } = useGame();
+  const { prefs, joined, canJoin, openJoin } = useLeaderboard();
+  // Runs this device put on the board — highlighted so the player finds themselves.
+  const mine = new Set([...(prefs?.published ?? []), ...(joined && state?.runId ? [state.runId] : [])]);
 
   const [filter, setFilter] = useState<BoardFilter>('all');
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -182,8 +217,23 @@ export default function LeaderboardScreen() {
     <View style={styles.headerContent}>
       <ThemedText type="subtitle">Leaderboard</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        Startups ranked by founder stake — what the founder’s shares are worth.
+        Startups ranked by founder stake — what the founder’s shares are worth. Scores are self-reported
+        by players.
       </ThemedText>
+
+      {canJoin && !joined && state && !state.gameOver ? (
+        <Pressable
+          onPress={() => openJoin('board')}
+          accessibilityRole="button"
+          style={[styles.join, { backgroundColor: theme.accentSurface, borderColor: theme.accent }]}>
+          <ThemedText type="small" numberOfLines={1} style={styles.name}>
+            Put {state.companyName} on the board
+          </ThemedText>
+          <ThemedText type="smallBold" themeColor="accent">
+            Join ›
+          </ThemedText>
+        </Pressable>
+      ) : null}
 
       <View style={styles.filters}>
         {BOARD_FILTERS.map((f) => {
@@ -244,7 +294,7 @@ export default function LeaderboardScreen() {
       <FlatList
         data={load.status === 'ready' ? load.rows : []}
         keyExtractor={(row) => row.runId}
-        renderItem={({ item, index }) => <BoardCard row={item} position={index + 1} />}
+        renderItem={({ item, index }) => <BoardCard row={item} position={index + 1} mine={mine.has(item.runId)} />}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
         ListFooterComponent={loadingMore ? <ActivityIndicator color={theme.text} style={styles.footer} /> : null}
@@ -266,6 +316,16 @@ export default function LeaderboardScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+  },
+  join: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
   },
   header: {
     paddingHorizontal: Spacing.four,

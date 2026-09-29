@@ -9,6 +9,7 @@ import { useScreenTracking } from '@/analytics/use-screen-tracking';
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import { NotificationManager } from '@/components/game/notification-manager';
 import { GameProvider, useGame } from '@/state/game-store';
+import { LeaderboardProvider } from '@/state/leaderboard-provider';
 import '@/src/global.css';
 
 SplashScreen.preventAutoHideAsync();
@@ -24,9 +25,11 @@ export default function RootLayout() {
         <GluestackUIProvider mode="dark">
           <ThemeProvider value={DarkTheme}>
             <GameProvider>
-              <SplashGate />
-              <NotificationManager />
-              <AppNavigator />
+              <LeaderboardProvider>
+                <SplashGate />
+                <NotificationManager />
+                <AppNavigator />
+              </LeaderboardProvider>
             </GameProvider>
           </ThemeProvider>
         </GluestackUIProvider>

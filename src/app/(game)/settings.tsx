@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { LEGAL_LINK_LABELS, openLegalLink, type LegalLink } from '@/lib/open-legal-link';
 import { purchasesAvailable } from '@/purchases';
 import { useGame } from '@/state/game-store';
+import { useLeaderboard } from '@/state/leaderboard-provider';
 import { forceReviewForDev, resetReviewGateForDev, storeListingUrl } from '@/state/store-review';
 
 /**
@@ -41,6 +42,9 @@ export default function SettingsScreen() {
     devForceBankruptcy,
     replayOnboarding,
   } = useGame();
+
+  const leaderboard = useLeaderboard();
+  const publishing = leaderboard.joined;
 
   const appVersion = APP_RELEASE;
 
@@ -207,6 +211,27 @@ export default function SettingsScreen() {
     devForceBankruptcy,
   ]);
 
+  // Turning publishing on goes through the same consent sheet as every other
+  // door; turning it off unpublishes, so it's confirmed first.
+  const togglePublishing = useCallback(
+    (next: boolean) => {
+      if (next) {
+        leaderboard.openJoin('settings');
+        return;
+      }
+      Alert.alert(
+        'Stop publishing?',
+        'Your runs will be removed from the leaderboard. You can join again any time.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Remove', style: 'destructive', onPress: leaderboard.leave },
+        ],
+        { cancelable: true },
+      );
+    },
+    [leaderboard],
+  );
+
   const handleVersionPress = useCallback(() => {
     tapCountRef.current += 1;
     if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
@@ -255,6 +280,27 @@ export default function SettingsScreen() {
               </ThemedText>
             </ThemedView>
           </Pressable>
+        ) : null}
+
+        {leaderboard.canJoin ? (
+          <>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+              Leaderboard
+            </ThemedText>
+            <ThemedView type="backgroundElement" style={styles.row}>
+              <View style={styles.rowText}>
+                <ThemedText type="default">Publish my runs</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Company name, week, stage, status, and founder stake. Never your name or Apple ID.
+                </ThemedText>
+              </View>
+              <Switch
+                value={publishing}
+                onValueChange={togglePublishing}
+                accessibilityLabel="Publish my runs to the leaderboard"
+              />
+            </ThemedView>
+          </>
         ) : null}
 
         {purchasesAvailable ? (
@@ -346,6 +392,11 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     marginTop: Spacing.two,
+  },
+  rowText: {
+    flex: 1,
+    gap: 2,
+    marginRight: Spacing.three,
   },
   row: {
     flexDirection: 'row',
