@@ -54,7 +54,7 @@ const CompanyWidgetLayout = (props: WidgetSnapshot, environment: WidgetEnvironme
   const weeksColor = props.weeksReady > 0 ? ACCENT : TEXT_MUTED;
   // The one line on the tile that moves on a wall clock, and so the only
   // reason the widget is worth keeping on a home screen.
-  const weeksLine = props.weeksReady > 0 ? `${props.weeksReady} ready` : 'More at midnight';
+  const weeksLine = props.weeksReady > 0 ? `${props.weeksReady} ready` : 'More soon';
 
   // No save yet — an invitation, no numbers.
   if (props.status === 'none') {

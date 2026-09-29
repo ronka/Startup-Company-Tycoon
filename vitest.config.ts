@@ -15,6 +15,9 @@ export default defineConfig({
       // Reading the OTA update ID is native-only; tests only need its null
       // development fallback while exercising modules that import analytics.
       'expo-updates': path.resolve(__dirname, './src/analytics/__tests__/expo-updates-stub.ts'),
+      // The store's foreground listener (week regen) is the only `react-native`
+      // import the tested modules reach; the real package is Flow and won't parse.
+      'react-native': path.resolve(__dirname, './src/state/__tests__/react-native-stub.ts'),
     },
   },
   test: {

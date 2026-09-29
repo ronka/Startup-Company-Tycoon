@@ -151,7 +151,7 @@ export function BuyWeeksSheet({
     <BottomSheet visible={visible} onClose={handleDismiss} title="Buy weeks">
       <ThemedText type="small" themeColor="textSecondary">
         {trigger === 'out_of_weeks'
-          ? "That's the free weeks planned out — grab more to keep going today."
+          ? "That's the free weeks planned out — grab more to keep going now."
           : 'Stock up on weeks for whenever you run out.'}
       </ThemedText>
 
@@ -177,12 +177,12 @@ export function BuyWeeksSheet({
         Spells out exactly what the money buys before the player spends it, which
         App Review expects of any purchase screen: a one-time charge (not a
         subscription), weeks that never expire, and the fact that they're only
-        consumed once the free daily allowance is gone — which is also just true
+        consumed once the free allowance is gone — which is also just true
         (`spendWeekFromPools` spends free weeks first).
       */}
       <ThemedText type="small" themeColor="textMuted" style={styles.fineprint}>
-        One-time purchase, not a subscription. Weeks never expire and are only used once your free daily
-        weeks run out.
+        One-time purchase, not a subscription. Weeks never expire and are only used once your free weeks
+        run out.
       </ThemedText>
 
       <PrimaryButton label="Not now" variant="secondary" onPress={handleDismiss} />

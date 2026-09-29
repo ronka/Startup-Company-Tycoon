@@ -10,18 +10,24 @@ import {
   initialPurchasedWeeksPool,
   initialWeekBudget,
   isWeekBudgetExhausted,
+  formatClockCountdown,
   formatRefillCountdown,
-  nextWeekRefillAt,
+  nextWeekRegenAt,
   refreshWeekBudget,
   spendWeek,
   spendWeekFromPools,
+  weekBankFullAt,
+  WEEK_REGEN_MS,
   WEEKS_BANK_CAP,
-  WEEKS_PER_DAY,
   type PurchasedWeeksPool,
   type WeekBudget,
 } from '../week-budget';
 
 const day = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h);
+const T0 = day(2026, 7, 3);
+const at = (ms: number) => new Date(T0.getTime() + ms);
+/** A budget whose regen clock started at `T0`. */
+const regen = (weeksRemaining: number): WeekBudget => ({ weeksRemaining, regenFrom: T0.getTime() });
 
 describe('dateKey', () => {
   it('is a local calendar-day key, stable within the same day', () => {
@@ -31,15 +37,13 @@ describe('dateKey', () => {
 });
 
 describe('initialWeekBudget', () => {
-  it('grants exactly one day\'s allotment', () => {
-    const budget = initialWeekBudget(day(2026, 7, 3));
-    expect(budget.weeksRemaining).toBe(WEEKS_PER_DAY);
-    expect(budget.lastSessionDate).toBe(dateKey(day(2026, 7, 3)));
+  it('starts with a full, idle bank', () => {
+    expect(initialWeekBudget(T0)).toEqual({ weeksRemaining: WEEKS_BANK_CAP, regenFrom: null });
   });
 
-  it('accepts a larger first-day grant but never exceeds the bank cap', () => {
-    expect(initialWeekBudget(day(2026, 7, 3), 10).weeksRemaining).toBe(10);
-    expect(initialWeekBudget(day(2026, 7, 3), 50).weeksRemaining).toBe(WEEKS_BANK_CAP);
+  it('clamps to the bank cap, and starts the clock when it starts below it', () => {
+    expect(initialWeekBudget(T0, 50).weeksRemaining).toBe(WEEKS_BANK_CAP);
+    expect(initialWeekBudget(T0, 4)).toEqual({ weeksRemaining: 4, regenFrom: T0.getTime() });
   });
 });
 
@@ -59,62 +63,100 @@ describe('formatRefillCountdown', () => {
   });
 });
 
-describe('nextWeekRefillAt', () => {
-  it('returns the next local midnight', () => {
-    const next = nextWeekRefillAt(day(2026, 7, 3, 23));
-    expect(next.getFullYear()).toBe(2026);
-    expect(next.getMonth()).toBe(6);
-    expect(next.getDate()).toBe(4);
-    expect(next.getHours()).toBe(0);
-    expect(next.getMinutes()).toBe(0);
-    expect(next.getSeconds()).toBe(0);
-    expect(next.getMilliseconds()).toBe(0);
+describe('formatClockCountdown', () => {
+  it('ticks minutes and seconds, rounding seconds up', () => {
+    expect(formatClockCountdown(29 * 60_000 + 41_001)).toBe('29:42');
+    expect(formatClockCountdown(5_000)).toBe('0:05');
+    expect(formatClockCountdown(1)).toBe('0:01');
+  });
+
+  it('adds hours past the hour, and never goes negative', () => {
+    expect(formatClockCountdown((62 * 60 + 3) * 1_000)).toBe('1:02:03');
+    expect(formatClockCountdown(-5)).toBe('0:00');
+  });
+});
+
+describe('nextWeekRegenAt / weekBankFullAt', () => {
+  it('names the next week and the full bank off the running clock', () => {
+    expect(nextWeekRegenAt(regen(4))?.getTime()).toBe(T0.getTime() + WEEK_REGEN_MS);
+    expect(weekBankFullAt(regen(4))?.getTime()).toBe(T0.getTime() + (WEEKS_BANK_CAP - 4) * WEEK_REGEN_MS);
+  });
+
+  it('is null for a full bank', () => {
+    const full: WeekBudget = { weeksRemaining: WEEKS_BANK_CAP, regenFrom: null };
+    expect(nextWeekRegenAt(full)).toBeNull();
+    expect(weekBankFullAt(full)).toBeNull();
   });
 });
 
 describe('refreshWeekBudget', () => {
-  it('is a no-op within the same local day', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 2 };
-    expect(refreshWeekBudget(budget, day(2026, 7, 3, 23))).toEqual(budget);
+  it('returns the very same object until a week lands', () => {
+    const budget = regen(2);
+    expect(refreshWeekBudget(budget, at(WEEK_REGEN_MS - 1))).toBe(budget);
   });
 
-  it('grants a fresh WEEKS_PER_DAY on the first session of a new day', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 0 };
-    const next = refreshWeekBudget(budget, day(2026, 7, 4));
-    expect(next.weeksRemaining).toBe(WEEKS_PER_DAY);
-    expect(next.lastSessionDate).toBe(dateKey(day(2026, 7, 4)));
+  it('credits one week per interval and carries the partial progress', () => {
+    const next = refreshWeekBudget(regen(2), at(2.5 * WEEK_REGEN_MS));
+    expect(next.weeksRemaining).toBe(4);
+    expect(next.regenFrom).toBe(T0.getTime() + 2 * WEEK_REGEN_MS);
+    // The next week is half an interval out, not a full one.
+    expect(nextWeekRegenAt(next)?.getTime()).toBe(T0.getTime() + 3 * WEEK_REGEN_MS);
   });
 
-  it('banks to WEEKS_BANK_CAP rather than growing unbounded', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 9 };
-    const next = refreshWeekBudget(budget, day(2026, 7, 4));
-    expect(next.weeksRemaining).toBe(WEEKS_BANK_CAP);
+  it('stops at the cap and idles the clock, however long the player was away', () => {
+    const next = refreshWeekBudget(regen(0), at(30 * 24 * 3_600_000));
+    expect(next).toEqual({ weeksRemaining: WEEKS_BANK_CAP, regenFrom: null });
   });
 
-  it('grants only one day\'s worth even after skipping several days', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 1)), weeksRemaining: 0 };
-    const next = refreshWeekBudget(budget, day(2026, 7, 8));
-    expect(next.weeksRemaining).toBe(WEEKS_PER_DAY);
+  it('fills an empty bank in cap × interval', () => {
+    expect(refreshWeekBudget(regen(0), at(WEEKS_BANK_CAP * WEEK_REGEN_MS - 1)).weeksRemaining).toBe(WEEKS_BANK_CAP - 1);
+    expect(refreshWeekBudget(regen(0), at(WEEKS_BANK_CAP * WEEK_REGEN_MS)).weeksRemaining).toBe(WEEKS_BANK_CAP);
   });
 
-  it('is deterministic for the same budget and instant', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 4 };
-    expect(refreshWeekBudget(budget, day(2026, 7, 4))).toEqual(refreshWeekBudget(budget, day(2026, 7, 4)));
+  it('re-anchors instead of crediting when the clock has been set back', () => {
+    const next = refreshWeekBudget(regen(3), at(-5 * WEEK_REGEN_MS));
+    expect(next.weeksRemaining).toBe(3);
+    expect(next.regenFrom).toBe(T0.getTime() - 5 * WEEK_REGEN_MS);
+  });
+
+  it('keeps wallHitAt through a credit', () => {
+    const next = refreshWeekBudget({ ...regen(0), wallHitAt: 123 }, at(WEEK_REGEN_MS));
+    expect(next.wallHitAt).toBe(123);
+  });
+
+  describe('converting a midnight-refill save', () => {
+    it('honours the midnight refill it was promised when a new day has begun', () => {
+      const legacy: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 2)), weeksRemaining: 0 };
+      expect(refreshWeekBudget(legacy, T0)).toEqual({ weeksRemaining: WEEKS_BANK_CAP, regenFrom: null, wallHitAt: null });
+    });
+
+    it('keeps the balance on the same day and starts accruing from now', () => {
+      const legacy: WeekBudget = { lastSessionDate: dateKey(T0), weeksRemaining: 3 };
+      expect(refreshWeekBudget(legacy, T0)).toEqual({ weeksRemaining: 3, regenFrom: T0.getTime(), wallHitAt: null });
+    });
   });
 });
 
 describe('canSpendWeek / spendWeek', () => {
   it('allows spending while weeks remain, and blocks at zero', () => {
-    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 1 };
+    const budget = regen(1);
     expect(canSpendWeek(budget)).toBe(true);
-    const spent = spendWeek(budget);
+    const spent = spendWeek(budget, T0);
     expect(spent.weeksRemaining).toBe(0);
     expect(canSpendWeek(spent)).toBe(false);
   });
 
   it('spendWeek never goes negative', () => {
-    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 0 };
-    expect(spendWeek(budget).weeksRemaining).toBe(0);
+    expect(spendWeek(regen(0), T0).weeksRemaining).toBe(0);
+  });
+
+  it('starts the clock when spending from a full bank', () => {
+    const full: WeekBudget = { weeksRemaining: WEEKS_BANK_CAP, regenFrom: null };
+    expect(spendWeek(full, at(1_000)).regenFrom).toBe(T0.getTime() + 1_000);
+  });
+
+  it('never resets a clock that is already running — playing must not delay the next week', () => {
+    expect(spendWeek(regen(5), at(WEEK_REGEN_MS / 2)).regenFrom).toBe(T0.getTime());
   });
 });
 
@@ -130,8 +172,8 @@ describe('purchased-weeks pool', () => {
   });
 
   it('canSpendAnyWeek is true if either pool has weeks', () => {
-    const emptyBudget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 0 };
-    const fullBudget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 3 };
+    const emptyBudget: WeekBudget = { regenFrom: 0, weeksRemaining: 0 };
+    const fullBudget: WeekBudget = { regenFrom: 0, weeksRemaining: 3 };
     const emptyPool = initialPurchasedWeeksPool();
     const fullPool: PurchasedWeeksPool = { weeksRemaining: 5, grantedTransactionIds: [] };
 
@@ -142,16 +184,16 @@ describe('purchased-weeks pool', () => {
   });
 
   it('spendWeekFromPools spends free weeks before touching the purchased pool', () => {
-    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 1 };
+    const budget: WeekBudget = { regenFrom: 0, weeksRemaining: 1 };
     const purchased: PurchasedWeeksPool = { weeksRemaining: 5, grantedTransactionIds: ['tx1'] };
 
-    const afterFirst = spendWeekFromPools(budget, purchased);
+    const afterFirst = spendWeekFromPools(budget, purchased, T0);
     expect(afterFirst.budget.weeksRemaining).toBe(0);
     expect(afterFirst.purchased.weeksRemaining).toBe(5);
     // Spending from the free budget must never bump the purchased-pool spend counter.
     expect(afterFirst.purchased.weeksSpent ?? 0).toBe(0);
 
-    const afterSecond = spendWeekFromPools(afterFirst.budget, afterFirst.purchased);
+    const afterSecond = spendWeekFromPools(afterFirst.budget, afterFirst.purchased, T0);
     expect(afterSecond.budget.weeksRemaining).toBe(0);
     expect(afterSecond.purchased.weeksRemaining).toBe(4);
     expect(afterSecond.purchased.weeksSpent).toBe(1);
@@ -160,33 +202,32 @@ describe('purchased-weeks pool', () => {
   });
 
   it('spendWeekFromPools increments weeksSpent on the purchased pool, defaulting an unset counter to 0', () => {
-    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 0 };
+    const budget: WeekBudget = { regenFrom: 0, weeksRemaining: 0 };
     // Simulates a pre-existing install's persisted pool, saved before this field existed.
     const legacyPurchased = { weeksRemaining: 3, grantedTransactionIds: ['tx1'] } as PurchasedWeeksPool;
 
-    const once = spendWeekFromPools(budget, legacyPurchased);
+    const once = spendWeekFromPools(budget, legacyPurchased, T0);
     expect(once.purchased.weeksSpent).toBe(1);
 
-    const twice = spendWeekFromPools(once.budget, once.purchased);
+    const twice = spendWeekFromPools(once.budget, once.purchased, T0);
     expect(twice.purchased.weeksSpent).toBe(2);
     expect(twice.purchased.weeksRemaining).toBe(1);
   });
 
   it('spendWeekFromPools is a no-op once both pools are empty', () => {
-    const budget: WeekBudget = { lastSessionDate: 'x', weeksRemaining: 0 };
+    const budget: WeekBudget = { regenFrom: 0, weeksRemaining: 0 };
     const purchased = initialPurchasedWeeksPool();
 
-    const result = spendWeekFromPools(budget, purchased);
+    const result = spendWeekFromPools(budget, purchased, T0);
     expect(result.budget.weeksRemaining).toBe(0);
     expect(result.purchased.weeksRemaining).toBe(0);
   });
 
-  it('day-rollover refreshes the free budget without touching a non-zero purchased pool', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 0 };
+  it('regen refreshes the free budget without touching a non-zero purchased pool', () => {
     const purchased: PurchasedWeeksPool = { weeksRemaining: 12, grantedTransactionIds: [] };
 
-    const refreshed = refreshWeekBudget(budget, day(2026, 7, 4));
-    expect(refreshed.weeksRemaining).toBe(WEEKS_PER_DAY);
+    const refreshed = refreshWeekBudget(regen(0), at(WEEK_REGEN_MS));
+    expect(refreshed.weeksRemaining).toBe(1);
     // refreshWeekBudget never touches the purchased pool — it's a separate object.
     expect(purchased.weeksRemaining).toBe(12);
   });
@@ -223,8 +264,9 @@ describe('creditTransaction / creditTransactions', () => {
 
   it('preserves weeksSpent across a credit — a purchase must never reset how much was already spent', () => {
     const spent = spendWeekFromPools(
-      { lastSessionDate: 'x', weeksRemaining: 0 },
+      { regenFrom: 0, weeksRemaining: 0 },
       { weeksRemaining: 1, grantedTransactionIds: [], weeksSpent: 0 },
+      T0,
     ).purchased;
     expect(spent.weeksSpent).toBe(1);
 
@@ -251,7 +293,7 @@ describe('creditTransaction / creditTransactions', () => {
 });
 
 describe('isWeekBudgetExhausted', () => {
-  const spent: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 0 };
+  const spent = regen(0);
   const empty: PurchasedWeeksPool = initialPurchasedWeeksPool();
 
   it('is true only once both pools are spent', () => {

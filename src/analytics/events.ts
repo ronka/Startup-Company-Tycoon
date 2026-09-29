@@ -37,7 +37,30 @@ export const EVENTS = {
   // Game lifecycle
   GAME_STARTED: 'game_started',
   WEEK_ADVANCED: 'week_advanced',
+  /**
+   * Next Week pressed with every week spent. Since the regen model (Sep 29
+   * 2026) carries `refill_model: 'regen'`, `next_week_at`, `full_at` and
+   * `minutes_until_next_week`; earlier builds sent a midnight `refill_at` and
+   * `free_weeks_per_day`. Expect more of these per player than before — the
+   * wall now reopens every 36 minutes instead of once a day.
+   */
   WEEK_ADVANCE_BLOCKED: 'week_advance_blocked',
+  /**
+   * Free weeks regenerated while the app observed it — `{ weeks_gained,
+   * weeks_remaining, reached_cap, source }`, where `source` is 'launch' (cold
+   * start), 'resume' (back from background) or 'live' (ticked over while open).
+   * Several weeks gained at once means the player was away; `reached_cap`
+   * means they came back to a full bank.
+   */
+  WEEK_REGEN_CREDITED: 'week_regen_credited',
+  /**
+   * The first week advanced after hitting the wall — `{ minutes_since_wall,
+   * free_weeks_available, purchased_weeks_available, returned_via }`.
+   * `returned_via` is 'regen' when free weeks carried them past it, or
+   * 'purchase' when only bought weeks did. The core metric for the regen
+   * interval: how long players take to come back.
+   */
+  RETURNED_AFTER_WALL: 'returned_after_wall',
   STAGE_ADVANCED: 'stage_advanced',
   ERA_CHANGED: 'era_changed',
   TREND_PHASE_CHANGED: 'trend_phase_changed',

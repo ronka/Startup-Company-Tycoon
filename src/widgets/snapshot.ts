@@ -24,7 +24,7 @@ import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
 import type { GameOverReason, GameState } from '@/game/types';
 import { LOW_RUNWAY_WARNING_WEEKS } from '@/state/notification-content';
-import { refreshWeekBudget, type PurchasedWeeksPool, type WeekBudget } from '@/state/week-budget';
+import { nextWeekRegenAt, refreshWeekBudget, type PurchasedWeeksPool, type WeekBudget } from '@/state/week-budget';
 
 export interface WidgetSnapshot {
   /** Which layout branch renders: no run at all, a live run, or a finished one. */
@@ -64,13 +64,6 @@ const OUTCOME_LABEL: Record<GameOverReason, string> = {
   ipo: 'IPO',
   bankruptcy: 'Bankrupt',
 };
-
-/** The next local (not UTC) midnight — when `refreshWeekBudget` grants the new day's weeks. */
-export function nextLocalMidnight(now: Date): Date {
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0);
-  return midnight;
-}
 
 const EMPTY: WidgetSnapshot = {
   status: 'none',
@@ -142,15 +135,13 @@ export function widgetSnapshot(
 }
 
 /**
- * Exactly two entries: now, and next local midnight.
+ * Now, then one entry per free week still to regenerate, up to the cap — at
+ * most `WEEKS_BANK_CAP + 1` entries, so the tile counts back up on its own
+ * while the app is closed.
  *
- * `refreshWeekBudget` grants a day's allotment **once** per new local calendar
- * day however many days were skipped, so the value a returning player receives
- * is the same tomorrow as next week — one forecast entry at midnight stays
- * truthful indefinitely, and any multi-day ramp toward the cap would
- * over-promise. The forecast runs the real `refreshWeekBudget` against midnight
- * rather than re-deriving `min(cap, free + perDay)` here, so the widget's
- * promise can never drift from what the app actually grants.
+ * Each forecast step runs the real `refreshWeekBudget` at the instant
+ * `nextWeekRegenAt` names, rather than re-deriving the regen maths here, so
+ * the widget's promise can never drift from what the app actually grants.
  */
 export function widgetTimeline(
   state: GameState | null,
@@ -158,10 +149,15 @@ export function widgetTimeline(
   purchasedWeeks: PurchasedWeeksPool | null,
   now: Date,
 ): WidgetTimelineEntry[] {
-  const midnight = nextLocalMidnight(now);
-  const forecastBudget = weekBudget ? refreshWeekBudget(weekBudget, midnight) : null;
-  return [
+  const entries: WidgetTimelineEntry[] = [
     { date: new Date(now), props: widgetSnapshot(state, weekBudget, purchasedWeeks) },
-    { date: midnight, props: widgetSnapshot(state, forecastBudget, purchasedWeeks) },
   ];
+  let forecast = weekBudget ? refreshWeekBudget(weekBudget, now) : null;
+  let at = forecast ? nextWeekRegenAt(forecast) : null;
+  while (forecast && at) {
+    forecast = refreshWeekBudget(forecast, at);
+    entries.push({ date: at, props: widgetSnapshot(state, forecast, purchasedWeeks) });
+    at = nextWeekRegenAt(forecast);
+  }
+  return entries;
 }

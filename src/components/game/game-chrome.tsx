@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,12 +28,15 @@ import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
 import { notificationAskSettled } from '@/state/review-ask';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import {
+  WEEK_REGEN_MS,
   WEEKS_BANK_CAP,
-  WEEKS_PER_DAY,
   dateKey,
+  formatClockCountdown,
   formatRefillCountdown,
   isWeekBudgetExhausted,
-  nextWeekRefillAt,
+  nextWeekRegenAt,
+  weekBankFullAt,
+  type WeekBudget,
 } from '@/state/week-budget';
 
 /** The budget state the wall was pressed in; see `wallTappedFor`. */
@@ -111,8 +114,8 @@ export function GameChrome() {
   // rather than a button: on 1.0.4-19, wall players pressed it about 5.3 times
   // each even after the copy said "come back tomorrow". The first press is
   // still dispatched, since it's what records `week_advance_blocked`. Keyed
-  // to the two budget objects rather than cleared by an effect, so a refill
-  // or a purchase (each replaces one) hands the button straight back.
+  // to the two budget objects rather than cleared by an effect, so a regen
+  // tick or a purchase (each replaces one) hands the button straight back.
   const [wallTappedFor, setWallTappedFor] = useState<WallKey | null>(null);
 
   // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
@@ -253,9 +256,7 @@ export function GameChrome() {
         <View style={styles.footer}>
           {wallTapped ? (
             <View style={styles.wallFooter}>
-              {/* One line under the countdown, never two: the 💡 tip when there's
-                  something to do now, otherwise the tomorrow teaser. */}
-              <RefillCountdown setWallTappedFor={setWallTappedFor} teaser={actionNow ? null : (agenda?.line ?? null)} />
+              {weekBudget ? <RefillCountdown weekBudget={weekBudget} /> : null}
               {actionNow ? <ActionTip action={actionNow} onPress={() => openActionTip(actionNow, 'wall')} /> : null}
               {purchasesAvailable ? (
                 <PrimaryButton
@@ -272,7 +273,7 @@ export function GameChrome() {
               budgetExhausted
                 ? purchasesAvailable
                   ? 'Pull an all-nighter'
-                  : 'See you tomorrow'
+                  : 'Back soon'
                 : 'Next Week →'
             }
             onPress={() => {
@@ -298,12 +299,12 @@ export function GameChrome() {
           hints={[
             {
               id: 'week-budget-dots',
-              text: 'Each day is a sprint of free weeks — the dots below. The next one starts tomorrow.',
+              text: `The dots are your free weeks. Spent ones come back — one every ${WEEK_REGEN_MS / 60_000} minutes.`,
               when: onLastFreeWeek && !spotlight.visible,
             },
             {
               id: 'out-of-weeks',
-              text: `Sprint done. The next one — ${WEEKS_PER_DAY} fresh weeks — starts at midnight. ${state.companyName} will be waiting.`,
+              text: `Sprint done. A week comes back every ${WEEK_REGEN_MS / 60_000} minutes, the full ${WEEKS_BANK_CAP} in ${(WEEKS_BANK_CAP * WEEK_REGEN_MS) / 3_600_000} hours.`,
               when: budgetExhausted && !spotlight.visible,
             },
           ]}
@@ -453,54 +454,64 @@ function maybeAskForReviewAtWall(streakDays: number, insolvent: boolean): void {
 }
 
 /**
- * Time left until the free weeks refill, shown in place of the Next Week
- * button once the player has pressed into the wall. Deliberately not
+ * The wall's regen progress, shown in place of the Next Week button once the
+ * player has pressed into the wall: the time to the next free week, a bar
+ * filling toward it, and how long until the bank is full. Deliberately not
  * pressable, so there's nothing left to retry.
  *
- * Framed as the company's own rhythm ("next sprint") rather than a meter
- * refilling, per PRD F12's diegetic tone, with the same "tomorrow" line the
- * end-of-day panel shows underneath, so the wait points at something.
- *
  * The clock is read in effects, never during render (the same rule
- * `week-budget.ts` follows). Clearing the latch at midnight hands the button
- * back, so the player can take the refilled weeks without relaunching.
+ * `week-budget.ts` follows). Nothing here hands the button back: when a week
+ * lands the store replaces `weekBudget`, which un-latches the wall.
  */
-function RefillCountdown({
-  setWallTappedFor,
-  teaser,
-}: {
-  setWallTappedFor: Dispatch<SetStateAction<WallKey | null>>;
-  teaser: string | null;
-}) {
-  const [label, setLabel] = useState<string | null>(null);
+function RefillCountdown({ weekBudget }: { weekBudget: WeekBudget }) {
+  const theme = useTheme();
+  const [progress, setProgress] = useState<{ next: string; full: string | null; fraction: number } | null>(null);
 
   useEffect(() => {
-    const refillAt = nextWeekRefillAt(new Date()).getTime();
+    const nextAt = nextWeekRegenAt(weekBudget)?.getTime() ?? null;
+    const fullAt = weekBankFullAt(weekBudget)?.getTime() ?? null;
     const update = () => {
-      const remaining = refillAt - Date.now();
-      if (remaining <= 0) {
-        setWallTappedFor(null);
-        return;
-      }
-      setLabel(formatRefillCountdown(remaining));
+      if (nextAt === null) return;
+      const now = Date.now();
+      const remaining = Math.max(0, nextAt - now);
+      setProgress({
+        // The unit spelled out: a bare `25:17` reads as a time of day.
+        next: `${formatClockCountdown(remaining)} ${remaining >= 3_600_000 ? 'hours' : 'minutes'}`,
+        // Only worth a second number once it says something the first doesn't.
+        full: fullAt !== null && fullAt > nextAt ? formatRefillCountdown(Math.max(0, fullAt - now)) : null,
+        fraction: Math.min(1, Math.max(0, 1 - remaining / WEEK_REGEN_MS)),
+      });
     };
-    const timer = setInterval(update, 15_000);
+    // Every second: the headline is a ticking mm:ss clock.
+    const timer = setInterval(update, 1_000);
     // First read deferred a tick rather than run synchronously in the effect.
     const first = setTimeout(update, 0);
     return () => {
       clearInterval(timer);
       clearTimeout(first);
     };
-  }, [setWallTappedFor]);
+  }, [weekBudget]);
 
+  const ready = weekBudget.weeksRemaining;
   return (
     <View style={styles.countdown} accessibilityRole="text">
-      <ThemedText type="smallBold">Next sprint starts in {label ?? '…'}</ThemedText>
-      {teaser ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.countdownTeaser}>
-          {teaser}
+      <View style={styles.countdownHeader}>
+        <ThemedText type="smallBold">Free week in</ThemedText>
+        <ThemedText type="smallBold" style={styles.countdownTime}>
+          {progress?.next ?? '…'}
         </ThemedText>
-      ) : null}
+      </View>
+      <View style={[styles.progressTrack, { backgroundColor: theme.border }]}>
+        <View
+          style={[
+            styles.progressFill,
+            { backgroundColor: theme.accent, width: `${Math.round((progress?.fraction ?? 0) * 100)}%` },
+          ]}
+        />
+      </View>
+      <ThemedText type="small" themeColor="textSecondary">
+        {ready} of {WEEKS_BANK_CAP} refilled{progress?.full ? ` · all back in ${progress.full}` : ''}
+      </ThemedText>
     </View>
   );
 }
@@ -557,13 +568,26 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   countdown: {
-    alignItems: 'center',
-    gap: Spacing.half,
+    gap: Spacing.one,
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.four,
   },
-  countdownTeaser: {
-    textAlign: 'center',
+  countdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  countdownTime: {
+    fontVariant: ['tabular-nums'],
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginVertical: Spacing.half,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   nextButton: {
     flex: 1,

@@ -60,12 +60,12 @@ function companyWidget(): WidgetHandle | null {
 }
 
 /**
- * Compared instead of the entries themselves: the `date`s move every render
- * (entry 0 is always "now"), so including them would defeat the dedupe
- * entirely. The props are what the player actually sees.
+ * Compared instead of the entries themselves. Entry 0's `date` is always
+ * "now", so including it would defeat the dedupe entirely; the forecast
+ * entries' dates do count, since they move whenever the regen clock does.
  */
 function timelineKey(entries: WidgetTimelineEntry[]): string {
-  return JSON.stringify(entries.map((entry) => entry.props));
+  return JSON.stringify(entries.map((entry, i) => [i === 0 ? 0 : entry.date.getTime(), entry.props]));
 }
 
 export function useWidgetSync(

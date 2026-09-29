@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
 import type { ActionNow, TomorrowAgenda } from '@/state/day-close';
-import { WEEKS_PER_DAY } from '@/state/week-budget';
+import { WEEK_REGEN_MS, WEEKS_BANK_CAP } from '@/state/week-budget';
 
 /**
  * The end-of-day beat: shown once per local day when the week budget runs out,
@@ -71,7 +71,7 @@ export function DayCompleteSheet({
       {agenda ? (
         <View style={styles.agenda}>
           <ThemedText type="small" themeColor="textSecondary">
-            Tomorrow
+            Next up
           </ThemedText>
           <ThemedText type="smallBold">{agenda.line}</ThemedText>
         </View>
@@ -80,16 +80,17 @@ export function DayCompleteSheet({
       {actionTip && onActionTip ? <ActionTip action={actionTip} onPress={onActionTip} /> : null}
 
       <ThemedText type="small" themeColor="textSecondary">
-        Next sprint starts at midnight — {WEEKS_PER_DAY} fresh weeks.
+        A week comes back every {WEEK_REGEN_MS / 60_000} minutes — a full sprint of {WEEKS_BANK_CAP} in{' '}
+        {(WEEKS_BANK_CAP * WEEK_REGEN_MS) / 3_600_000} hours.
       </ThemedText>
 
       {onRemindMe ? (
         <>
           <PrimaryButton label="Remind me at 9am" onPress={onRemindMe} />
-          <PrimaryButton label="See you tomorrow" variant="ghost" onPress={onDismiss} />
+          <PrimaryButton label="Back soon" variant="ghost" onPress={onDismiss} />
         </>
       ) : (
-        <PrimaryButton label="See you tomorrow" onPress={onDismiss} />
+        <PrimaryButton label="Back soon" onPress={onDismiss} />
       )}
       {onBuyWeeks ? <PrimaryButton label="Pull an all-nighter" variant="secondary" onPress={onBuyWeeks} /> : null}
     </BottomSheet>

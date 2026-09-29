@@ -6,7 +6,7 @@ import { newGame } from '@/game/engine';
 
 import { loadWeekBudget, storeReducer, WEEK_BUDGET_STORAGE_KEY } from '../game-store';
 import { isRollBudgetExhausted, spendRoll, type RollBudget } from '../roll-budget';
-import { dateKey, INITIAL_FREE_WEEKS, WEEKS_PER_DAY } from '../week-budget';
+import { INITIAL_FREE_WEEKS, WEEK_REGEN_MS, WEEKS_BANK_CAP } from '../week-budget';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -17,19 +17,33 @@ describe('loadWeekBudget — first-day grant', () => {
     expect((await loadWeekBudget(true)).weeksRemaining).toBe(INITIAL_FREE_WEEKS);
   });
 
-  it('gives an existing install with no budget only the daily allotment', async () => {
+  it('gives an existing install with no budget a full bank', async () => {
     vi.spyOn(AsyncStorage, 'getItem').mockResolvedValue(null);
 
-    expect((await loadWeekBudget(false)).weeksRemaining).toBe(WEEKS_PER_DAY);
+    expect((await loadWeekBudget(false)).weeksRemaining).toBe(WEEKS_BANK_CAP);
   });
 
   it('never re-grants over a persisted budget, even for a "new" install', async () => {
-    const saved = { lastSessionDate: dateKey(new Date()), weeksRemaining: 0 };
+    const saved = { weeksRemaining: 0, regenFrom: Date.now() };
     vi.spyOn(AsyncStorage, 'getItem').mockImplementation((key) =>
       Promise.resolve(key === WEEK_BUDGET_STORAGE_KEY ? JSON.stringify(saved) : null),
     );
 
     expect((await loadWeekBudget(true)).weeksRemaining).toBe(0);
+  });
+
+  it('credits the weeks that regenerated while the app was closed, and reports them', async () => {
+    const saved = { weeksRemaining: 1, regenFrom: Date.now() - 3 * WEEK_REGEN_MS - 1_000 };
+    vi.spyOn(AsyncStorage, 'getItem').mockImplementation((key) =>
+      Promise.resolve(key === WEEK_BUDGET_STORAGE_KEY ? JSON.stringify(saved) : null),
+    );
+    const capture = vi.spyOn(posthog, 'capture');
+
+    expect((await loadWeekBudget(false)).weeksRemaining).toBe(4);
+    expect(capture).toHaveBeenCalledWith(
+      'week_regen_credited',
+      expect.objectContaining({ weeks_gained: 3, weeks_remaining: 4, reached_cap: false, source: 'launch' }),
+    );
   });
 
   it('clears the retired experiment marker and super properties', async () => {

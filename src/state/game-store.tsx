@@ -15,6 +15,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 
 import {
   accountAvailable,
@@ -68,11 +69,13 @@ import {
   initialPurchasedWeeksPool,
   INITIAL_FREE_WEEKS,
   initialWeekBudget,
+  canSpendAnyWeek,
   isWeekBudgetExhausted,
-  nextWeekRefillAt,
+  nextWeekRegenAt,
   refreshWeekBudget,
   spendWeekFromPools,
-  WEEKS_PER_DAY,
+  weekBankFullAt,
+  WEEKS_BANK_CAP,
   type PurchasedWeeksPool,
   type WeekBudget,
 } from '@/state/week-budget';
@@ -101,20 +104,44 @@ function clearInitialWeeksExperiment(): void {
   for (const prop of LEGACY_INITIAL_WEEKS_PROPS) posthog.unregister(prop).catch(() => {});
 }
 
+/** Where a regen credit was noticed — the `source` on `week_regen_credited`. */
+type RegenSource = 'launch' | 'resume' | 'live';
+
+/**
+ * `week_regen_credited` for a `refreshWeekBudget` that credited weeks. Skips
+ * the one-off conversion of a midnight-refill save, which isn't regen. Callers
+ * dedupe (see `regenCreditedFromRef`), since the same stale budget can be
+ * refreshed from more than one path.
+ */
+function trackRegen(before: WeekBudget, after: WeekBudget, source: RegenSource): void {
+  if (before.regenFrom === undefined || after.weeksRemaining <= before.weeksRemaining) return;
+  track(EVENTS.WEEK_REGEN_CREDITED, {
+    weeks_gained: after.weeksRemaining - before.weeksRemaining,
+    weeks_remaining: after.weeksRemaining,
+    reached_cap: after.weeksRemaining >= WEEKS_BANK_CAP,
+    source,
+  });
+}
+
 /**
  * Load the persisted week budget, refreshed against "now". A brand-new install
- * (no save, no budget) gets the larger `INITIAL_FREE_WEEKS` first-day grant;
- * a save without a budget is a legacy/corrupt existing install and gets the
- * ordinary daily allotment. `resetAll` never comes through here — it resets to
- * the daily allotment in memory — so resetting can't farm the first-day grant.
+ * (no save, no budget) gets the `INITIAL_FREE_WEEKS` first grant; a save
+ * without a budget is a legacy/corrupt existing install and gets a full bank.
+ * `resetAll` never comes through here — it resets to a full bank in memory —
+ * so resetting can't farm the first grant.
  * Exported for tests; application code calls it only during provider hydration.
  */
 export async function loadWeekBudget(isNewInstall: boolean): Promise<WeekBudget> {
   const now = new Date();
   clearInitialWeeksExperiment();
   const raw = await AsyncStorage.getItem(WEEK_BUDGET_STORAGE_KEY);
-  if (raw) return refreshWeekBudget(JSON.parse(raw) as WeekBudget, now);
-  return initialWeekBudget(now, isNewInstall ? INITIAL_FREE_WEEKS : WEEKS_PER_DAY);
+  if (raw) {
+    const saved = JSON.parse(raw) as WeekBudget;
+    const refreshed = refreshWeekBudget(saved, now);
+    trackRegen(saved, refreshed, 'launch');
+    return refreshed;
+  }
+  return initialWeekBudget(now, isNewInstall ? INITIAL_FREE_WEEKS : WEEKS_BANK_CAP);
 }
 
 /**
@@ -733,6 +760,34 @@ export function GameProvider({ children }: { children: ReactNode }) {
     );
   }, [state, loading]);
 
+  // Free weeks regenerate on a clock, so the budget has to be re-read while
+  // the app is open (polled, only while below the cap) and on every return
+  // from the background, where JS timers don't run. `refreshWeekBudget` hands
+  // back the same object until a week actually lands, so the poll is free
+  // otherwise. The setter only applies the result to the budget it was
+  // computed from, and the ref keeps the event to one per credited budget:
+  // resume and the poll can both fire on the same stale closure.
+  const regenCreditedFromRef = useRef<WeekBudget | null>(null);
+  useEffect(() => {
+    if (loading || weekBudget === null || weekBudget.regenFrom == null) return;
+    const check = (source: RegenSource) => {
+      if (regenCreditedFromRef.current === weekBudget) return;
+      const next = refreshWeekBudget(weekBudget, new Date());
+      if (next === weekBudget) return;
+      regenCreditedFromRef.current = weekBudget;
+      trackRegen(weekBudget, next, source);
+      setWeekBudget((prev) => (prev === weekBudget ? next : prev));
+    };
+    const timer = setInterval(() => check('live'), 15_000);
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status === 'active') check('resume');
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [loading, weekBudget]);
+
   // Persist the week budget alongside the save whenever it changes.
   useEffect(() => {
     if (loading || weekBudget === null) return;
@@ -974,23 +1029,47 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // that window would advance the week without spending anything, so hold
       // the tap instead of handing out a free week.
       if (!devFreePlay && (weekBudget === null || purchasedWeeks === null)) return;
-      if (isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay)) {
-        // The player hit the daily wall — a key retention/monetization signal.
-        const now = new Date();
+      const now = new Date();
+      // A week may have landed since the last poll; a tap one second after it
+      // shouldn't hit the wall. Only committed below, on a successful spend —
+      // committing on the blocked path would replace the object the wall
+      // latch is keyed to.
+      const freshBudget = weekBudget ? refreshWeekBudget(weekBudget, now) : null;
+      if (isWeekBudgetExhausted(freshBudget, purchasedWeeks, devFreePlay)) {
+        // The player hit the wall — a key retention/monetization signal.
+        const nextWeekAt = freshBudget ? nextWeekRegenAt(freshBudget) : null;
         track(EVENTS.WEEK_ADVANCE_BLOCKED, {
           ...gameProps(state),
-          free_weeks_remaining: weekBudget?.weeksRemaining ?? 0,
+          free_weeks_remaining: freshBudget?.weeksRemaining ?? 0,
           purchased_weeks_remaining: purchasedWeeks?.weeksRemaining ?? 0,
-          free_weeks_per_day: WEEKS_PER_DAY,
-          refill_at: nextWeekRefillAt(now).toISOString(),
+          refill_model: 'regen',
+          next_week_at: nextWeekAt?.toISOString() ?? null,
+          full_at: freshBudget ? (weekBankFullAt(freshBudget)?.toISOString() ?? null) : null,
+          minutes_until_next_week: nextWeekAt ? Math.ceil((nextWeekAt.getTime() - now.getTime()) / 60_000) : null,
           local_date: dateKey(now),
         });
         return;
       }
       setPreviousState(state);
-      if (!devFreePlay && weekBudget && purchasedWeeks) {
-        const spent = spendWeekFromPools(weekBudget, purchasedWeeks);
-        setWeekBudget(spent.budget);
+      if (!devFreePlay && freshBudget && purchasedWeeks) {
+        if (weekBudget && freshBudget !== weekBudget && regenCreditedFromRef.current !== weekBudget) {
+          regenCreditedFromRef.current = weekBudget;
+          trackRegen(weekBudget, freshBudget, 'live');
+        }
+        if (freshBudget.wallHitAt != null) {
+          track(EVENTS.RETURNED_AFTER_WALL, {
+            ...gameProps(state),
+            minutes_since_wall: Math.round((now.getTime() - freshBudget.wallHitAt) / 60_000),
+            free_weeks_available: freshBudget.weeksRemaining,
+            purchased_weeks_available: purchasedWeeks.weeksRemaining,
+            returned_via: freshBudget.weeksRemaining > 0 ? 'regen' : 'purchase',
+          });
+        }
+        const spent = spendWeekFromPools(freshBudget, purchasedWeeks, now);
+        // Stamped by the spend that empties both pools rather than by the
+        // blocked press: that press must leave the budget object alone.
+        const wallHitAt = canSpendAnyWeek(spent.budget, spent.purchased) ? null : now.getTime();
+        setWeekBudget({ ...spent.budget, wallHitAt });
         setPurchasedWeeks(spent.purchased);
       }
       dispatch(action);

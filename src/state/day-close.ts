@@ -64,7 +64,7 @@ export function tomorrowAgendaFor(state: GameState | null): TomorrowAgenda | nul
     };
   }
 
-  return { kind: 'steady', line: `${state.companyName} keeps building overnight — check in tomorrow.` };
+  return { kind: 'steady', line: `${state.companyName} keeps building while you're away — check back soon.` };
 }
 
 /** Something the player can do right now, even with no weeks left today. */

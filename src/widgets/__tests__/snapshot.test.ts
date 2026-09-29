@@ -6,18 +6,19 @@ import { deriveWeeklyStats } from '../../lib/derived-stats';
 import { formatMoney, formatWeeks } from '../../lib/format';
 import { LOW_RUNWAY_WARNING_WEEKS } from '../../state/notification-content';
 import {
+  WEEK_REGEN_MS,
   WEEKS_BANK_CAP,
-  WEEKS_PER_DAY,
   type PurchasedWeeksPool,
   type WeekBudget,
 } from '../../state/week-budget';
-import { nextLocalMidnight, widgetSnapshot, widgetTimeline } from '../snapshot';
+import { widgetSnapshot, widgetTimeline } from '../snapshot';
 
 const NOW = new Date(2026, 6, 21, 14, 30); // local time, mid-afternoon
 
-const budget = (weeksRemaining: number, now = NOW): WeekBudget => ({
-  lastSessionDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+/** A budget whose regen clock started at `NOW` (or is idle, at the cap). */
+const budget = (weeksRemaining: number): WeekBudget => ({
   weeksRemaining,
+  regenFrom: weeksRemaining < WEEKS_BANK_CAP ? NOW.getTime() : null,
 });
 
 const purchased = (weeksRemaining: number): PurchasedWeeksPool => ({
@@ -160,58 +161,50 @@ describe('widgetSnapshot', () => {
   });
 });
 
-describe('nextLocalMidnight', () => {
-  it('is the upcoming local midnight, not a UTC one', () => {
-    const midnight = nextLocalMidnight(NOW);
-    expect(midnight.getHours()).toBe(0);
-    expect(midnight.getMinutes()).toBe(0);
-    expect(midnight.getDate()).toBe(22);
-    expect(midnight.getTime()).toBeGreaterThan(NOW.getTime());
-  });
-
-  it('does not mutate the date it is given', () => {
-    const now = new Date(NOW);
-    nextLocalMidnight(now);
-    expect(now.getTime()).toBe(NOW.getTime());
-  });
-});
-
 describe('widgetTimeline', () => {
-  it('is exactly two entries: now, and next local midnight', () => {
-    const entries = widgetTimeline(newGame('Acme', 1), budget(2), purchased(0), NOW);
-    expect(entries).toHaveLength(2);
+  it('is now, then one entry per week still to regenerate', () => {
+    const entries = widgetTimeline(newGame('Acme', 1), budget(7), purchased(0), NOW);
+    expect(entries).toHaveLength(1 + (WEEKS_BANK_CAP - 7));
     expect(entries[0].date.getTime()).toBe(NOW.getTime());
-    expect(entries[1].date.getTime()).toBe(nextLocalMidnight(NOW).getTime());
+    entries.slice(1).forEach((entry, i) => {
+      expect(entry.date.getTime()).toBe(NOW.getTime() + (i + 1) * WEEK_REGEN_MS);
+      expect(entry.props.weeksReady).toBe(7 + i + 1);
+    });
   });
 
-  it('forecasts the midnight grant on the second entry', () => {
+  it('counts an empty bank all the way back up to the cap', () => {
     const entries = widgetTimeline(newGame('Acme', 1), budget(0), purchased(0), NOW);
+    expect(entries).toHaveLength(WEEKS_BANK_CAP + 1);
     expect(entries[0].props.weeksReady).toBe(0);
-    expect(entries[1].props.weeksReady).toBe(WEEKS_PER_DAY);
+    expect(entries.at(-1)?.props.weeksReady).toBe(WEEKS_BANK_CAP);
   });
 
-  it('clamps the forecast at the bank cap', () => {
-    const nearCap = WEEKS_BANK_CAP - 1;
-    const entries = widgetTimeline(newGame('Acme', 1), budget(nearCap), purchased(0), NOW);
-    expect(entries[1].props.weeksReady).toBe(WEEKS_BANK_CAP);
+  it('carries partial progress: the first forecast lands where the running clock says', () => {
+    const halfway = { weeksRemaining: 3, regenFrom: NOW.getTime() - WEEK_REGEN_MS / 2 };
+    const entries = widgetTimeline(newGame('Acme', 1), halfway, purchased(0), NOW);
+    expect(entries[1].date.getTime()).toBe(NOW.getTime() + WEEK_REGEN_MS / 2);
+  });
+
+  it('is just the one entry at the cap', () => {
+    expect(widgetTimeline(newGame('Acme', 1), budget(WEEKS_BANK_CAP), purchased(0), NOW)).toHaveLength(1);
   });
 
   it('leaves purchased weeks out of the cap, on top of the forecast', () => {
-    // The daily refresh never touches the purchased pool, so it rides above the cap intact.
-    const entries = widgetTimeline(newGame('Acme', 1), budget(WEEKS_BANK_CAP), purchased(6), NOW);
-    expect(entries[0].props.weeksReady).toBe(WEEKS_BANK_CAP + 6);
+    // Regen never touches the purchased pool, so it rides above the cap intact.
+    const entries = widgetTimeline(newGame('Acme', 1), budget(WEEKS_BANK_CAP - 1), purchased(6), NOW);
+    expect(entries[0].props.weeksReady).toBe(WEEKS_BANK_CAP - 1 + 6);
     expect(entries[1].props.weeksReady).toBe(WEEKS_BANK_CAP + 6);
   });
 
   it('still forecasts with no run, so an idle tile stays truthful', () => {
     const entries = widgetTimeline(null, budget(0), purchased(0), NOW);
     expect(entries[0].props.status).toBe('none');
-    expect(entries[1].props.weeksReady).toBe(WEEKS_PER_DAY);
+    expect(entries[1].props.weeksReady).toBe(1);
   });
 
   it('survives pools that have not loaded yet', () => {
     const entries = widgetTimeline(newGame('Acme', 1), null, null, NOW);
+    expect(entries).toHaveLength(1);
     expect(entries[0].props.weeksReady).toBe(0);
-    expect(entries[1].props.weeksReady).toBe(0);
   });
 });

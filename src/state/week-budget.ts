@@ -1,5 +1,5 @@
 /**
- * Daily week-budget: a store-layer-only rate limit on `TICK` (PRD F12). Kept
+ * Free week-budget: a store-layer-only rate limit on `TICK` (PRD F12). Kept
  * entirely out of `src/game/` — the pure engine never sees a clock or a
  * `Date` — so this is plain, independently testable logic that `game-store.tsx`
  * wires up around `dispatch`. Every function here takes `now`
@@ -8,29 +8,42 @@
  */
 
 /**
- * Game-weeks granted per new local day — one "sprint". Raised from 5 to 10 on
- * Sep 29 2026 to match the paywall copy and the 10-week first day. It now
- * equals `WEEKS_BANK_CAP`, so a skipped day no longer banks anything extra.
+ * One free week regenerates every this many ms, up to `WEEKS_BANK_CAP` — a
+ * "lives" model. Replaced the single midnight refill on Sep 29 2026: the wall
+ * countdown used to read "8h 48m" for anyone who ran out mid-afternoon, and
+ * the wait depended on the hour the player happened to play. At 36 minutes an
+ * empty bank is full again in 6 hours. The one tunable in this module.
  */
-export const WEEKS_PER_DAY = 10;
-/** The budget never banks past this many weeks, no matter how many days are skipped. */
+export const WEEK_REGEN_MS = 36 * 60_000;
+/** The free budget never banks past this many weeks, however long the player is away. */
 export const WEEKS_BANK_CAP = 10;
 /**
- * Free weeks on a brand-new install's first day — originally double the daily
- * refill (then 5), so a first session isn't walled after ~2 minutes. Now the
- * same as `WEEKS_PER_DAY`; kept separate so the two can diverge again. Shipped from the
- * `initial-free-weeks-v1` experiment (Sep 2026): players advanced ~80% more
- * weeks with no drop in next-day return. Clamped to `WEEKS_BANK_CAP`.
+ * Free weeks on a brand-new install. Shipped from the `initial-free-weeks-v1`
+ * experiment (Sep 2026): players advanced ~80% more weeks with no drop in
+ * next-day return. Clamped to `WEEKS_BANK_CAP`.
  */
 export const INITIAL_FREE_WEEKS = 10;
 
 export interface WeekBudget {
-  /** Local calendar date (YYYY-MM-DD) the budget was last refreshed for. */
-  lastSessionDate: string;
   weeksRemaining: number;
+  /**
+   * Epoch ms the next free week started accruing from; it lands at
+   * `regenFrom + WEEK_REGEN_MS`. `null` while the bank is full, since nothing
+   * accrues then. Absent (not `null`) only on a save from the midnight-refill
+   * builds, which `refreshWeekBudget` converts on first read.
+   */
+  regenFrom?: number | null;
+  /**
+   * Epoch ms the player last ran out of every week (free and purchased) —
+   * stamped by the store when a spend empties both pools, cleared on the next
+   * week they advance. Feeds `returned_after_wall`.
+   */
+  wallHitAt?: number | null;
+  /** Legacy (midnight-refill builds): the local date the budget was last refreshed. Read once, on conversion. */
+  lastSessionDate?: string;
 }
 
-/** Local (not UTC) calendar-day key — refresh timing follows the player's own clock. */
+/** Local (not UTC) calendar-day key. */
 export function dateKey(now: Date): string {
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
@@ -38,25 +51,28 @@ export function dateKey(now: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** A brand-new budget, as granted on first install. */
-export function initialWeekBudget(now: Date, initialWeeks = WEEKS_PER_DAY): WeekBudget {
-  return {
-    lastSessionDate: dateKey(now),
-    weeksRemaining: Math.max(0, Math.min(WEEKS_BANK_CAP, initialWeeks)),
-  };
+/** A brand-new budget. Starts accruing straight away if it starts below the cap. */
+export function initialWeekBudget(now: Date, initialWeeks = WEEKS_BANK_CAP): WeekBudget {
+  const weeksRemaining = Math.max(0, Math.min(WEEKS_BANK_CAP, initialWeeks));
+  return { weeksRemaining, regenFrom: weeksRemaining < WEEKS_BANK_CAP ? now.getTime() : null };
 }
 
-/** Exact local-midnight instant when the next daily allowance becomes available. */
-export function nextWeekRefillAt(now: Date): Date {
-  const next = new Date(now);
-  next.setHours(24, 0, 0, 0);
-  return next;
+/** When the next free week lands, or `null` if the bank is full. */
+export function nextWeekRegenAt(budget: WeekBudget): Date | null {
+  if (budget.regenFrom == null) return null;
+  return new Date(budget.regenFrom + WEEK_REGEN_MS);
+}
+
+/** When the bank is back at `WEEKS_BANK_CAP`, or `null` if it already is. */
+export function weekBankFullAt(budget: WeekBudget): Date | null {
+  if (budget.regenFrom == null) return null;
+  const missing = WEEKS_BANK_CAP - budget.weeksRemaining;
+  return new Date(budget.regenFrom + missing * WEEK_REGEN_MS);
 }
 
 /**
- * Compact "time until refill" label for the wall's countdown: `5h 12m`,
- * `12m`, or `under a minute`. Rounds minutes *up*, so the label never says
- * `0m` while the wall is still up.
+ * Compact countdown label: `5h 12m`, `12m`, or `under a minute`. Rounds
+ * minutes *up*, so the label never says `0m` while the wall is still up.
  */
 export function formatRefillCountdown(msUntilRefill: number): string {
   if (msUntilRefill < 60_000) return 'under a minute';
@@ -67,17 +83,59 @@ export function formatRefillCountdown(msUntilRefill: number): string {
 }
 
 /**
- * Grants a new day's allotment exactly once per local calendar-day change,
- * banked to `WEEKS_BANK_CAP`. Skipping several days still only grants one
- * day's worth — the cap (not per-day accumulation across the gap) is what
- * keeps a week-long absence from handing back a huge lump sum.
+ * Ticking clock label for the next week: `29:42`, or `1:02:03` past an hour.
+ * Rounds seconds *up*, so it reads `0:01` rather than `0:00` until the week
+ * actually lands.
+ */
+export function formatClockCountdown(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
+}
+
+/**
+ * Credits every week that has regenerated by `now`, capped at
+ * `WEEKS_BANK_CAP`. Partial progress carries over: the anchor advances by
+ * whole intervals only, so checking at 50 minutes credits one week and leaves
+ * the next one 22 minutes out.
+ *
+ * Returns the **same object** when nothing changed. The store polls this, and
+ * the wall latch, the persist effect and the widget sync all key on the
+ * budget's identity — a fresh object per poll would un-latch the wall and
+ * rewrite storage every few seconds.
+ *
+ * A save from the midnight-refill builds (no `regenFrom` key) is converted
+ * here: it keeps the midnight refill it was promised if a new day has begun,
+ * then starts accruing from `now`.
  */
 export function refreshWeekBudget(budget: WeekBudget, now: Date): WeekBudget {
-  const today = dateKey(now);
-  if (today === budget.lastSessionDate) return budget;
+  const nowMs = now.getTime();
+  if (budget.regenFrom === undefined) {
+    const weeksRemaining =
+      budget.lastSessionDate !== undefined && budget.lastSessionDate !== dateKey(now)
+        ? WEEKS_BANK_CAP
+        : Math.min(WEEKS_BANK_CAP, budget.weeksRemaining);
+    return {
+      weeksRemaining,
+      regenFrom: weeksRemaining < WEEKS_BANK_CAP ? nowMs : null,
+      wallHitAt: budget.wallHitAt ?? null,
+    };
+  }
+  if (budget.weeksRemaining >= WEEKS_BANK_CAP) {
+    return budget.regenFrom === null ? budget : { ...budget, regenFrom: null };
+  }
+  // Below the cap with no anchor shouldn't happen; start accruing now.
+  // Likewise when the clock has been set back past the anchor.
+  if (budget.regenFrom === null || nowMs < budget.regenFrom) return { ...budget, regenFrom: nowMs };
+  const gained = Math.floor((nowMs - budget.regenFrom) / WEEK_REGEN_MS);
+  if (gained === 0) return budget;
+  const weeksRemaining = Math.min(WEEKS_BANK_CAP, budget.weeksRemaining + gained);
   return {
-    lastSessionDate: today,
-    weeksRemaining: Math.min(WEEKS_BANK_CAP, budget.weeksRemaining + WEEKS_PER_DAY),
+    ...budget,
+    weeksRemaining,
+    regenFrom: weeksRemaining >= WEEKS_BANK_CAP ? null : budget.regenFrom + gained * WEEK_REGEN_MS,
   };
 }
 
@@ -85,14 +143,22 @@ export function canSpendWeek(budget: WeekBudget): boolean {
   return budget.weeksRemaining > 0;
 }
 
-/** Spend one week (one TICK). Never goes below 0. */
-export function spendWeek(budget: WeekBudget): WeekBudget {
-  return { ...budget, weeksRemaining: Math.max(0, budget.weeksRemaining - 1) };
+/**
+ * Spend one week (one TICK). Never goes below 0. Spending from a full bank
+ * starts the regen clock; spending below the cap leaves a running clock alone,
+ * so playing never delays the next week.
+ */
+export function spendWeek(budget: WeekBudget, now: Date): WeekBudget {
+  return {
+    ...budget,
+    weeksRemaining: Math.max(0, budget.weeksRemaining - 1),
+    regenFrom: budget.regenFrom ?? now.getTime(),
+  };
 }
 
 /**
  * Weeks bought via IAP (PRD week-packs). Kept as a pool entirely separate
- * from the free daily `WeekBudget`: unlike the free budget it is exempt from
+ * from the free `WeekBudget`: unlike the free budget it is exempt from
  * `WEEKS_BANK_CAP`, never expires, and outlives `NEW_GAME` — a purchase is a
  * durable entitlement, not a daily allowance.
  *
@@ -151,7 +217,7 @@ export function canSpendAnyWeek(budget: WeekBudget, purchased: PurchasedWeeksPoo
 }
 
 /**
- * The daily wall: both pools spent, and not bypassed by dev free play. The
+ * The wall: both pools spent, and not bypassed by dev free play. The
  * single definition shared by the store's `TICK` gate and the chrome that
  * renders the wall — they have to agree, because the chrome opens the
  * week-pack sheet on the same press whose `TICK` the store swallows to emit
@@ -174,14 +240,15 @@ export function isWeekBudgetExhausted(
 /**
  * Spend one week, free budget first and the purchased pool only once the
  * free budget is exhausted — a purchase should never feel like it "ate" the
- * daily free allotment. No-op if both pools are already empty; callers
+ * free allotment. No-op if both pools are already empty; callers
  * should gate on `canSpendAnyWeek` first.
  */
 export function spendWeekFromPools(
   budget: WeekBudget,
   purchased: PurchasedWeeksPool,
+  now: Date,
 ): { budget: WeekBudget; purchased: PurchasedWeeksPool } {
-  if (canSpendWeek(budget)) return { budget: spendWeek(budget), purchased };
+  if (canSpendWeek(budget)) return { budget: spendWeek(budget, now), purchased };
   if (purchased.weeksRemaining > 0) {
     return {
       budget,

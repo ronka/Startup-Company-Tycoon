@@ -13,6 +13,7 @@
 import PostHog from 'posthog-react-native';
 
 import { ANALYTICS_RELEASE_PROPERTIES } from '@/constants/app-release';
+import { WEEK_REGEN_MS } from '@/state/week-budget';
 
 import { POSTHOG_API_KEY, POSTHOG_HOST } from './config';
 
@@ -23,11 +24,15 @@ export const posthog = new PostHog(POSTHOG_API_KEY, {
 });
 
 /**
- * Attach the readable release and Expo's canonical update ID to every event.
+ * Attach the readable release and Expo's canonical update ID to every event,
+ * plus `week_regen_minutes` — the free-week regen interval this build runs —
+ * so any event can be split by it if the interval is ever tuned or tested.
  * This is exported because `posthog.reset()` clears registered properties.
  */
 export function registerAnalyticsRelease(): void {
-  posthog.register(ANALYTICS_RELEASE_PROPERTIES).catch(() => {});
+  posthog
+    .register({ ...ANALYTICS_RELEASE_PROPERTIES, week_regen_minutes: WEEK_REGEN_MS / 60_000 })
+    .catch(() => {});
 }
 
 registerAnalyticsRelease();
