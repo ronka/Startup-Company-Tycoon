@@ -2,7 +2,7 @@
 
 Created: September 29, 2026. Source: PostHog project [startup-company-tycoon, 505800](https://us.posthog.com/project/505800), covering **August 30 to September 29, 2026** (30 days, UTC). None of the users counted below are in the test-account cohort (404415). This follows up [the September 8 quick wins](2026-09-08-posthog-quick-wins.md).
 
-Status: **Items 0, 2, 3 and 4, plus item 1 steps 3 to 5, are implemented in the workspace** (not committed, and no OTA has been published). Still open: item 0's PostHog steps, item 1 steps 1 and 2, and item 5 (see each item).
+Status: **Items 0, 2, 3 and 4, plus item 1 steps 3 to 5, are implemented in the workspace** (committed in `c4ee569` and published as OTA 1.0.4-20 on Sep 29, update group `d044a891-2680-48f1-9505-71b6dfc1344f`). Still open: item 0's PostHog steps, item 1 steps 1 and 2, and item 5 (see each item).
 
 ## Headline
 
@@ -24,7 +24,7 @@ Players get into the game fine, but they don't come back.
 
 ## 0. Ship the initial-weeks experiment: 10 weeks (implemented)
 Status: blocked
-Blocker: code is done. You approved ending the experiment on Sep 29, but the PostHog MCP connection lacks `experiment:write` / `feature_flag:write`, so the experiment couldn't be ended from here. Reconnect with those scopes, or end it in the PostHog UI (ship `test`). The OTA still needs its own go-ahead.
+Blocker: code is done. You approved ending the experiment on Sep 29, but the PostHog MCP connection lacks `experiment:write` / `feature_flag:write`, so the experiment couldn't be ended from here. Reconnect with those scopes, or end it in the PostHog UI (ship `test`). The OTA (1.0.4-20) was published on Sep 29.
 
 Readout for [experiment 461830](https://us.posthog.com/project/505800/experiments/461830), flag `initial-free-weeks-v1`, Sep 8 to 29:
 
