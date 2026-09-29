@@ -116,13 +116,25 @@ export const EVENTS = {
    */
   NOTIFICATION_PERMISSION_REQUESTED: 'notification_permission_requested',
   REENGAGEMENT_NOTIFICATION_SCHEDULED: 'reengagement_notification_scheduled',
+  /**
+   * The app backgrounded at the wall, with notifications allowed — `{
+   * delay_seconds, skipped }`. `delay_seconds` is when the "your sprint's
+   * ready" nudge lands (the free bank is full); `skipped` is set instead when
+   * it wasn't scheduled: 'quiet_hours', 'near_morning_nudge' or 'passed'.
+   */
+  WEEKS_BACK_NOTIFICATION_SCHEDULED: 'weeks_back_notification_scheduled',
+  /**
+   * A notification was tapped — `{ url, reminder_day, reminder_kind }`.
+   * `reminder_kind` is 'weeks_back' for the bank-full nudge (its
+   * `reminder_day` is null) and 'agenda' for the day 1/3/7 sequence.
+   */
   NOTIFICATION_OPENED: 'notification_opened',
   /** The end-of-day panel was shown — `{ agenda_kind, action_kind }`: the tomorrow hook, and the 💡 tip if any. */
   DAY_COMPLETE_SHOWN: 'day_complete_shown',
   /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me' | 'action_tip'. */
   DAY_COMPLETE_DISMISSED: 'day_complete_dismissed',
   /**
-   * "Remind me at 9am" was tapped on the end-of-day panel — `{ agenda_kind }`.
+   * "Notify me when weeks are back" was tapped on the end-of-day panel — `{ agenda_kind }`.
    * The OS dialog follows as `notification_permission_requested` with
    * `trigger: reminder_optin`.
    */

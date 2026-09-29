@@ -5,12 +5,24 @@ import { useEffect, useRef } from 'react';
 import { AppState, Platform } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
-import { notificationContentFor, progressReminderContentFor } from '@/state/notification-content';
+import {
+  notificationContentFor,
+  progressReminderContentFor,
+  weeksBackContentFor,
+} from '@/state/notification-content';
 import { requestNotificationPermissionOnce } from '@/state/notification-permission';
-import { REENGAGEMENT_HOUR, REMINDER_SEQUENCE, secondsUntilReminder } from '@/state/notification-schedule';
+import {
+  REENGAGEMENT_HOUR,
+  REMINDER_SEQUENCE,
+  secondsUntilReminder,
+  secondsUntilWeeksBack,
+} from '@/state/notification-schedule';
 import { useGame } from '@/state/game-store';
+import { isWeekBudgetExhausted, weekBankFullAt, type PurchasedWeeksPool, type WeekBudget } from '@/state/week-budget';
 
 const HAS_LAUNCHED_BEFORE_KEY = 'startup-tycoon/notifications/has-launched-before';
+/** Fixed, so each backgrounding replaces the one pending bank-full nudge rather than stacking. */
+const WEEKS_BACK_ID = 'startup-tycoon-weeks-back';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -72,17 +84,57 @@ async function scheduleReengagementNotification(state: Parameters<typeof notific
 }
 
 /**
+ * The "your sprint's ready" nudge, for the moment the free-week bank is full
+ * again. Only for a player at the wall — both pools empty — since that's the
+ * player with nothing to do until then; one mid-sprint would be told about
+ * weeks they never ran out of. Quiet hours and the 09:00 nudge can each veto
+ * it (`secondsUntilWeeksBack`).
+ */
+async function scheduleWeeksBackNotification(
+  state: Parameters<typeof weeksBackContentFor>[0],
+  weekBudget: WeekBudget | null,
+  purchasedWeeks: PurchasedWeeksPool | null,
+  devFreePlay: boolean,
+) {
+  if (IS_WEB) return;
+  await Notifications.cancelScheduledNotificationAsync(WEEKS_BACK_ID).catch(() => {});
+  const content = weeksBackContentFor(state);
+  const fullAt = weekBudget ? weekBankFullAt(weekBudget) : null;
+  if (!content || !fullAt || !isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay)) return;
+  const timing = secondsUntilWeeksBack(new Date(), fullAt);
+  if ('seconds' in timing) {
+    await Notifications.scheduleNotificationAsync({
+      identifier: WEEKS_BACK_ID,
+      content: { title: content.title, body: content.body, data: { url: '/hq', reminder_kind: 'weeks_back' } },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: timing.seconds },
+    });
+  }
+  // Same rule as the sequence above: only counted where it can be delivered.
+  const permission = await Notifications.getPermissionsAsync().catch(() => null);
+  if (!permission?.granted) return;
+  track(EVENTS.WEEKS_BACK_NOTIFICATION_SCHEDULED, {
+    delay_seconds: 'seconds' in timing ? timing.seconds : null,
+    skipped: 'skipped' in timing ? timing.skipped : null,
+  });
+}
+
+/**
  * Invisible, app-wide manager for Task 16's local re-engagement push:
  * requests permission as a fallback (deferred to the session after the very
  * first launch, per PRD), reschedules the day 1 / 3 / 7 reminder sequence
- * whenever the app backgrounds, and deep-links back into the run on tap. A no-op everywhere
+ * and the bank-full nudge whenever the app backgrounds, and deep-links back
+ * into the run on tap. A no-op everywhere
  * on web — `expo-notifications` has no web backend, and permission prompts
  * would be meaningless there anyway.
  */
 export function NotificationManager() {
-  const { state } = useGame();
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const { state, weekBudget, purchasedWeeks, devFreePlay } = useGame();
+  // The most recent inputs, so the AppState listener schedules from what is
+  // true now rather than whatever was current when it was registered.
+  const latest = useRef({ state, weekBudget, purchasedWeeks, devFreePlay });
+  useEffect(() => {
+    latest.current = { state, weekBudget, purchasedWeeks, devFreePlay };
+  }, [state, weekBudget, purchasedWeeks, devFreePlay]);
 
   // Tapping a delivered notification (cold start or from background) deep-links in.
   useEffect(() => {
@@ -91,8 +143,13 @@ export function NotificationManager() {
     function redirect(notification: Notifications.Notification) {
       const url = notification.request.content.data?.url;
       const reminderDay = notification.request.content.data?.reminder_day;
+      const reminderKind = notification.request.content.data?.reminder_kind;
       if (typeof url === 'string') {
-        track(EVENTS.NOTIFICATION_OPENED, { url, reminder_day: typeof reminderDay === 'number' ? reminderDay : null });
+        track(EVENTS.NOTIFICATION_OPENED, {
+          url,
+          reminder_day: typeof reminderDay === 'number' ? reminderDay : null,
+          reminder_kind: typeof reminderKind === 'string' ? reminderKind : 'agenda',
+        });
         router.push(url as Parameters<typeof router.push>[0]);
       }
     }
@@ -106,7 +163,7 @@ export function NotificationManager() {
     return () => subscription.remove();
   }, []);
 
-  // *Fallback* opt-in path, for players who never tapped "Remind me at 9am"
+  // *Fallback* opt-in path, for players who never tapped "Notify me when weeks are back"
   // on the end-of-day panel — the primary ask (`NotificationPermissionAsk`,
   // mounted by `game-chrome.tsx`), where the player has just felt the reason
   // for it. Most players never reach this one: it needs a second launch, and the
@@ -131,13 +188,20 @@ export function NotificationManager() {
     };
   }, []);
 
-  // Reschedule the reminder sequence, with fresh state-derived content,
-  // every time the app leaves the foreground.
+  // Reschedule the reminder sequence and the bank-full nudge, with fresh
+  // state-derived content, every time the app leaves the foreground.
   useEffect(() => {
     if (IS_WEB) return;
     const subscription = AppState.addEventListener('change', (next) => {
       if (next !== 'background' && next !== 'inactive') return;
-      scheduleReengagementNotification(stateRef.current).catch(() => {});
+      const current = latest.current;
+      scheduleReengagementNotification(current.state).catch(() => {});
+      scheduleWeeksBackNotification(
+        current.state,
+        current.weekBudget,
+        current.purchasedWeeks,
+        current.devFreePlay,
+      ).catch(() => {});
     });
     return () => subscription.remove();
   }, []);

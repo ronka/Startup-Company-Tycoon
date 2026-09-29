@@ -86,7 +86,7 @@ export function DayCompleteSheet({
 
       {onRemindMe ? (
         <>
-          <PrimaryButton label="Remind me at 9am" onPress={onRemindMe} />
+          <PrimaryButton label="Notify me when weeks are back" onPress={onRemindMe} />
           <PrimaryButton label="Back soon" variant="ghost" onPress={onDismiss} />
         </>
       ) : (

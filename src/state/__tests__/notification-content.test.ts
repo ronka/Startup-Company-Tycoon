@@ -8,7 +8,9 @@ import {
   LOW_RUNWAY_WARNING_WEEKS,
   notificationContentFor,
   progressReminderContentFor,
+  weeksBackContentFor,
 } from '../notification-content';
+import { WEEKS_BANK_CAP } from '../week-budget';
 
 describe('notificationContentFor', () => {
   it('is null with no active game', () => {
@@ -119,5 +121,19 @@ describe('progressReminderContentFor', () => {
     expect(content?.kind).toBe('progress');
     expect(content?.title).toContain('Acme');
     expect(content?.body).toMatch(/^Your stake is /);
+  });
+});
+
+describe('weeksBackContentFor', () => {
+  it('names the full bank and the company', () => {
+    const content = weeksBackContentFor(newGame('Acme', 1));
+    expect(content?.kind).toBe('weeks_back');
+    expect(content?.body).toContain(`${WEEKS_BANK_CAP} free weeks`);
+    expect(content?.body).toContain('Acme');
+  });
+
+  it('is null with no live run', () => {
+    expect(weeksBackContentFor(null)).toBeNull();
+    expect(weeksBackContentFor({ ...newGame('Acme', 1), gameOver: 'bankruptcy', finalScore: 0 })).toBeNull();
   });
 });

@@ -8,6 +8,7 @@
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney } from '@/lib/format';
 import { AGENDA_RUNWAY_WEEKS, raiseAvailable, tomorrowAgendaFor, type TomorrowAgenda } from '@/state/day-close';
+import { WEEKS_BANK_CAP } from '@/state/week-budget';
 import type { GameState } from '@/game/types';
 
 export interface NotificationContent {
@@ -15,9 +16,10 @@ export interface NotificationContent {
   body: string;
   /**
    * Which rung produced it — the end-of-day panel's `agenda_kind` vocabulary,
-   * plus `raise` (see below) and `progress` for the later reminders. Analytics only.
+   * plus `raise` (see below), `progress` for the later reminders and
+   * `weeks_back` for the free-week bank refilling. Analytics only.
    */
-  kind: TomorrowAgenda['kind'] | 'raise' | 'progress';
+  kind: TomorrowAgenda['kind'] | 'raise' | 'progress' | 'weeks_back';
 }
 
 /** Runway at or below this many weeks is worth a standalone warning — the panel's threshold, by construction. */
@@ -83,5 +85,18 @@ export function progressReminderContentFor(state: GameState | null): Notificatio
     kind: 'progress',
     title: `${state.companyName} is still waiting`,
     body: `Your stake is ${formatMoney(stake)} — your company's still waiting on you.`,
+  };
+}
+
+/**
+ * The bank-full nudge: the free weeks the player ran out of have all
+ * regenerated. Null when there's no live run to point back at.
+ */
+export function weeksBackContentFor(state: GameState | null): NotificationContent | null {
+  if (!state || state.gameOver) return null;
+  return {
+    kind: 'weeks_back',
+    title: "Your sprint's ready",
+    body: `${WEEKS_BANK_CAP} free weeks are back — ${state.companyName} is waiting on you.`,
   };
 }

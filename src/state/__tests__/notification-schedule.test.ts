@@ -5,6 +5,7 @@ import {
   REMINDER_SEQUENCE,
   secondsUntilNextLocalHour,
   secondsUntilReminder,
+  secondsUntilWeeksBack,
 } from '../notification-schedule';
 
 describe('secondsUntilNextLocalHour', () => {
@@ -71,5 +72,29 @@ describe('secondsUntilReminder', () => {
 
   it('gives every reminder in the sequence a distinct id', () => {
     expect(new Set(REMINDER_SEQUENCE.map((r) => r.id)).size).toBe(REMINDER_SEQUENCE.length);
+  });
+});
+
+describe('secondsUntilWeeksBack', () => {
+  const at = (h: number, m = 0) => new Date(2026, 8, 29, h, m, 0);
+
+  it('lands exactly when the bank is full, in waking hours', () => {
+    expect(secondsUntilWeeksBack(at(14), at(20))).toEqual({ seconds: 6 * 3600 });
+  });
+
+  it('stays quiet overnight, from 22:00 until 08:00', () => {
+    expect(secondsUntilWeeksBack(at(17), at(22))).toEqual({ skipped: 'quiet_hours' });
+    expect(secondsUntilWeeksBack(at(1), at(7, 59))).toEqual({ skipped: 'quiet_hours' });
+    expect(secondsUntilWeeksBack(at(2), at(8))).not.toEqual({ skipped: 'quiet_hours' });
+  });
+
+  it('defers to the 09:00 nudge when it would land within an hour of it', () => {
+    expect(secondsUntilWeeksBack(at(3), at(8, 30))).toEqual({ skipped: 'near_morning_nudge' });
+    expect(secondsUntilWeeksBack(at(4), at(9, 59))).toEqual({ skipped: 'near_morning_nudge' });
+    expect(secondsUntilWeeksBack(at(4), at(10))).toEqual({ seconds: 6 * 3600 });
+  });
+
+  it('skips a bank that is already full', () => {
+    expect(secondsUntilWeeksBack(at(14), at(14))).toEqual({ skipped: 'passed' });
   });
 });

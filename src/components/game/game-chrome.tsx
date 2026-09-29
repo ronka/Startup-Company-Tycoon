@@ -100,10 +100,10 @@ export function GameChrome() {
   const [dayCompleteShownFor, setDayCompleteShownFor] = useState<string | null>(null);
   const [dayCompleteLoaded, setDayCompleteLoaded] = useState(false);
   const [dayCompleteVisible, setDayCompleteVisible] = useState(false);
-  // Whether the closing panel may offer "Remind me at 9am": only while the
+  // Whether the closing panel may offer "Notify me when weeks are back": only while the
   // install's one OS permission shot is unspent. Checked when the panel opens.
   const [reminderOfferable, setReminderOfferable] = useState(false);
-  // Set when the player taps "Remind me at 9am", which closes the panel and
+  // Set when the player taps "Notify me when weeks are back", which closes the panel and
   // then mounts the permission ask below. Asking only after the tap (instead of
   // on any dismissal, as before) means the system dialog never appears
   // unannounced; asking after the close keeps it out of the frame the sheet is
@@ -248,7 +248,7 @@ export function GameChrome() {
 
         {/* The daily wall is the one moment the player has just felt why a nudge
             is worth allowing. Mounting is the ask, and it waits for both the
-            player's "Remind me at 9am" tap and the panel's dismissal: 24% of
+            player's "Notify me when weeks are back" tap and the panel's dismissal: 24% of
             players granted the old unannounced dialog here, and presenting it
             into the sheet's frame hangs iOS (docs/bug-stuck-decision-modal.md). */}
         {reminderOptedIn ? <NotificationPermissionAsk trigger="reminder_optin" /> : null}

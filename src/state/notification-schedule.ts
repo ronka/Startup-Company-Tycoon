@@ -18,8 +18,7 @@ export const REENGAGEMENT_HOUR = 9;
  */
 export function secondsUntilNextLocalHour(now: Date, hour: number): number {
   // Local-time constructor on purpose: the nudge should land on the player's
-  // own morning, matching how `dateKey` in `week-budget.ts` decides when the
-  // daily budget refreshes. The two must agree on what "a day" means.
+  // own morning, on the same local calendar `dateKey` in `week-budget.ts` uses.
   const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0, 0);
   // `<=`, not `<`: landing exactly on the hour must roll to tomorrow, never
   // return 0 — a zero-second trigger would fire immediately.
@@ -58,4 +57,36 @@ export function secondsUntilReminder(now: Date, hour: number, day: number): numb
   const first = new Date(now.getTime() + secondsUntilNextLocalHour(now, hour) * 1000);
   const target = new Date(first.getFullYear(), first.getMonth(), first.getDate() + (day - 1), hour, 0, 0, 0);
   return Math.round((target.getTime() - now.getTime()) / 1000);
+}
+
+/** Local hours (24h) the "weeks are back" nudge stays quiet in: from 22:00 until 08:00. */
+export const QUIET_HOURS = { start: 22, end: 8 } as const;
+
+/**
+ * Closer than this to the 09:00 nudge and the "weeks are back" one is dropped:
+ * two notifications inside an hour of each other read as spam.
+ */
+export const WEEKS_BACK_MIN_GAP_SECONDS = 60 * 60;
+
+/** Why `secondsUntilWeeksBack` declined to schedule — the event's `skipped` prop. */
+export type WeeksBackSkip = 'passed' | 'quiet_hours' | 'near_morning_nudge';
+
+/**
+ * Seconds from `now` until the free-week bank is full again (`fullAt`), or
+ * why that instant isn't worth a notification. A bank that fills overnight, or
+ * right beside the 09:00 nudge, is left to that nudge — it lands after the
+ * weeks are back anyway.
+ */
+export function secondsUntilWeeksBack(
+  now: Date,
+  fullAt: Date,
+): { seconds: number } | { skipped: WeeksBackSkip } {
+  const seconds = Math.round((fullAt.getTime() - now.getTime()) / 1000);
+  if (seconds <= 0) return { skipped: 'passed' };
+  const hour = fullAt.getHours();
+  if (hour >= QUIET_HOURS.start || hour < QUIET_HOURS.end) return { skipped: 'quiet_hours' };
+  if (Math.abs(seconds - secondsUntilNextLocalHour(now, REENGAGEMENT_HOUR)) < WEEKS_BACK_MIN_GAP_SECONDS) {
+    return { skipped: 'near_morning_nudge' };
+  }
+  return { seconds };
 }
