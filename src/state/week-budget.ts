@@ -83,16 +83,17 @@ export function formatRefillCountdown(msUntilRefill: number): string {
 }
 
 /**
- * Ticking clock label for the next week: `29:42`, or `1:02:03` past an hour.
- * Rounds seconds *up*, so it reads `0:01` rather than `0:00` until the week
- * actually lands.
+ * Ticking label for the next week: `22m 50s`, `1h 2m 3s` past an hour, or
+ * `45s` under a minute. Rounds seconds *up*, so it reads `1s` rather than
+ * `0s` until the week actually lands.
  */
 export function formatClockCountdown(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1_000));
   const hours = Math.floor(totalSeconds / 3_600);
   const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, '0');
-  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
 /**

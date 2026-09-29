@@ -475,14 +475,13 @@ function RefillCountdown({ weekBudget }: { weekBudget: WeekBudget }) {
       const now = Date.now();
       const remaining = Math.max(0, nextAt - now);
       setProgress({
-        // The unit spelled out: a bare `25:17` reads as a time of day.
-        next: `${formatClockCountdown(remaining)} ${remaining >= 3_600_000 ? 'hours' : 'minutes'}`,
+        next: formatClockCountdown(remaining),
         // Only worth a second number once it says something the first doesn't.
         full: fullAt !== null && fullAt > nextAt ? formatRefillCountdown(Math.max(0, fullAt - now)) : null,
         fraction: Math.min(1, Math.max(0, 1 - remaining / WEEK_REGEN_MS)),
       });
     };
-    // Every second: the headline is a ticking mm:ss clock.
+    // Every second: the headline counts down in seconds.
     const timer = setInterval(update, 1_000);
     // First read deferred a tick rather than run synchronously in the effect.
     const first = setTimeout(update, 0);

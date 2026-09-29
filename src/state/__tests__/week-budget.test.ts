@@ -65,14 +65,18 @@ describe('formatRefillCountdown', () => {
 
 describe('formatClockCountdown', () => {
   it('ticks minutes and seconds, rounding seconds up', () => {
-    expect(formatClockCountdown(29 * 60_000 + 41_001)).toBe('29:42');
-    expect(formatClockCountdown(5_000)).toBe('0:05');
-    expect(formatClockCountdown(1)).toBe('0:01');
+    expect(formatClockCountdown(22 * 60_000 + 49_001)).toBe('22m 50s');
+    expect(formatClockCountdown(5 * 60_000)).toBe('5m 0s');
   });
 
-  it('adds hours past the hour, and never goes negative', () => {
-    expect(formatClockCountdown((62 * 60 + 3) * 1_000)).toBe('1:02:03');
-    expect(formatClockCountdown(-5)).toBe('0:00');
+  it('drops the minutes under a minute, and never goes negative', () => {
+    expect(formatClockCountdown(45_000)).toBe('45s');
+    expect(formatClockCountdown(1)).toBe('1s');
+    expect(formatClockCountdown(-5)).toBe('0s');
+  });
+
+  it('adds hours past the hour', () => {
+    expect(formatClockCountdown((62 * 60 + 3) * 1_000)).toBe('1h 2m 3s');
   });
 });
 
