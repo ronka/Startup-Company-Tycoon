@@ -7,13 +7,18 @@
  * drive it with a fixed `Date` instead of mocking global time.
  */
 
-/** Game-weeks granted per new local day. */
-export const WEEKS_PER_DAY = 5;
+/**
+ * Game-weeks granted per new local day — one "sprint". Raised from 5 to 10 on
+ * Sep 29 2026 to match the paywall copy and the 10-week first day. It now
+ * equals `WEEKS_BANK_CAP`, so a skipped day no longer banks anything extra.
+ */
+export const WEEKS_PER_DAY = 10;
 /** The budget never banks past this many weeks, no matter how many days are skipped. */
 export const WEEKS_BANK_CAP = 10;
 /**
- * Free weeks on a brand-new install's first day — double the daily refill, so
- * a first session isn't walled after ~2 minutes. Shipped from the
+ * Free weeks on a brand-new install's first day — originally double the daily
+ * refill (then 5), so a first session isn't walled after ~2 minutes. Now the
+ * same as `WEEKS_PER_DAY`; kept separate so the two can diverge again. Shipped from the
  * `initial-free-weeks-v1` experiment (Sep 2026): players advanced ~80% more
  * weeks with no drop in next-day return. Clamped to `WEEKS_BANK_CAP`.
  */

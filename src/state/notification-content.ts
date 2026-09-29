@@ -7,34 +7,43 @@
 
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney } from '@/lib/format';
-import { AGENDA_RUNWAY_WEEKS, tomorrowAgendaFor, type TomorrowAgenda } from '@/state/day-close';
+import { AGENDA_RUNWAY_WEEKS, raiseAvailable, tomorrowAgendaFor, type TomorrowAgenda } from '@/state/day-close';
 import type { GameState } from '@/game/types';
 
 export interface NotificationContent {
   title: string;
   body: string;
   /**
-   * Which rung produced it — the same vocabulary as the end-of-day panel's
-   * `agenda_kind`, plus `progress` for the later reminders. Analytics only.
+   * Which rung produced it — the end-of-day panel's `agenda_kind` vocabulary,
+   * plus `raise` (see below) and `progress` for the later reminders. Analytics only.
    */
-  kind: TomorrowAgenda['kind'] | 'progress';
+  kind: TomorrowAgenda['kind'] | 'raise' | 'progress';
 }
 
 /** Runway at or below this many weeks is worth a standalone warning — the panel's threshold, by construction. */
 export const LOW_RUNWAY_WARNING_WEEKS = AGENDA_RUNWAY_WEEKS;
 
 /**
- * The next-morning nudge. It climbs the *same* ladder as the end-of-day
- * panel's "Tomorrow" line (`tomorrowAgendaFor`) rather than keeping its own:
- * the panel names a thing, and the 09:00 notification has to name the same
- * thing or the pair reads as a bug. Until Sep 2026 this had no `raise` or
- * `event-soon` rung, so most players got the generic line.
+ * The next-morning nudge. It climbs the end-of-day panel's "Tomorrow" ladder
+ * (`tomorrowAgendaFor`) rather than keeping its own: the panel names a thing,
+ * and the 09:00 notification has to name the same thing or the pair reads as a
+ * bug. One addition: an available raise outranks `event-soon` and `steady`
+ * here. The panel shows it as a "do it now" tip instead of a tomorrow line,
+ * and by 09:00 that tip *is* today's news.
  *
  * Null when there's no live run to point back at (no game, or it already ended).
  */
 export function notificationContentFor(state: GameState | null): NotificationContent | null {
   const agenda = tomorrowAgendaFor(state);
   if (!state || !agenda) return null;
+
+  if ((agenda.kind === 'event-soon' || agenda.kind === 'steady') && raiseAvailable(state)) {
+    return {
+      kind: 'raise',
+      title: 'Investors are ready',
+      body: `${state.companyName} is clear to raise — the terms are waiting on the Money tab.`,
+    };
+  }
 
   switch (agenda.kind) {
     case 'decision':
@@ -51,12 +60,6 @@ export function notificationContentFor(state: GameState | null): NotificationCon
         body: `Runway is down to ${Math.max(0, Math.floor(runway))} weeks.`,
       };
     }
-    case 'raise':
-      return {
-        kind: agenda.kind,
-        title: 'Investors are ready',
-        body: `${state.companyName} is clear to raise — the terms are waiting on the Money tab.`,
-      };
     case 'event-soon':
       return { kind: agenda.kind, title: state.companyName, body: agenda.line };
     case 'steady':

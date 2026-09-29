@@ -94,9 +94,9 @@ export const EVENTS = {
   NOTIFICATION_PERMISSION_REQUESTED: 'notification_permission_requested',
   REENGAGEMENT_NOTIFICATION_SCHEDULED: 'reengagement_notification_scheduled',
   NOTIFICATION_OPENED: 'notification_opened',
-  /** The end-of-day panel was shown — `{ agenda_kind }` is the hook it offered. */
+  /** The end-of-day panel was shown — `{ agenda_kind, action_kind }`: the tomorrow hook, and the 💡 tip if any. */
   DAY_COMPLETE_SHOWN: 'day_complete_shown',
-  /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me'. */
+  /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me' | 'action_tip'. */
   DAY_COMPLETE_DISMISSED: 'day_complete_dismissed',
   /**
    * "Remind me at 9am" was tapped on the end-of-day panel — `{ agenda_kind }`.
@@ -104,6 +104,11 @@ export const EVENTS = {
    * `trigger: reminder_optin`.
    */
   REMINDER_OPTIN_TAPPED: 'reminder_optin_tapped',
+  /**
+   * The 💡 "While you wait" tip was tapped — `{ kind, surface }`, where
+   * `surface` is 'wall' (under the sprint countdown) or 'day_complete'.
+   */
+  ACTION_TIP_TAPPED: 'action_tip_tapped',
 
   // First-run hints / debug
   /** A contextual hint became visible (won its screen's single hint slot). */

@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { purchasesAvailable } from '@/purchases';
 import { EVENTS, track } from '@/analytics/events';
+import { ActionTip } from '@/components/game/action-tip';
 import { BuyWeeksSheet } from '@/components/game/buy-weeks-sheet';
 import { DayCompleteSheet } from '@/components/game/day-complete-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
@@ -19,7 +21,7 @@ import { Spacing } from '@/constants/theme';
 import { isNotableWeek } from '@/game/digest';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
-import { tomorrowAgendaFor } from '@/state/day-close';
+import { actionNowFor, tomorrowAgendaFor, type ActionNow } from '@/state/day-close';
 import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
 import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
@@ -141,6 +143,7 @@ export function GameChrome() {
   const weekEntries = state ? state.newsLog.filter((entry) => entry.week === state.week) : [];
   const notable = isNotableWeek(weekEntries);
   const agenda = useMemo(() => tomorrowAgendaFor(state), [state]);
+  const actionNow = useMemo(() => actionNowFor(state), [state]);
 
   // Every condition that has to hold before the day can be closed out. The
   // ordering ones are what matter: each names another surface that owns the
@@ -171,13 +174,17 @@ export function GameChrome() {
       setDayCompleteShownFor(today);
       AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
       setDayCompleteVisible(true);
-      track(EVENTS.DAY_COMPLETE_SHOWN, { agenda_kind: agenda?.kind ?? null, week: dayCompleteWeek });
+      track(EVENTS.DAY_COMPLETE_SHOWN, {
+        agenda_kind: agenda?.kind ?? null,
+        action_kind: actionNow?.kind ?? null,
+        week: dayCompleteWeek,
+      });
       notificationAskSpentOnDateKey()
         .then((spentOn) => setReminderOfferable(Platform.OS !== 'web' && spentOn === null))
         .catch(() => {});
     }, DAY_COMPLETE_ARM_MS);
     return () => clearTimeout(timer);
-  }, [dayCompleteDue, dayCompleteShownFor, agenda, dayCompleteWeek]);
+  }, [dayCompleteDue, dayCompleteShownFor, agenda, actionNow, dayCompleteWeek]);
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -246,10 +253,13 @@ export function GameChrome() {
         <View style={styles.footer}>
           {wallTapped ? (
             <View style={styles.wallFooter}>
-              <RefillCountdown setWallTappedFor={setWallTappedFor} />
+              {/* One line under the countdown, never two: the 💡 tip when there's
+                  something to do now, otherwise the tomorrow teaser. */}
+              <RefillCountdown setWallTappedFor={setWallTappedFor} teaser={actionNow ? null : (agenda?.line ?? null)} />
+              {actionNow ? <ActionTip action={actionNow} onPress={() => openActionTip(actionNow, 'wall')} /> : null}
               {purchasesAvailable ? (
                 <PrimaryButton
-                  label="Get more weeks"
+                  label="Pull an all-nighter"
                   variant="secondary"
                   onPress={() => buyWeeks.open('out_of_weeks')}
                   style={styles.wallButton}
@@ -261,7 +271,7 @@ export function GameChrome() {
             label={
               budgetExhausted
                 ? purchasesAvailable
-                  ? 'Get more weeks'
+                  ? 'Pull an all-nighter'
                   : 'See you tomorrow'
                 : 'Next Week →'
             }
@@ -288,12 +298,12 @@ export function GameChrome() {
           hints={[
             {
               id: 'week-budget-dots',
-              text: 'You get a few free weeks each day — the dots below. They refill tomorrow.',
+              text: 'Each day is a sprint of free weeks — the dots below. The next one starts tomorrow.',
               when: onLastFreeWeek && !spotlight.visible,
             },
             {
               id: 'out-of-weeks',
-              text: `${WEEKS_PER_DAY} free weeks refill at local midnight. Come back tomorrow — ${state.companyName} will be waiting.`,
+              text: `Sprint done. The next one — ${WEEKS_PER_DAY} fresh weeks — starts at midnight. ${state.companyName} will be waiting.`,
               when: budgetExhausted && !spotlight.visible,
             },
           ]}
@@ -351,6 +361,16 @@ export function GameChrome() {
         week={state.week}
         stake={stake}
         agenda={agenda}
+        actionTip={actionNow}
+        onActionTip={
+          actionNow
+            ? () => {
+                setDayCompleteVisible(false);
+                track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'action_tip' });
+                openActionTip(actionNow, 'day_complete');
+              }
+            : undefined
+        }
         onBuyWeeks={
           purchasesAvailable
             ? () => {
@@ -392,6 +412,12 @@ export function GameChrome() {
   );
 }
 
+/** Jumps to where the 💡 tip's action is taken. A tab switch, not a modal, so it's safe mid-dismissal. */
+function openActionTip(action: ActionNow, surface: 'wall' | 'day_complete'): void {
+  track(EVENTS.ACTION_TIP_TAPPED, { kind: action.kind, surface });
+  router.navigate(action.href);
+}
+
 /**
  * The review ask that rides the closing panel's dismissal — a player on a streak,
  * having just read what's waiting tomorrow.
@@ -431,11 +457,21 @@ function maybeAskForReviewAtWall(streakDays: number, insolvent: boolean): void {
  * button once the player has pressed into the wall. Deliberately not
  * pressable, so there's nothing left to retry.
  *
+ * Framed as the company's own rhythm ("next sprint") rather than a meter
+ * refilling, per PRD F12's diegetic tone, with the same "tomorrow" line the
+ * end-of-day panel shows underneath, so the wait points at something.
+ *
  * The clock is read in effects, never during render (the same rule
  * `week-budget.ts` follows). Clearing the latch at midnight hands the button
  * back, so the player can take the refilled weeks without relaunching.
  */
-function RefillCountdown({ setWallTappedFor }: { setWallTappedFor: Dispatch<SetStateAction<WallKey | null>> }) {
+function RefillCountdown({
+  setWallTappedFor,
+  teaser,
+}: {
+  setWallTappedFor: Dispatch<SetStateAction<WallKey | null>>;
+  teaser: string | null;
+}) {
   const [label, setLabel] = useState<string | null>(null);
 
   useEffect(() => {
@@ -459,7 +495,12 @@ function RefillCountdown({ setWallTappedFor }: { setWallTappedFor: Dispatch<SetS
 
   return (
     <View style={styles.countdown} accessibilityRole="text">
-      <ThemedText type="smallBold">Free weeks refill in {label ?? '…'}</ThemedText>
+      <ThemedText type="smallBold">Next sprint starts in {label ?? '…'}</ThemedText>
+      {teaser ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.countdownTeaser}>
+          {teaser}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
@@ -517,7 +558,12 @@ const styles = StyleSheet.create({
   },
   countdown: {
     alignItems: 'center',
+    gap: Spacing.half,
     paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.four,
+  },
+  countdownTeaser: {
+    textAlign: 'center',
   },
   nextButton: {
     flex: 1,

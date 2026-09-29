@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { newGame } from '../../game/engine';
 import { GameState } from '../../game/types';
-import { tomorrowAgendaFor } from '../day-close';
+import { actionNowFor, raiseAvailable, tomorrowAgendaFor } from '../day-close';
+import { ROUND_ORDER } from '../../game/types';
 
 /** A run with enough cash that the runway branch can never fire. */
 function healthy(overrides: Partial<GameState> = {}): GameState {
@@ -51,10 +52,10 @@ describe('tomorrowAgendaFor', () => {
     expect(agenda?.line).toMatch(/Runway is down to \d+ weeks/);
   });
 
-  it('points at an available raise when the run is otherwise healthy', () => {
-    const agenda = tomorrowAgendaFor(healthy());
-    expect(agenda?.kind).toBe('raise');
-    expect(agenda?.line).toContain('raise');
+  it('never advertises a raise — that belongs to actionNowFor', () => {
+    const s = healthy();
+    expect(raiseAvailable(s)).toBe(true);
+    expect(tomorrowAgendaFor(s)?.kind).not.toBe('raise');
   });
 
   it('teases a card landing soon once the raise is on cooldown', () => {
@@ -95,7 +96,6 @@ describe('tomorrowAgendaFor', () => {
     const base = healthy();
     const states: GameState[] = [
       { ...base, cash: 1_000, headcount: { devs: 50, sales: 50, support: 50 }, pendingHeadcount: { devs: 50, sales: 50, support: 50 } },
-      base,
       { ...base, lastRoundRaisedWeek: base.week, weeksUntilNextEvent: 2 },
       { ...base, roundsRaised: 3, lastRoundRaisedWeek: base.week, weeksUntilNextEvent: Number.MAX_SAFE_INTEGER },
     ];
@@ -106,5 +106,50 @@ describe('tomorrowAgendaFor', () => {
     });
     // Each state above is built to land on a different rung of the ladder.
     expect(new Set(kinds).size).toBe(states.length);
+  });
+});
+
+describe('actionNowFor', () => {
+  it('is null with no live run', () => {
+    expect(actionNowFor(null)).toBeNull();
+    expect(actionNowFor({ ...healthy(), gameOver: 'bankruptcy', finalScore: 0 })).toBeNull();
+  });
+
+  it('points at the Money tab when a raise is available', () => {
+    const action = actionNowFor(healthy());
+    expect(action?.kind).toBe('raise');
+    expect(action?.href).toBe('/money');
+    expect(action?.line).toBe('Investors are ready to talk.');
+  });
+
+  it('mentions thin runway when the raise is also the way out', () => {
+    const s: GameState = {
+      ...newGame('Acme', 1),
+      cash: 1_000,
+      headcount: { devs: 50, sales: 50, support: 50 },
+      pendingHeadcount: { devs: 50, sales: 50, support: 50 },
+    };
+    expect(actionNowFor(s)?.line).toMatch(/Runway's thin/);
+  });
+
+  it('is null while the round is on cooldown or every round is raised', () => {
+    const base = healthy();
+    expect(actionNowFor({ ...base, lastRoundRaisedWeek: base.week })).toBeNull();
+    expect(actionNowFor({ ...base, roundsRaised: ROUND_ORDER.length })).toBeNull();
+  });
+
+  it('stands down while a decision card owns the screen', () => {
+    const s: GameState = {
+      ...healthy(),
+      pendingEvent: {
+        id: 'x',
+        era: 'scrappy',
+        kind: 'decision',
+        title: 'Series A term sheet',
+        flavor: '...',
+        choices: [{ label: 'Sign', effects: {} }],
+      },
+    };
+    expect(actionNowFor(s)).toBeNull();
   });
 });

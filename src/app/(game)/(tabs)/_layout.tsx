@@ -6,6 +6,8 @@ import { GameChrome } from '@/components/game/game-chrome';
 import { Hud } from '@/components/game/hud';
 import { TabBarIcon } from '@/components/ui/tab-bar-icon';
 import { useTheme } from '@/hooks/use-theme';
+import { raiseAvailable } from '@/state/day-close';
+import { useGame } from '@/state/game-store';
 
 /**
  * `GameChrome` (Next Week / fast-forward footer, decision modal, week
@@ -21,6 +23,10 @@ import { useTheme } from '@/hooks/use-theme';
 export default function GameTabsLayout() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // A dot on Money while a round can be raised — the same signal as the wall's
+  // 💡 tip, visible from anywhere in the run.
+  const { state } = useGame();
+  const moneyHasAction = raiseAvailable(state);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -52,6 +58,13 @@ export default function GameTabsLayout() {
               name="money"
               options={{
                 title: 'Money',
+                tabBarBadge: moneyHasAction ? '' : undefined,
+                tabBarBadgeStyle: {
+                  minWidth: 10,
+                  maxHeight: 10,
+                  borderRadius: 5,
+                  backgroundColor: theme.accent,
+                },
                 tabBarIcon: ({ color, size }) => <TabBarIcon name="money" color={color} size={size} />,
               }}
             />

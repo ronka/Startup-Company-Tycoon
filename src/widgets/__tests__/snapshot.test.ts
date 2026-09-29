@@ -185,9 +185,9 @@ describe('widgetTimeline', () => {
   });
 
   it('forecasts the midnight grant on the second entry', () => {
-    const entries = widgetTimeline(newGame('Acme', 1), budget(2), purchased(0), NOW);
-    expect(entries[0].props.weeksReady).toBe(2);
-    expect(entries[1].props.weeksReady).toBe(2 + WEEKS_PER_DAY);
+    const entries = widgetTimeline(newGame('Acme', 1), budget(0), purchased(0), NOW);
+    expect(entries[0].props.weeksReady).toBe(0);
+    expect(entries[1].props.weeksReady).toBe(WEEKS_PER_DAY);
   });
 
   it('clamps the forecast at the bank cap', () => {
@@ -204,9 +204,9 @@ describe('widgetTimeline', () => {
   });
 
   it('still forecasts with no run, so an idle tile stays truthful', () => {
-    const entries = widgetTimeline(null, budget(1), purchased(0), NOW);
+    const entries = widgetTimeline(null, budget(0), purchased(0), NOW);
     expect(entries[0].props.status).toBe('none');
-    expect(entries[1].props.weeksReady).toBe(1 + WEEKS_PER_DAY);
+    expect(entries[1].props.weeksReady).toBe(WEEKS_PER_DAY);
   });
 
   it('survives pools that have not loaded yet', () => {

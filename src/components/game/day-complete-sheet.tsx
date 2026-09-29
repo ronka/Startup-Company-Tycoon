@@ -1,11 +1,12 @@
 import { StyleSheet, View } from 'react-native';
 
+import { ActionTip } from '@/components/game/action-tip';
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
-import type { TomorrowAgenda } from '@/state/day-close';
+import type { ActionNow, TomorrowAgenda } from '@/state/day-close';
 import { WEEKS_PER_DAY } from '@/state/week-budget';
 
 /**
@@ -24,6 +25,8 @@ export function DayCompleteSheet({
   week,
   stake,
   agenda,
+  actionTip,
+  onActionTip,
   onBuyWeeks,
   onRemindMe,
   onDismiss,
@@ -34,6 +37,9 @@ export function DayCompleteSheet({
   /** Founder take-home at the current valuation — the run's score-in-progress. */
   stake: number;
   agenda: TomorrowAgenda | null;
+  /** Something still worth doing today (a raise), shown as a tappable 💡 row. */
+  actionTip?: ActionNow | null;
+  onActionTip?: () => void;
   /** Present only where real purchases work; omit to render no purchase affordance. */
   onBuyWeeks?: () => void;
   /**
@@ -71,8 +77,10 @@ export function DayCompleteSheet({
         </View>
       ) : null}
 
+      {actionTip && onActionTip ? <ActionTip action={actionTip} onPress={onActionTip} /> : null}
+
       <ThemedText type="small" themeColor="textSecondary">
-        {WEEKS_PER_DAY} free weeks refill at local midnight.
+        Next sprint starts at midnight — {WEEKS_PER_DAY} fresh weeks.
       </ThemedText>
 
       {onRemindMe ? (
@@ -83,7 +91,7 @@ export function DayCompleteSheet({
       ) : (
         <PrimaryButton label="See you tomorrow" onPress={onDismiss} />
       )}
-      {onBuyWeeks ? <PrimaryButton label="Get more weeks" variant="secondary" onPress={onBuyWeeks} /> : null}
+      {onBuyWeeks ? <PrimaryButton label="Pull an all-nighter" variant="secondary" onPress={onBuyWeeks} /> : null}
     </BottomSheet>
   );
 }

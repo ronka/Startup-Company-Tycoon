@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame } from '../../game/engine';
 import { GameState } from '../../game/types';
 import { ROUND_ORDER } from '../../game/types';
-import { tomorrowAgendaFor } from '../day-close';
+import { actionNowFor, tomorrowAgendaFor } from '../day-close';
 import {
   LOW_RUNWAY_WARNING_WEEKS,
   notificationContentFor,
@@ -65,9 +65,9 @@ describe('notificationContentFor', () => {
     expect(content?.body).toContain(`Week ${s.week}`);
   });
 
-  it('names an available raise, like the end-of-day panel does', () => {
+  it('names an available raise, which the panel shows as a tip instead', () => {
     const s: GameState = { ...newGame('Acme', 1), cash: 50_000_000 };
-    expect(tomorrowAgendaFor(s)?.kind).toBe('raise');
+    expect(actionNowFor(s)?.kind).toBe('raise');
     const content = notificationContentFor(s);
     expect(content?.kind).toBe('raise');
     expect(content?.body).toContain('Money tab');
@@ -85,10 +85,14 @@ describe('notificationContentFor', () => {
     expect(content?.body).toBe(tomorrowAgendaFor(s)?.line);
   });
 
-  it('always climbs the same rung as the end-of-day panel', () => {
+  it('climbs the same rung as the end-of-day panel, except where a raise is waiting', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const s = newGame('Acme', seed);
-      expect(notificationContentFor(s)?.kind).toBe(tomorrowAgendaFor(s)?.kind);
+      for (const s of [newGame('Acme', seed), { ...newGame('Acme', seed), roundsRaised: ROUND_ORDER.length }]) {
+        const expected = actionNowFor(s) && ['event-soon', 'steady'].includes(tomorrowAgendaFor(s)!.kind)
+          ? 'raise'
+          : tomorrowAgendaFor(s)?.kind;
+        expect(notificationContentFor(s)?.kind).toBe(expected);
+      }
     }
   });
 

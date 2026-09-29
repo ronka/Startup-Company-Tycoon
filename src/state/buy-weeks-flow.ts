@@ -51,7 +51,7 @@ function explainPurchasesUnavailable(): void {
   setTimeout(() => {
     Alert.alert(
       "Purchases aren't available right now",
-      'The App Store isn\'t responding. Your free weeks refill at midnight — try again later.',
+      'The App Store isn\'t responding. Your next sprint starts at midnight — try again later.',
     );
   }, EXPLAIN_ARM_MS);
 }

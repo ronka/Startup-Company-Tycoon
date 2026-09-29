@@ -79,9 +79,9 @@ describe('refreshWeekBudget', () => {
   });
 
   it('grants a fresh WEEKS_PER_DAY on the first session of a new day', () => {
-    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 1 };
+    const budget: WeekBudget = { lastSessionDate: dateKey(day(2026, 7, 3)), weeksRemaining: 0 };
     const next = refreshWeekBudget(budget, day(2026, 7, 4));
-    expect(next.weeksRemaining).toBe(1 + WEEKS_PER_DAY);
+    expect(next.weeksRemaining).toBe(WEEKS_PER_DAY);
     expect(next.lastSessionDate).toBe(dateKey(day(2026, 7, 4)));
   });
 
