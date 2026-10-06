@@ -8,6 +8,7 @@ import { AnimatedNumber } from '@/components/game/animated-number';
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
 import { Card } from '@/components/game/card';
+import { GameArt } from '@/components/game/game-art';
 import { CompanyHeader } from '@/components/game/company-header';
 import { FirstRunHint, HintSlot } from '@/components/game/first-run-hint';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
@@ -15,7 +16,6 @@ import { InsolvencyBanner } from '@/components/game/insolvency-banner';
 import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
 import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
 import { NewsFeed } from '@/components/game/news-feed';
-import { Pill, PillRow } from '@/components/game/pill';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { RingGauge } from '@/components/game/ring-gauge';
 import { SectionHeader } from '@/components/game/section-header';
@@ -92,22 +92,38 @@ export default function HqScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <CompanyHeader
-          name={state.companyName}
-          stage={state.stage}
-          focus={state.focus}
-          logo={state.companyLogo}
-          onPressLogo={openLogoPicker}
-        />
+        <Card style={styles.companyCard}>
+          <View style={styles.companyTop}>
+            <View style={styles.companyIdentity}>
+              <CompanyHeader
+                name={state.companyName}
+                stage={state.stage}
+                focus={state.focus}
+                logo={state.companyLogo}
+                onPressLogo={openLogoPicker}
+              />
+              <View style={styles.weekBadge}>
+                <ThemedText type="smallBold" themeColor="accent">
+                  ▦ Year {Math.floor(state.week / 52) + 1} · Week {state.week}
+                </ThemedText>
+              </View>
+            </View>
+            <View pointerEvents="none" style={styles.headquartersArt}><GameArt name="hq" size={110} /></View>
+          </View>
+          <View style={styles.companyMetrics}>
+            {[
+              { label: 'MRR', value: formatMoney(revenue * 4) },
+              { label: '⚡ Hype', value: `${Math.round(state.hype * HYPE_SCORE_SCALE)}` },
+              { label: 'Share', value: `${Math.round(state.marketShare * 100)}%` },
+            ].map((metric) => (
+              <Card key={metric.label} style={styles.companyMetric}>
+                <ThemedText type="small" themeColor="textSecondary">{metric.label}</ThemedText>
+                <ThemedText type="smallBold" numberOfLines={1}>{metric.value}</ThemedText>
+              </Card>
+            ))}
+          </View>
 
-        <PillRow>
-          {/* Week 0 is still year one, so the year is floor-then-+1, not ceil. */}
-          <Pill label="Year" value={`${Math.floor(state.week / 52) + 1}`} tone="strong" />
-          <Pill label="MRR" value={formatMoney(revenue * 4)} />
-          <Pill label="Hype" value={`${Math.round(state.hype * HYPE_SCORE_SCALE)}`} />
-          <Pill label="Share" value={`${Math.round(state.marketShare * 100)}%`} />
-          <Pill label={`${ERA_LABEL[state.era]} era`} />
-        </PillRow>
+        </Card>
 
         <LeaderboardRankCard />
 
@@ -116,7 +132,7 @@ export default function HqScreen() {
           hints={[
             {
               id: 'hq',
-              text: 'Top bar: your cash, how many weeks it lasts (runway), customers, and the current week. Cash at $0 for 3 weeks = game over.',
+              text: 'Top bar: your cash, how many weeks it lasts (runway), and customers. Cash at $0 for 3 weeks = game over.',
             },
             {
               id: 'runway-short',
@@ -151,14 +167,14 @@ export default function HqScreen() {
                 Week {state.week} · post-money est.
               </ThemedText>
             </View>
-            <RingGauge percent={state.morale} label="team" caption="Morale" tone={moraleTone(state.morale)} />
+            <RingGauge percent={state.morale} label="Morale" size={100} tone={moraleTone(state.morale)} />
           </View>
           {/* Bleeds to the card's bottom edge, like a chart footer. Kept out of
               the tree until there's a series to draw, so the card doesn't open
               with 72px of dead space in weeks 0-1. */}
           {hasChart ? (
             <View style={styles.chart} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
-              {chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={72} /> : null}
+              {chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={92} color={theme.success} /> : null}
             </View>
           ) : null}
         </Card>
@@ -166,6 +182,7 @@ export default function HqScreen() {
         <View style={styles.grid}>
           <StatTile
             label="Revenue"
+            art="money"
             value={revenue}
             previousValue={previous?.revenue}
             format={formatMoney}
@@ -175,6 +192,7 @@ export default function HqScreen() {
           />
           <StatTile
             label="Burn / wk"
+            emoji="🔥"
             value={burn}
             previousValue={previous?.burn}
             format={formatMoney}
@@ -189,6 +207,7 @@ export default function HqScreen() {
           />
           <StatTile
             label="Hype"
+            emoji="⚡"
             value={state.hype * HYPE_SCORE_SCALE}
             previousValue={previousState ? previousState.hype * HYPE_SCORE_SCALE : undefined}
             format={(n) => `${Math.round(n)}`}
@@ -198,6 +217,7 @@ export default function HqScreen() {
           />
           <StatTile
             label="Active users"
+            art="team"
             value={state.customers}
             previousValue={previousState?.customers}
             format={formatCount}
@@ -217,7 +237,7 @@ export default function HqScreen() {
                 Change
               </ThemedText>
             </View>
-            <ThemedText type="default">{FOCUS_LABEL[state.focus]}</ThemedText>
+            <ThemedText type="default">{FOCUS_LABEL[state.focus]} · {ERA_LABEL[state.era]} era</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               {trendAlignmentFor(state.focus, state.trend)}
             </ThemedText>
@@ -284,11 +304,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
-    paddingBottom: Spacing.four,
-    gap: Spacing.three,
+    paddingBottom: Spacing.six,
+    gap: Spacing.two,
   },
+  companyMetrics: { flexDirection: 'row', gap: 8 },
+  companyMetric: { flex: 1, padding: 8, gap: 0, borderRadius: 16 },
+  companyCard: { gap: Spacing.two },
+  companyTop: { flexDirection: 'row', alignItems: 'center', minHeight: 100 },
+  companyIdentity: { flex: 1, zIndex: 1 },
+  headquartersArt: { marginRight: -16, marginLeft: -12 },
+  weekBadge: { alignSelf: 'flex-start', marginTop: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#173454' },
   hero: {
     paddingTop: Spacing.three,
     paddingHorizontal: Spacing.three,
@@ -316,13 +343,13 @@ const styles = StyleSheet.create({
   chart: {
     marginTop: Spacing.three,
     marginHorizontal: -Spacing.three,
-    height: 72,
+    height: 92,
     justifyContent: 'flex-end',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.three,
+    gap: Spacing.two,
   },
   strategyHeader: {
     flexDirection: 'row',

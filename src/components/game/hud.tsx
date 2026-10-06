@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
+import { GameArt } from '@/components/game/game-art';
+import { SurfaceSheen } from '@/components/game/surface-sheen';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { markHintSeen } from '@/components/game/first-run-hint';
 import { ThemedText } from '@/components/themed-text';
@@ -13,8 +15,7 @@ import { formatCount, formatMoney, formatWeeks } from '@/lib/format';
 import { useGame } from '@/state/game-store';
 
 /**
- * Persistent strip rendered above every game tab: cash, runway, customers and
- * week, each in its own outlined chip. Owns the top safe-area inset, so tab
+ * Persistent strip rendered above every game tab: cash, runway, customers, each in its own outlined chip. Owns the top safe-area inset, so tab
  * screens no longer need to.
  */
 export function Hud() {
@@ -49,7 +50,7 @@ export function Hud() {
     <View
       style={[
         styles.hud,
-        { backgroundColor: theme.background, borderBottomColor: theme.border, paddingTop: insets.top + Spacing.two },
+        { backgroundColor: theme.background, paddingTop: insets.top + Spacing.two },
       ]}>
       <Pressable
         onPress={openMenu}
@@ -62,7 +63,9 @@ export function Hud() {
         </ThemedText>
       </Pressable>
       <View style={chipStyle}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
+        <SurfaceSheen />
+        <View pointerEvents="none" style={styles.chipArt}><GameArt name="money" size={32} /></View>
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
           Cash
         </ThemedText>
         <AnimatedNumber
@@ -74,7 +77,8 @@ export function Hud() {
         />
       </View>
       <View style={chipStyle}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
+        <SurfaceSheen />
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
           Runway
         </ThemedText>
         <AnimatedNumber
@@ -86,7 +90,8 @@ export function Hud() {
         />
       </View>
       <View style={chipStyle}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
+        <SurfaceSheen />
+        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
           Users
         </ThemedText>
         <AnimatedNumber
@@ -97,14 +102,6 @@ export function Hud() {
           themeColor={insolvent ? 'danger' : undefined}
         />
       </View>
-      <View style={chipStyle}>
-        <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textMuted'}>
-          Week
-        </ThemedText>
-        <ThemedText type="smallBold" themeColor={insolvent ? 'danger' : undefined}>
-          {state.week}
-        </ThemedText>
-      </View>
     </View>
   );
 }
@@ -113,26 +110,29 @@ const styles = StyleSheet.create({
   hud: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
+    gap: 6,
     paddingBottom: Spacing.two,
     paddingHorizontal: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   menuButton: {
     justifyContent: 'center',
-    paddingRight: Spacing.one,
+    width: 20,
   },
   menuGlyph: {
-    fontSize: 22,
+    fontSize: 19,
     lineHeight: 26,
   },
+  chipArt: { position: 'absolute', right: -4, bottom: -4, opacity: 0.3 },
   chip: {
     flex: 1,
     alignItems: 'center',
-    gap: Spacing.half,
-    paddingVertical: Spacing.one,
+    justifyContent: 'center',
+    gap: 0,
+    minHeight: 70,
+    overflow: 'hidden',
+    paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.two,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
   },
 });

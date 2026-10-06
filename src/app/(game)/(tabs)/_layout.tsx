@@ -3,23 +3,14 @@ import { View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GameChrome } from '@/components/game/game-chrome';
+import { FooterFade } from '@/components/game/footer-fade';
 import { Hud } from '@/components/game/hud';
-import { TabBarIcon } from '@/components/ui/tab-bar-icon';
+import { GameTabBar } from '@/components/game/game-tab-bar';
 import { useTheme } from '@/hooks/use-theme';
 import { raiseAvailable } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
 
-/**
- * `GameChrome` (Next Week / fast-forward footer, decision modal, week
- * recap) is rendered once here — a sibling of `Tabs`, not inside any one
- * screen — so it's reachable from all four tabs (Task 12) and its two
- * `Modal`s never stack duplicates from background-mounted tab screens.
- *
- * Because GameChrome renders below the Tabs navigator (not inside it),
- * it — not the tab bar — owns the bottom safe-area inset (the home
- * indicator curve). The tab bar is fed a zeroed-out bottom inset so it
- * doesn't *also* reserve that space, which used to double it up.
- */
+/** Shared chrome sits above the illustrated tab bar; the bar owns the bottom safe area. */
 export default function GameTabsLayout() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -34,6 +25,13 @@ export default function GameTabsLayout() {
       <View style={{ flex: 1 }}>
         <SafeAreaInsetsContext.Provider value={{ ...insets, bottom: 0 }}>
           <Tabs
+            tabBar={(props) => (
+              <View style={{ backgroundColor: theme.background, zIndex: 1 }}>
+                <FooterFade />
+                <GameChrome />
+                <GameTabBar {...props} bottomInset={insets.bottom} moneyHasAction={moneyHasAction} />
+              </View>
+            )}
             screenOptions={{
               headerShown: false,
               tabBarActiveTintColor: theme.accent,
@@ -44,14 +42,12 @@ export default function GameTabsLayout() {
               name="hq"
               options={{
                 title: 'HQ',
-                tabBarIcon: ({ color, size }) => <TabBarIcon name="hq" color={color} size={size} />,
               }}
             />
             <Tabs.Screen
               name="team"
               options={{
                 title: 'Team',
-                tabBarIcon: ({ color, size }) => <TabBarIcon name="team" color={color} size={size} />,
               }}
             />
             <Tabs.Screen
@@ -65,20 +61,17 @@ export default function GameTabsLayout() {
                   borderRadius: 5,
                   backgroundColor: theme.accent,
                 },
-                tabBarIcon: ({ color, size }) => <TabBarIcon name="money" color={color} size={size} />,
               }}
             />
             <Tabs.Screen
               name="market"
               options={{
                 title: 'Market',
-                tabBarIcon: ({ color, size }) => <TabBarIcon name="market" color={color} size={size} />,
               }}
             />
           </Tabs>
         </SafeAreaInsetsContext.Provider>
       </View>
-      <GameChrome />
     </View>
   );
 }

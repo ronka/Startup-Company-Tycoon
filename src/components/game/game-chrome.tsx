@@ -91,6 +91,7 @@ export function GameChrome() {
   } = useGame();
   const leaderboard = useLeaderboard();
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
   // Week whose recap has "settled" — armed a beat after its tick's decision
@@ -326,7 +327,7 @@ export function GameChrome() {
           hints={[
             {
               id: 'week-budget-dots',
-              text: `The dots are your free weeks. Spent ones come back — one every ${WEEK_REGEN_MS / 60_000} minutes.`,
+              text: `The meter shows your free weeks. Spent ones come back — one every ${WEEK_REGEN_MS / 60_000} minutes.`,
               when: onLastFreeWeek && !spotlight.visible,
             },
             {
@@ -340,14 +341,18 @@ export function GameChrome() {
         <View style={styles.budgetRow}>
           {!budgetExhausted && weekBudget ? (
             purchasesAvailable ? (
-              <Pressable onPress={() => buyWeeks.open('hud')} accessibilityRole="button">
-                <WeekBudgetDots
+              <Pressable
+                onPress={() => buyWeeks.open('hud')}
+                accessibilityRole="button"
+                accessibilityLabel={`${weekBudget.weeksRemaining} free weeks and ${purchasedWeeks?.weeksRemaining ?? 0} purchased weeks remaining. Get more weeks.`}
+                style={styles.budgetControl}>
+                <WeekBudgetMeter
                   weeksRemaining={weekBudget.weeksRemaining}
                   purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
                 />
               </Pressable>
             ) : (
-              <WeekBudgetDots
+              <WeekBudgetMeter
                 weeksRemaining={weekBudget.weeksRemaining}
                 purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
               />
@@ -355,9 +360,15 @@ export function GameChrome() {
           ) : null}
 
           {__DEV__ ? (
-            <Pressable onPress={() => setDevFreePlay(!devFreePlay)} accessibilityRole="button">
-              <ThemedText type="small" themeColor={devFreePlay ? 'success' : 'textSecondary'}>
-                {devFreePlay ? 'Free play: ON' : 'Free play: off'}
+            <Pressable
+              onPress={() => setDevFreePlay(!devFreePlay)}
+              accessibilityRole="button"
+              accessibilityLabel={`Developer free play: ${devFreePlay ? 'on' : 'off'}`}
+              accessibilityState={{ selected: devFreePlay }}
+              style={[styles.devToggle, { backgroundColor: devFreePlay ? theme.successBackground : theme.surface }]}>
+
+              <ThemedText type="small" themeColor={devFreePlay ? 'success' : 'textMuted'} style={styles.devGlyph}>
+                ∞
               </ThemedText>
             </Pressable>
           ) : null}
@@ -542,14 +553,8 @@ function RefillCountdown({ weekBudget }: { weekBudget: WeekBudget }) {
   );
 }
 
-/**
- * Diegetic, non-numeric stand-in for a battery/energy meter: one filled dot
- * per free week still available today (banked weeks included), out of the
- * bank cap. Purchased weeks are cap-exempt and shown separately as a "+N"
- * companion — since they never expire, a dot-per-week meter would grow
- * unbounded — so a numeric badge is used there instead.
- */
-function WeekBudgetDots({
+/** Free-week count with a segmented meter; purchased weeks remain a separate, uncapped badge. */
+function WeekBudgetMeter({
   weeksRemaining,
   purchasedWeeksRemaining,
 }: {
@@ -558,20 +563,23 @@ function WeekBudgetDots({
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.dotsRow}>
-      {Array.from({ length: WEEKS_BANK_CAP }, (_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.dot,
-            { backgroundColor: i < weeksRemaining ? theme.text : theme.surfaceRaised },
-          ]}
-        />
-      ))}
+    <View
+      accessible
+      accessibilityLabel={`${weeksRemaining} of ${WEEKS_BANK_CAP} free weeks remaining${purchasedWeeksRemaining > 0 ? `, plus ${purchasedWeeksRemaining} purchased weeks` : ''}. One free week refills every ${WEEK_REGEN_MS / 60_000} minutes.`}
+      style={[styles.weekMeter, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <ThemedText type="footnote" themeColor="textSecondary">
+        <ThemedText type="footnote" themeColor="text">{weeksRemaining}/{WEEKS_BANK_CAP}</ThemedText> free weeks
+      </ThemedText>
+      <View style={styles.dotsRow}>
+        {Array.from({ length: WEEKS_BANK_CAP }, (_, i) => (
+          <View
+            key={i}
+            style={[styles.dot, { backgroundColor: i < weeksRemaining ? theme.accent : theme.surfaceRaised }]}
+          />
+        ))}
+      </View>
       {purchasedWeeksRemaining > 0 ? (
-        <ThemedText type="small" themeColor="success" style={styles.purchasedBadge}>
-          +{purchasedWeeksRemaining}
-        </ThemedText>
+        <ThemedText type="footnote" themeColor="success">+{purchasedWeeksRemaining}</ThemedText>
       ) : null}
     </View>
   );
@@ -617,7 +625,7 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     flex: 1,
-    paddingVertical: Spacing.two,
+    paddingVertical: Spacing.three,
   },
   budgetHint: {
     paddingHorizontal: Spacing.four,
@@ -630,16 +638,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.two,
   },
+  budgetControl: { minHeight: 44, justifyContent: 'center' },
+  devToggle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  devGlyph: { fontSize: 20, lineHeight: 24 },
+  weekMeter: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
   dotsRow: {
     flexDirection: 'row',
-    gap: Spacing.half,
+    gap: 3,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  purchasedBadge: {
-    marginLeft: Spacing.half,
+    width: 5,
+    height: 10,
+    borderRadius: 2,
   },
 });

@@ -12,22 +12,22 @@ import { Platform } from 'react-native';
 
 const Palette = {
   /** App canvas. */
-  background: '#0A0A0A',
+  background: '#080E16',
   /** Cards, pills, sheet bodies. */
-  surface: '#161616',
+  surface: '#141E2B',
   /** Nested rows inside a card, pressed states. */
-  surfaceRaised: '#1F1F1F',
+  surfaceRaised: '#202D3F',
   /** 1px card/pill hairlines. */
-  border: '#262626',
+  border: '#3A495D',
   text: '#FAFAFA',
-  textSecondary: '#A1A1A1',
+  textSecondary: '#AFBCD3',
   /** Section labels, timestamps — quieter than `textSecondary`. */
-  textMuted: '#6B6B6B',
+  textMuted: '#8493AB',
   /**
    * Brand blue — primary actions, links, selected state. Same family as the
    * splash/icon navy, brightened so it carries on a near-black canvas.
    */
-  accent: '#3C87F7',
+  accent: '#2785FF',
   /** Ink on top of a solid `accent` fill. */
   accentInk: '#FFFFFF',
   /** Tinted background for accent pills/badges. */
@@ -39,11 +39,11 @@ const Palette = {
   /** Tinted background for warning pills/badges — the legend-tier treatment. */
   warningBackground: '#2A1B04',
   /** Value moving the right way — deltas, healthy morale. Never an action colour. */
-  success: '#4ADE80',
+  success: '#29E78B',
   successBackground: '#132B1D',
   /** Aliases kept so pre-redesign `ThemedView type=` call sites keep working. */
-  backgroundElement: '#161616',
-  backgroundSelected: '#1F1F1F',
+  backgroundElement: '#141E2B',
+  backgroundSelected: '#202D3F',
 } as const;
 
 export const Colors = {
@@ -94,7 +94,7 @@ export const Spacing = {
 export const Radius = {
   sm: 10,
   md: 14,
-  lg: 20,
+  lg: 24,
   pill: 999,
   sheet: 28,
 } as const;

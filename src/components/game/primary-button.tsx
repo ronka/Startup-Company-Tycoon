@@ -1,3 +1,5 @@
+import { SurfaceSheen } from '@/components/game/surface-sheen';
+
 import { ActivityIndicator, Pressable, StyleSheet, type PressableProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -61,6 +63,7 @@ export function PrimaryButton({
         typeof style === 'function' ? style(state) : style,
       ]}
       {...rest}>
+      {isPrimary && !isDisabled ? <SurfaceSheen /> : null}
       {loading ? (
         <ActivityIndicator color={labelColor} />
       ) : (
@@ -74,7 +77,8 @@ const styles = StyleSheet.create({
   button: {
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.four,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',

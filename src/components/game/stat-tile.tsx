@@ -2,6 +2,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { GameArt, type GAME_ART } from '@/components/game/game-art';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { Card } from '@/components/game/card';
 import { ThemedText } from '@/components/themed-text';
@@ -18,6 +19,8 @@ export function StatTile({
   alert = false,
   explainer,
   icon,
+  art,
+  emoji,
   onPress,
 }: {
   label: string;
@@ -35,6 +38,8 @@ export function StatTile({
   explainer?: string;
   /** SF Symbol (with Material fallbacks) drawn beside the label. */
   icon?: SymbolViewProps['name'];
+  art?: keyof typeof GAME_ART;
+  emoji?: string;
   /** When provided, tapping the tile calls this instead of toggling the explainer. */
   onPress?: () => void;
 }) {
@@ -59,19 +64,24 @@ export function StatTile({
       accessibilityLabel={onPress || explainer ? `${label}: tap for details` : undefined}
       style={styles.pressable}>
       <Card tone={alert ? 'alert' : 'default'} style={styles.tile}>
-        <View style={styles.labelRow}>
-          {icon ? <SymbolView name={icon} size={16} tintColor={labelColor} /> : null}
-          <ThemedText type="small" themeColor={alert ? 'danger' : 'textSecondary'}>
-            {label}
-          </ThemedText>
+        <View style={styles.metricRow}>
+          {art ? <GameArt name={art} size={48} /> : emoji ? <ThemedText style={styles.emoji}>{emoji}</ThemedText> : null}
+          <View style={styles.metricBody}>
+            <View style={styles.labelRow}>
+              {icon && !art && !emoji ? <SymbolView name={icon} size={16} tintColor={labelColor} /> : null}
+              <ThemedText type="small" themeColor={alert ? 'danger' : 'textSecondary'}>
+                {label}
+              </ThemedText>
+            </View>
+            <AnimatedNumber
+              value={value}
+              format={format}
+              goodDirection={goodDirection}
+              type="cardValue"
+              themeColor={alert ? 'danger' : undefined}
+            />
+          </View>
         </View>
-        <AnimatedNumber
-          value={value}
-          format={format}
-          goodDirection={goodDirection}
-          type="cardValue"
-          themeColor={alert ? 'danger' : undefined}
-        />
         {hasDelta ? (
           <ThemedText type="small" themeColor={deltaIsGood ? 'success' : 'danger'}>
             {delta > 0 ? '▲' : '▼'} {format(Math.abs(delta))}
@@ -99,8 +109,12 @@ const styles = StyleSheet.create({
   },
   tile: {
     gap: Spacing.one,
-    minHeight: 116,
+    minHeight: 110,
+    paddingHorizontal: 12,
   },
+  metricRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metricBody: { flex: 1, minWidth: 0 },
+  emoji: { fontSize: 34, lineHeight: 46 },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',

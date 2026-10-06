@@ -1,5 +1,7 @@
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
+import { SurfaceSheen } from '@/components/game/surface-sheen';
+
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -13,6 +15,7 @@ export type CardTone = 'default' | 'alert' | 'accent' | 'plain';
 export function Card({
   tone = 'default',
   style,
+  children,
   ...rest
 }: ViewProps & { tone?: CardTone }) {
   const theme = useTheme();
@@ -29,8 +32,10 @@ export function Card({
         { backgroundColor: background, borderColor },
         style,
       ]}
-      {...rest}
-    />
+      {...rest}>
+      <SurfaceSheen />
+      {children}
+    </View>
   );
 }
 
