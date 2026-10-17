@@ -13,10 +13,15 @@ import { useOfficeTier } from '@/office/use-office-tier';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCount } from '@/lib/format';
 
-/** Everyone who comes to the office: staff, filled C-level seats, and the founder. */
+/**
+ * Everyone who comes to the office: staff, filled C-level seats, and the
+ * founder. Staff counts the Team tab's queued changes, so the office reacts
+ * to the steppers right away (the next tick lands them, and resets the queue
+ * to whoever is left after attrition).
+ */
 export function officeHeadcount(state: GameState): number {
   const execs = C_LEVEL_ROLES.filter((role) => state.cLevels[role].hired != null).length;
-  return totalHeadcount(state.headcount) + execs + 1;
+  return totalHeadcount(state.pendingHeadcount) + execs + 1;
 }
 
 /**
