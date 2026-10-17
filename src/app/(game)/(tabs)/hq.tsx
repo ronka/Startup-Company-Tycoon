@@ -16,6 +16,7 @@ import { InsolvencyBanner } from '@/components/game/insolvency-banner';
 import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
 import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
 import { NewsFeed } from '@/components/game/news-feed';
+import { OfficeCard } from '@/components/game/office-card';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { RingGauge } from '@/components/game/ring-gauge';
 import { SectionHeader } from '@/components/game/section-header';
@@ -178,6 +179,8 @@ export default function HqScreen() {
             </View>
           ) : null}
         </Card>
+
+        <OfficeCard state={state} valuation={valuation} />
 
         <View style={styles.grid}>
           <StatTile

@@ -32,6 +32,8 @@ export default defineConfig({
       // src/widgets/snapshot.ts is pure too — the native `expo-widgets` calls
       // are quarantined in src/widgets/sync.ts, which has no tests here.
       'src/widgets/**/*.test.ts',
+      // The office scene's engine and tier selection are pure TypeScript too.
+      'src/office/**/*.test.ts',
     ],
     environment: 'node',
   },

@@ -1,0 +1,52 @@
+{
+  "capacity": { "comfortable": 22, "max": 32 },
+  "floor": [[318,272],[640,98],[1000,292],[983,365],[983,492],[690,672],[338,478],[335,355]],
+  "frontWalls": [
+    [[160,265],[335,355],[338,478],[300,470],[155,390]],
+    [[983,360],[1120,292],[1160,330],[1160,420],[1000,495],[983,490]]
+  ],
+  "objects": [
+    { "id": "bench-left", "boxes": [[381,387,161,71,45],[390,370,140,25,95]] },
+    { "id": "bench-left-chair-1", "boxes": [[330,300,15,15,55]] },
+    { "id": "bench-left-chair-2", "boxes": [[378,272,15,15,55]] },
+    { "id": "bench-left-chair-3", "boxes": [[428,243,15,15,55]] },
+    { "id": "bench-left-chair-4", "boxes": [[470,365,25,25,70]] },
+    { "id": "bench-left-chair-5", "boxes": [[525,333,25,25,70]] },
+    { "id": "bench-back", "boxes": [[683,267,90,134,43],[655,250,90,20,95]] },
+    { "id": "bench-back-chair-1", "boxes": [[568,145,15,15,45]] },
+    { "id": "bench-back-chair-2", "boxes": [[672,135,15,15,50]] },
+    { "id": "bench-back-chair-3", "boxes": [[714,152,15,15,50]] },
+    { "id": "bench-back-chair-4", "boxes": [[757,177,15,15,52]] },
+    { "id": "bench-back-chair-5", "boxes": [[580,228,25,25,70]] },
+    { "id": "bench-back-chair-6", "boxes": [[635,262,25,25,70]] },
+    { "id": "bench-right", "boxes": [[945,404,80,161,44],[915,375,12,130,90]] },
+    { "id": "bench-right-chair-1", "boxes": [[905,256,15,15,45]] },
+    { "id": "bench-right-chair-2", "boxes": [[952,280,15,15,45]] },
+    { "id": "bench-right-chair-3", "boxes": [[998,305,15,15,45]] },
+    { "id": "bench-right-chair-4", "boxes": [[805,355,25,25,75]] },
+    { "id": "bench-right-chair-5", "boxes": [[853,370,25,25,70]] },
+    { "id": "bench-right-chair-6", "boxes": [[903,397,25,25,70]] },
+    { "id": "coffee", "boxes": [[413,537,47,50,38],[413,502,25,25,98]] },
+    { "id": "reception", "boxes": [[658,515,120,76,51],[660,495,18,18,100],[705,474,18,18,105]] },
+    { "id": "reception-chair-1", "boxes": [[618,420,15,15,50]] },
+    { "id": "reception-chair-2", "boxes": [[658,395,15,15,50]] },
+    { "id": "sofa", "boxes": [[800,605,123,55,95]] }
+  ],
+  "pois": [
+    { "x": 480, "y": 520, "kind": "coffee" },
+    { "x": 725, "y": 520, "kind": "coffee" },
+    { "x": 455, "y": 390, "kind": "desk" },
+    { "x": 520, "y": 352, "kind": "desk" },
+    { "x": 600, "y": 255, "kind": "desk" },
+    { "x": 645, "y": 290, "kind": "desk" },
+    { "x": 790, "y": 375, "kind": "desk" },
+    { "x": 860, "y": 395, "kind": "desk" },
+    { "x": 905, "y": 425, "kind": "desk" },
+    { "x": 735, "y": 600, "kind": "lounge" },
+    { "x": 700, "y": 570, "kind": "lounge" },
+    { "x": 365, "y": 470, "kind": "plant" },
+    { "x": 950, "y": 470, "kind": "plant" },
+    { "x": 540, "y": 450, "kind": "window" },
+    { "x": 830, "y": 250, "kind": "window" }
+  ]
+}
