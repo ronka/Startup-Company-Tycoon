@@ -203,8 +203,10 @@ function OfficeStage({ state, valuation, cardWidth, maxHeight }: {
       <View style={styles.sceneClip}>
         <OfficeScene tier={tier} people={visible} width={width} />
       </View>
-      <View pointerEvents="none" style={styles.officeCaption}>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+      <View
+        pointerEvents="none"
+        style={[styles.officeCaption, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <ThemedText type="smallBold" numberOfLines={1}>
           {OFFICE_NAMES[tier]} · {formatCount(employees)} {employees === 1 ? 'person' : 'people'}
           {crowded ? ' · cramped' : ''}
         </ThemedText>
@@ -231,9 +233,21 @@ const styles = StyleSheet.create({
   weekPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: Radius.pill },
   officeCard: { padding: 0, overflow: 'hidden', justifyContent: 'center' },
   sceneClip: { alignItems: 'center', justifyContent: 'center' },
-  officeCaption: { position: 'absolute', top: Spacing.three, left: Spacing.three },
+  // Above every zIndex the scene animates its people and furniture to.
+  officeCaption: {
+    position: 'absolute',
+    top: Spacing.two,
+    left: Spacing.two,
+    maxWidth: '80%',
+    zIndex: 1000,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+  },
   overflowBadge: {
     position: 'absolute',
+    zIndex: 1000,
     right: Spacing.two,
     bottom: Spacing.two,
     borderWidth: StyleSheet.hairlineWidth,
