@@ -133,7 +133,7 @@ export default function HqScreen() {
           hints={[
             {
               id: 'hq',
-              text: 'Top bar: your cash, how many weeks it lasts (runway), and customers. Cash at $0 for 3 weeks = game over.',
+              text: 'Top bar: your cash, how many weeks it lasts (runway), and Next Week — its dots are your free weeks. Cash at $0 for 3 weeks = game over.',
             },
             {
               id: 'runway-short',

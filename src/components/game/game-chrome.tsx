@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { purchasesAvailable } from '@/purchases';
@@ -10,41 +10,20 @@ import { ActionTip } from '@/components/game/action-tip';
 import { BuyWeeksSheet } from '@/components/game/buy-weeks-sheet';
 import { DayCompleteSheet } from '@/components/game/day-complete-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
-import { HintSlot, useFirstRunHint } from '@/components/game/first-run-hint';
 import { NotificationPermissionAsk } from '@/components/game/notification-permission-ask';
-import { PrimaryButton } from '@/components/game/primary-button';
-import { SpotlightHint } from '@/components/game/spotlight-hint';
-import { ThemedText } from '@/components/themed-text';
 import { WeekInReviewSheet, type RivalShareMove } from '@/components/game/week-in-review-sheet';
 import { WeekTicker } from '@/components/game/week-ticker';
 import { Spacing } from '@/constants/theme';
 import { isNotableWeek } from '@/game/digest';
-import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { actionNowFor, tomorrowAgendaFor, type ActionNow } from '@/state/day-close';
-import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
+import type { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
 import { useLeaderboard } from '@/state/leaderboard-provider';
 import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
 import { notificationAskSettled } from '@/state/review-ask';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
-import {
-  WEEK_REGEN_MS,
-  WEEKS_BANK_CAP,
-  dateKey,
-  formatClockCountdown,
-  formatRefillCountdown,
-  isWeekBudgetExhausted,
-  nextWeekRegenAt,
-  weekBankFullAt,
-  type WeekBudget,
-} from '@/state/week-budget';
-
-/** The budget state the wall was pressed in; see `wallTappedFor`. */
-interface WallKey {
-  weekBudget: unknown;
-  purchasedWeeks: unknown;
-}
+import { dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
 
 /** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
 const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
@@ -70,14 +49,14 @@ const LEADERBOARD_ASK_ARM_MS = 700;
 const REVIEW_STREAK_DAYS = 3;
 
 /**
- * Persistent chrome shared by every game tab (Task 12): the Next Week
- * control, the pending-decision modal, and the post-tick
+ * Persistent chrome shared by every game tab (Task 12): the pending-decision
+ * modal, the wall's 💡 tip, and the post-tick
  * recap (a full Week in Review sheet on notable weeks, a compact dismissible
  * ticker on quiet ones — Task 13). Rendered once in `(game)/_layout.tsx`
  * rather than per-screen so its two `Modal`s never stack duplicates across
  * tabs that stay mounted in the background.
  */
-export function GameChrome() {
+export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWeeksFlow> }) {
   const {
     state,
     previousState,
@@ -86,12 +65,10 @@ export function GameChrome() {
     purchasedWeeks,
     creditPurchase,
     devFreePlay,
-    setDevFreePlay,
     streak,
   } = useGame();
   const leaderboard = useLeaderboard();
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
   const [reviewedWeek, setReviewedWeek] = useState<number | null>(null);
   const [tickerDismissedWeek, setTickerDismissedWeek] = useState<number | null>(null);
   // Week whose recap has "settled" — armed a beat after its tick's decision
@@ -99,9 +76,6 @@ export function GameChrome() {
   // the DecisionModal is dismissing (present-while-dismiss hangs iOS — see
   // docs/bug-stuck-decision-modal.md).
   const [recapArmedWeek, setRecapArmedWeek] = useState<number | null>(null);
-  // The one-time "this is the whole game" callout over Next Week. Retired by
-  // the first tick, so pressing the button counts as reading it.
-  const spotlight = useFirstRunHint('next-week-spotlight');
   // Which local calendar day the closing panel has already been shown for.
   // Persisted (see the load effect below) because the player who just hit the
   // wall is precisely the player about to kill the app — in-memory state alone
@@ -118,30 +92,12 @@ export function GameChrome() {
   // unannounced; asking after the close keeps it out of the frame the sheet is
   // dismissing in.
   const [reminderOptedIn, setReminderOptedIn] = useState(false);
-  // Latched by the first press at the wall, for the budget state it was
-  // pressed in. From then on the Next Week control becomes a refill countdown
-  // rather than a button: on 1.0.4-19, wall players pressed it about 5.3 times
-  // each even after the copy said "come back tomorrow". The first press is
-  // still dispatched, since it's what records `week_advance_blocked`. Keyed
-  // to the two budget objects rather than cleared by an effect, so a regen
-  // tick or a purchase (each replaces one) hands the button straight back.
-  const [wallTappedFor, setWallTappedFor] = useState<WallKey | null>(null);
 
   // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
   // no-op while either is still resolving (null), so play is never blocked
   // by a slow AsyncStorage read. Derived above the early return below because
   // the closing-panel effects key off it and hooks can't run conditionally.
   const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
-  const wallTapped =
-    budgetExhausted &&
-    wallTappedFor !== null &&
-    wallTappedFor.weekBudget === weekBudget &&
-    wallTappedFor.purchasedWeeks === purchasedWeeks;
-
-  // The whole buy-weeks flow — presenting the paywall, falling back to the
-  // sheet, crediting and reporting — lives in `useBuyWeeksFlow`. The chrome
-  // only says when it was asked for and where the sheet goes.
-  const buyWeeks = useBuyWeeksFlow(state !== null && !state.gameOver);
 
   useEffect(() => {
     AsyncStorage.getItem(DAY_COMPLETE_KEY)
@@ -248,15 +204,6 @@ export function GameChrome() {
       }))
     : [];
 
-  // Only pitch "advance a week" while advancing is actually possible. The Next
-  // Week button deliberately stays pressable at the wall (see its handler), so
-  // this gates the spotlight alone.
-  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted;
-  // Down to the final free dot, with nothing purchased to fall back on — the
-  // moment the daily budget is worth explaining, before it bites.
-  const onLastFreeWeek =
-    !budgetExhausted && weekBudget?.weeksRemaining === 1 && (purchasedWeeks?.weeksRemaining ?? 0) === 0;
-
   return (
     <>
       {showTicker ? (
@@ -269,111 +216,20 @@ export function GameChrome() {
         />
       ) : null}
 
-      <View style={[styles.chrome, { paddingBottom: insets.bottom + Spacing.two }]}>
-        {showSpotlight ? (
-          <SpotlightHint text="This is the whole game → advance a week" onDismiss={spotlight.dismiss} />
-        ) : null}
+      {/* The daily wall is the one moment the player has just felt why a nudge
+          is worth allowing. Mounting is the ask, and it waits for both the
+          player's "Notify me when weeks are back" tap and the panel's dismissal: 24% of
+          players granted the old unannounced dialog here, and presenting it
+          into the sheet's frame hangs iOS (docs/bug-stuck-decision-modal.md). */}
+      {reminderOptedIn ? <NotificationPermissionAsk trigger="reminder_optin" /> : null}
 
-        {/* The daily wall is the one moment the player has just felt why a nudge
-            is worth allowing. Mounting is the ask, and it waits for both the
-            player's "Notify me when weeks are back" tap and the panel's dismissal: 24% of
-            players granted the old unannounced dialog here, and presenting it
-            into the sheet's frame hangs iOS (docs/bug-stuck-decision-modal.md). */}
-        {reminderOptedIn ? <NotificationPermissionAsk trigger="reminder_optin" /> : null}
-
-        <View style={styles.footer}>
-          {wallTapped ? (
-            <View style={styles.wallFooter}>
-              {weekBudget ? <RefillCountdown weekBudget={weekBudget} /> : null}
-              {actionNow ? <ActionTip action={actionNow} onPress={() => openActionTip(actionNow, 'wall')} /> : null}
-              {purchasesAvailable ? (
-                <PrimaryButton
-                  label="Pull an all-nighter"
-                  variant="secondary"
-                  onPress={() => buyWeeks.open('out_of_weeks')}
-                  style={styles.wallButton}
-                />
-              ) : null}
-            </View>
-          ) : (
-          <PrimaryButton
-            label={
-              budgetExhausted
-                ? purchasesAvailable
-                  ? 'Pull an all-nighter'
-                  : 'Back soon'
-                : 'Next Week →'
-            }
-            onPress={() => {
-              if (spotlight.visible) spotlight.dismiss();
-              // Dispatched even when the daily budget is spent: the store's TICK
-              // gate swallows it and captures WEEK_ADVANCE_BLOCKED, which is the
-              // only signal that tells a hit-the-wall player apart from one who
-              // drifted off before reaching it. Where purchases exist, the press
-              // also opens the week-pack sheet.
-              dispatch({ type: 'TICK' });
-              if (budgetExhausted) setWallTappedFor({ weekBudget, purchasedWeeks });
-              if (budgetExhausted && purchasesAvailable) buyWeeks.open('out_of_weeks');
-            }}
-            disabled={!!state.pendingEvent}
-            style={styles.nextButton}
-          />
-          )}
+      {/* At the wall, the one thing still worth doing while the Hud's Next Week
+          chip counts down to the next free week. */}
+      {budgetExhausted && actionNow ? (
+        <View style={[styles.chrome, { paddingBottom: insets.bottom + Spacing.two }]}>
+          <ActionTip action={actionNow} onPress={() => openActionTip(actionNow, 'wall')} />
         </View>
-
-        {/* Held back while the spotlight is up, so the chrome never stacks two callouts. */}
-        <HintSlot
-          style={styles.budgetHint}
-          hints={[
-            {
-              id: 'week-budget-dots',
-              text: `The meter shows your free weeks. Spent ones come back — one every ${WEEK_REGEN_MS / 60_000} minutes.`,
-              when: onLastFreeWeek && !spotlight.visible,
-            },
-            {
-              id: 'out-of-weeks',
-              text: `Sprint done. A week comes back every ${WEEK_REGEN_MS / 60_000} minutes, the full ${WEEKS_BANK_CAP} in ${(WEEKS_BANK_CAP * WEEK_REGEN_MS) / 3_600_000} hours.`,
-              when: budgetExhausted && !spotlight.visible,
-            },
-          ]}
-        />
-
-        <View style={styles.budgetRow}>
-          {!budgetExhausted && weekBudget ? (
-            purchasesAvailable ? (
-              <Pressable
-                onPress={() => buyWeeks.open('hud')}
-                accessibilityRole="button"
-                accessibilityLabel={`${weekBudget.weeksRemaining} free weeks and ${purchasedWeeks?.weeksRemaining ?? 0} purchased weeks remaining. Get more weeks.`}
-                style={styles.budgetControl}>
-                <WeekBudgetMeter
-                  weeksRemaining={weekBudget.weeksRemaining}
-                  purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
-                />
-              </Pressable>
-            ) : (
-              <WeekBudgetMeter
-                weeksRemaining={weekBudget.weeksRemaining}
-                purchasedWeeksRemaining={purchasedWeeks?.weeksRemaining ?? 0}
-              />
-            )
-          ) : null}
-
-          {__DEV__ ? (
-            <Pressable
-              onPress={() => setDevFreePlay(!devFreePlay)}
-              accessibilityRole="button"
-              accessibilityLabel={`Developer free play: ${devFreePlay ? 'on' : 'off'}`}
-              accessibilityState={{ selected: devFreePlay }}
-              style={[styles.devToggle, { backgroundColor: devFreePlay ? theme.successBackground : theme.surface }]}>
-
-              <ThemedText type="small" themeColor={devFreePlay ? 'success' : 'textMuted'} style={styles.devGlyph}>
-                ∞
-              </ThemedText>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+      ) : null}
 
       <DecisionModal
         card={state.pendingEvent}
@@ -491,164 +347,9 @@ function maybeAskForReviewAtWall(streakDays: number, insolvent: boolean): void {
     .catch(() => {});
 }
 
-/**
- * The wall's regen progress, shown in place of the Next Week button once the
- * player has pressed into the wall: the time to the next free week, a bar
- * filling toward it, and how long until the bank is full. Deliberately not
- * pressable, so there's nothing left to retry.
- *
- * The clock is read in effects, never during render (the same rule
- * `week-budget.ts` follows). Nothing here hands the button back: when a week
- * lands the store replaces `weekBudget`, which un-latches the wall.
- */
-function RefillCountdown({ weekBudget }: { weekBudget: WeekBudget }) {
-  const theme = useTheme();
-  const [progress, setProgress] = useState<{ next: string; full: string | null; fraction: number } | null>(null);
-
-  useEffect(() => {
-    const nextAt = nextWeekRegenAt(weekBudget)?.getTime() ?? null;
-    const fullAt = weekBankFullAt(weekBudget)?.getTime() ?? null;
-    const update = () => {
-      if (nextAt === null) return;
-      const now = Date.now();
-      const remaining = Math.max(0, nextAt - now);
-      setProgress({
-        next: formatClockCountdown(remaining),
-        // Only worth a second number once it says something the first doesn't.
-        full: fullAt !== null && fullAt > nextAt ? formatRefillCountdown(Math.max(0, fullAt - now)) : null,
-        fraction: Math.min(1, Math.max(0, 1 - remaining / WEEK_REGEN_MS)),
-      });
-    };
-    // Every second: the headline counts down in seconds.
-    const timer = setInterval(update, 1_000);
-    // First read deferred a tick rather than run synchronously in the effect.
-    const first = setTimeout(update, 0);
-    return () => {
-      clearInterval(timer);
-      clearTimeout(first);
-    };
-  }, [weekBudget]);
-
-  const ready = weekBudget.weeksRemaining;
-  return (
-    <View style={styles.countdown} accessibilityRole="text">
-      <View style={styles.countdownHeader}>
-        <ThemedText type="smallBold">Free week in</ThemedText>
-        <ThemedText type="smallBold" style={styles.countdownTime}>
-          {progress?.next ?? '…'}
-        </ThemedText>
-      </View>
-      <View style={[styles.progressTrack, { backgroundColor: theme.border }]}>
-        <View
-          style={[
-            styles.progressFill,
-            { backgroundColor: theme.accent, width: `${Math.round((progress?.fraction ?? 0) * 100)}%` },
-          ]}
-        />
-      </View>
-      <ThemedText type="small" themeColor="textSecondary">
-        {ready} of {WEEKS_BANK_CAP} refilled{progress?.full ? ` · all back in ${progress.full}` : ''}
-      </ThemedText>
-    </View>
-  );
-}
-
-/** Free-week count with a segmented meter; purchased weeks remain a separate, uncapped badge. */
-function WeekBudgetMeter({
-  weeksRemaining,
-  purchasedWeeksRemaining,
-}: {
-  weeksRemaining: number;
-  purchasedWeeksRemaining: number;
-}) {
-  const theme = useTheme();
-  return (
-    <View
-      accessible
-      accessibilityLabel={`${weeksRemaining} of ${WEEKS_BANK_CAP} free weeks remaining${purchasedWeeksRemaining > 0 ? `, plus ${purchasedWeeksRemaining} purchased weeks` : ''}. One free week refills every ${WEEK_REGEN_MS / 60_000} minutes.`}
-      style={[styles.weekMeter, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <ThemedText type="footnote" themeColor="textSecondary">
-        <ThemedText type="footnote" themeColor="text">{weeksRemaining}/{WEEKS_BANK_CAP}</ThemedText> free weeks
-      </ThemedText>
-      <View style={styles.dotsRow}>
-        {Array.from({ length: WEEKS_BANK_CAP }, (_, i) => (
-          <View
-            key={i}
-            style={[styles.dot, { backgroundColor: i < weeksRemaining ? theme.accent : theme.surfaceRaised }]}
-          />
-        ))}
-      </View>
-      {purchasedWeeksRemaining > 0 ? (
-        <ThemedText type="footnote" themeColor="success">+{purchasedWeeksRemaining}</ThemedText>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   chrome: {
     paddingTop: Spacing.two,
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: Spacing.two,
     paddingHorizontal: Spacing.four,
-  },
-  wallFooter: {
-    flex: 1,
-    gap: Spacing.two,
-  },
-  wallButton: {
-    paddingVertical: Spacing.two,
-  },
-  countdown: {
-    gap: Spacing.one,
-    paddingVertical: Spacing.two,
-  },
-  countdownHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  countdownTime: {
-    fontVariant: ['tabular-nums'],
-  },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginVertical: Spacing.half,
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  nextButton: {
-    flex: 1,
-    paddingVertical: Spacing.three,
-  },
-  budgetHint: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
-  },
-  budgetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
-  },
-  budgetControl: { minHeight: 44, justifyContent: 'center' },
-  devToggle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  devGlyph: { fontSize: 20, lineHeight: 24 },
-  weekMeter: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6 },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 3,
-  },
-  dot: {
-    width: 5,
-    height: 10,
-    borderRadius: 2,
   },
 });

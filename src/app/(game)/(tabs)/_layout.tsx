@@ -7,6 +7,7 @@ import { FooterFade } from '@/components/game/footer-fade';
 import { Hud } from '@/components/game/hud';
 import { GameTabBar } from '@/components/game/game-tab-bar';
 import { useTheme } from '@/hooks/use-theme';
+import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { raiseAvailable } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
 
@@ -18,17 +19,21 @@ export default function GameTabsLayout() {
   // 💡 tip, visible from anywhere in the run.
   const { state } = useGame();
   const moneyHasAction = raiseAvailable(state);
+  // One buy-weeks flow for both doors into it (the Hud's Next Week chip and the
+  // chrome's closing panel): its `isOpen` gates the chrome's other surfaces, and
+  // its guard against a double-present only works if there's one of it.
+  const buyWeeks = useBuyWeeksFlow(state !== null && !state.gameOver);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <Hud />
+      <Hud onBuyWeeks={buyWeeks.open} />
       <View style={{ flex: 1 }}>
         <SafeAreaInsetsContext.Provider value={{ ...insets, bottom: 0 }}>
           <Tabs
             tabBar={(props) => (
               <View style={{ backgroundColor: theme.background, zIndex: 1 }}>
                 <FooterFade />
-                <GameChrome />
+                <GameChrome buyWeeks={buyWeeks} />
                 <GameTabBar {...props} bottomInset={insets.bottom} moneyHasAction={moneyHasAction} />
               </View>
             )}
