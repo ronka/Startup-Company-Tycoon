@@ -32,7 +32,8 @@ export default function GameTabsLayout() {
           <Tabs
             tabBar={(props) => (
               <View style={{ backgroundColor: theme.background, zIndex: 1 }}>
-                <FooterFade />
+                {/* HQ fits on one screen, so there's nothing to recede behind the footer. */}
+                {props.state.routes[props.state.index]?.name !== 'hq' ? <FooterFade /> : null}
                 <GameChrome buyWeeks={buyWeeks} />
                 <GameTabBar {...props} bottomInset={insets.bottom} moneyHasAction={moneyHasAction} />
               </View>

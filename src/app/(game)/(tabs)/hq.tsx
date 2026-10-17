@@ -1,287 +1,174 @@
 import { Redirect } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { useTabView } from '@/analytics/use-tab-view';
-import { AnimatedNumber } from '@/components/game/animated-number';
 import { BottomSheet } from '@/components/game/bottom-sheet';
-import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
 import { Card } from '@/components/game/card';
-import { GameArt } from '@/components/game/game-art';
 import { CompanyHeader } from '@/components/game/company-header';
-import { FirstRunHint, HintSlot } from '@/components/game/first-run-hint';
-import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
+import { HintSlot } from '@/components/game/first-run-hint';
 import { InsolvencyBanner } from '@/components/game/insolvency-banner';
-import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
 import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
 import { NewsFeed } from '@/components/game/news-feed';
-import { OfficeCard } from '@/components/game/office-card';
-import { PrimaryButton } from '@/components/game/primary-button';
-import { RingGauge } from '@/components/game/ring-gauge';
+import { officeHeadcount } from '@/components/game/office-card';
 import { SectionHeader } from '@/components/game/section-header';
-import { Sparkline } from '@/components/game/sparkline';
-import { StatTile } from '@/components/game/stat-tile';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
-import { FOCUS_TRANSITION_WEEKS, weeklyReportFor } from '@/game/balance';
-import type { FocusId } from '@/game/types';
+import { Radius, Spacing } from '@/constants/theme';
+import type { GameState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatCount, formatMoney } from '@/lib/format';
 import { moraleTone } from '@/lib/stat-colors';
-import { STAT_EXPLAINERS } from '@/lib/stat-explainers';
-import { BOTTLENECK_LABEL, ERA_LABEL, FOCUS_LABEL, trendAlignmentFor } from '@/lib/strategy-copy';
+import { OFFICE_NAMES, SCENE_ASPECT, sceneryFor } from '@/office/maps';
+import { OfficeScene } from '@/office/office-scene';
+import { peopleShown } from '@/office/select-office';
+import { useOfficeTier } from '@/office/use-office-tier';
 import { useGame } from '@/state/game-store';
 
 /** Runway below this many weeks is where a founder should be thinking about raising. */
 const SHORT_RUNWAY_WEEKS = 10;
 /** By this week, a player who still hasn't opened the drawer gets pointed at it. */
 const DRAWER_HINT_WEEK = 6;
-/** How many news entries the collapsed "This week" list shows. */
-const COMPACT_NEWS_COUNT = 3;
-/** Hype is a 0.5–2.5 multiplier internally; ×40 reads as a familiar 20–100 score. */
-const HYPE_SCORE_SCALE = 40;
+/**
+ * How far the office may zoom past the card's width, cropping its side tips,
+ * to use more of a tall screen. The room art runs nearly edge to edge, so
+ * much more than this starts cutting into furniture.
+ */
+const OFFICE_MAX_ZOOM = 1.12;
+/** One compact news row (one-line title + one-line flavor) plus the gap after it. */
+const NEWS_ROW_HEIGHT = 60;
+/** The compact news card's vertical padding, both edges together. */
+const NEWS_CARD_PADDING = 32;
+/** The office never takes more than this share of the screen, so the numbers and news always fit. */
+const OFFICE_MAX_SCREEN_SHARE = 0.6;
 
+/**
+ * HQ: the company at a glance, on one screen with no scrolling. The living
+ * office is the centrepiece; under it, three numbers (valuation, MRR, morale)
+ * and as much of this week's news as fits. Everything else has a home on
+ * another tab: cash flow and the valuation chart on Money, strategy, hype,
+ * and the leaderboard on Market, the team on Team.
+ */
 export default function HqScreen() {
   const { state, previousState, dispatch } = useGame();
   const theme = useTheme();
-  const [pendingFocus, setPendingFocus] = useState<FocusId | null>(null);
-  const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
-  const [allNewsOpen, setAllNewsOpen] = useState(false);
   const [logoPickerOpen, setLogoPickerOpen] = useState(false);
-  const [chartWidth, setChartWidth] = useState(0);
-  const focusPickerRef = useRef<FocusPickerHandle>(null);
+  const [newsOpen, setNewsOpen] = useState(false);
+  const [screenBox, setScreenBox] = useState<{ w: number; h: number } | null>(null);
+  const [newsHeight, setNewsHeight] = useState(0);
   useTabView('hq');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  const { burn, revenue, valuation, insolvent, runway } = deriveWeeklyStats(state);
+  const { valuation, revenue, insolvent, runway } = deriveWeeklyStats(state);
   const runwayIsShort = Number.isFinite(runway) && runway < SHORT_RUNWAY_WEEKS;
-  const previous = previousState ? deriveWeeklyStats(previousState) : null;
-  const report = weeklyReportFor(state);
-
-  // Week-over-week valuation move, shown as the hero's delta chip.
+  const previousValuation = previousState ? deriveWeeklyStats(previousState).valuation : null;
   const valuationChange =
-    previous && previous.valuation > 0 ? ((valuation - previous.valuation) / previous.valuation) * 100 : null;
-  const valuationUp = (valuationChange ?? 0) >= 0;
-  const history = state.valuationHistory ?? [];
-  const hasChart = history.length > 1;
-  const newsShown = allNewsOpen ? state.newsLog : state.newsLog.slice(0, COMPACT_NEWS_COUNT);
+    previousValuation && previousValuation > 0 ? ((valuation - previousValuation) / previousValuation) * 100 : null;
 
-  const requestFocus = (focus: FocusId) => {
-    focusPickerRef.current?.dismiss();
-    setPendingFocus(focus);
-  };
-
-  const confirmFocus = () => {
-    if (pendingFocus) dispatch({ type: 'SET_FOCUS', focus: pendingFocus });
-    setPendingFocus(null);
-  };
+  // As many rows as the leftover height holds, so nothing is cut mid-line and
+  // nothing scrolls.
+  const newsRows = Math.max(0, Math.floor((newsHeight - NEWS_CARD_PADDING + Spacing.three) / NEWS_ROW_HEIGHT));
 
   const openLogoPicker = () => {
     track(EVENTS.COMPANY_LOGO_PICKER_OPENED, { surface: 'hq', had_logo: state.companyLogo != null });
     setLogoPickerOpen(true);
   };
 
-  const openFocusPicker = () => {
-    track(EVENTS.FOCUS_PICKER_OPENED, { focus: state.focus });
-    focusPickerRef.current?.present();
-  };
-
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.companyCard}>
-          <View style={styles.companyTop}>
-            <View style={styles.companyIdentity}>
-              <CompanyHeader
-                name={state.companyName}
-                stage={state.stage}
-                focus={state.focus}
-                logo={state.companyLogo}
-                onPressLogo={openLogoPicker}
-              />
-              <View style={styles.weekBadge}>
-                <ThemedText type="smallBold" themeColor="accent">
-                  ▦ Year {Math.floor(state.week / 52) + 1} · Week {state.week}
-                </ThemedText>
-              </View>
-            </View>
-            <View pointerEvents="none" style={styles.headquartersArt}><GameArt name="hq" size={110} /></View>
-          </View>
-          <View style={styles.companyMetrics}>
-            {[
-              { label: 'MRR', value: formatMoney(revenue * 4) },
-              { label: '⚡ Hype', value: `${Math.round(state.hype * HYPE_SCORE_SCALE)}` },
-              { label: 'Share', value: `${Math.round(state.marketShare * 100)}%` },
-            ].map((metric) => (
-              <Card key={metric.label} style={styles.companyMetric}>
-                <ThemedText type="small" themeColor="textSecondary">{metric.label}</ThemedText>
-                <ThemedText type="smallBold" numberOfLines={1}>{metric.value}</ThemedText>
-              </Card>
-            ))}
-          </View>
+    <View
+      style={[styles.screen, { backgroundColor: theme.background }]}
+      onLayout={(e: LayoutChangeEvent) => {
+        const { width, height } = e.nativeEvent.layout;
+        setScreenBox({ w: width - styles.screen.paddingHorizontal * 2, h: height });
+      }}>
+      <View style={styles.companyRow}>
+        <View style={styles.companyIdentity}>
+          <CompanyHeader
+            name={state.companyName}
+            stage={state.stage}
+            focus={state.focus}
+            logo={state.companyLogo}
+            onPressLogo={openLogoPicker}
+          />
+        </View>
+        <View style={[styles.weekPill, { backgroundColor: theme.accentSurface }]}>
+          <ThemedText type="smallBold" themeColor="accent">
+            Year {Math.floor(state.week / 52) + 1} · Wk {state.week}
+          </ThemedText>
+        </View>
+      </View>
 
-        </Card>
+      {/* At most one shows at a time; earlier entries win the slot. */}
+      <HintSlot
+        hints={[
+          {
+            id: 'hq',
+            text: 'Top bar: your cash, how many weeks it lasts (runway), and Next Week — its dots are your free weeks. Cash at $0 for 3 weeks = game over.',
+          },
+          {
+            id: 'runway-short',
+            text: 'Runway is getting short. The Money tab is where founders raise cash — before terms get ugly.',
+            when: runwayIsShort,
+          },
+          {
+            id: 'drawer-glossary',
+            text: 'Stuck on a term? The ☰ menu has a full glossary with your live numbers.',
+            when: state.week >= DRAWER_HINT_WEEK,
+          },
+        ]}
+      />
 
-        <LeaderboardRankCard />
+      {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 
-        {/* At most one shows at a time; earlier entries win the slot. */}
-        <HintSlot
-          hints={[
-            {
-              id: 'hq',
-              text: 'Top bar: your cash, how many weeks it lasts (runway), and Next Week — its dots are your free weeks. Cash at $0 for 3 weeks = game over.',
-            },
-            {
-              id: 'runway-short',
-              text: 'Runway is getting short. The Money tab is where founders raise cash — before terms get ugly.',
-              when: runwayIsShort,
-            },
-            {
-              id: 'drawer-glossary',
-              text: 'Stuck on a term? The ☰ menu has a full glossary with your live numbers.',
-              when: state.week >= DRAWER_HINT_WEEK,
-            },
-          ]}
+      {screenBox ? (
+        <OfficeStage
+          state={state}
+          valuation={valuation}
+          cardWidth={screenBox.w}
+          maxHeight={screenBox.h * OFFICE_MAX_SCREEN_SHARE}
         />
+      ) : null}
 
-        {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
-
-        <Card tone="plain" style={[styles.hero, !hasChart && styles.heroCompact]}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroNumbers}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Company valuation
-              </ThemedText>
-              <View style={styles.heroValueRow}>
-                <AnimatedNumber value={valuation} format={formatMoney} goodDirection="up" type="hero" />
-                {valuationChange !== null && Math.abs(valuationChange) >= 0.1 ? (
-                  <ThemedText type="smallBold" themeColor={valuationUp ? 'success' : 'danger'}>
-                    {valuationUp ? '↗' : '↘'} {Math.abs(valuationChange).toFixed(1)}%
-                  </ThemedText>
-                ) : null}
-              </View>
-              <ThemedText type="small" themeColor="textMuted">
-                Week {state.week} · post-money est.
-              </ThemedText>
-            </View>
-            <RingGauge percent={state.morale} label="Morale" size={100} tone={moraleTone(state.morale)} />
-          </View>
-          {/* Bleeds to the card's bottom edge, like a chart footer. Kept out of
-              the tree until there's a series to draw, so the card doesn't open
-              with 72px of dead space in weeks 0-1. */}
-          {hasChart ? (
-            <View style={styles.chart} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
-              {chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={92} color={theme.success} /> : null}
-            </View>
+      <View style={styles.vitalsRow}>
+        <Card style={styles.vital}>
+          <ThemedText type="small" themeColor="textSecondary">Valuation</ThemedText>
+          <ThemedText type="smallBold" numberOfLines={1}>{formatMoney(valuation)}</ThemedText>
+          {valuationChange !== null && Math.abs(valuationChange) >= 0.1 ? (
+            <ThemedText type="footnote" themeColor={valuationChange >= 0 ? 'success' : 'danger'}>
+              {valuationChange >= 0 ? '↗' : '↘'} {Math.abs(valuationChange).toFixed(1)}%
+            </ThemedText>
           ) : null}
         </Card>
+        <Card style={styles.vital}>
+          <ThemedText type="small" themeColor="textSecondary">MRR</ThemedText>
+          <ThemedText type="smallBold" numberOfLines={1}>{formatMoney(revenue * 4)}</ThemedText>
+        </Card>
+        <Card style={styles.vital}>
+          <ThemedText type="small" themeColor="textSecondary">Morale</ThemedText>
+          <ThemedText type="smallBold" themeColor={moraleTone(state.morale)}>
+            {Math.round(state.morale)}
+          </ThemedText>
+        </Card>
+      </View>
 
-        <OfficeCard state={state} valuation={valuation} />
+      <View style={styles.news} onLayout={(e) => setNewsHeight(e.nativeEvent.layout.height)}>
+        {newsRows > 0 ? (
+          <Pressable
+            onPress={() => setNewsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="This week's news. Show all news.">
+            <NewsFeed entries={state.newsLog.slice(0, newsRows)} variant="compact" titleLines={1} />
+          </Pressable>
+        ) : null}
+      </View>
 
-        <View style={styles.grid}>
-          <StatTile
-            label="Revenue"
-            art="money"
-            value={revenue}
-            previousValue={previous?.revenue}
-            format={formatMoney}
-            goodDirection="up"
-            icon={{ ios: 'chart.line.uptrend.xyaxis', android: 'trending_up', web: 'trending_up' }}
-            explainer={STAT_EXPLAINERS.revenue}
-          />
-          <StatTile
-            label="Burn / wk"
-            emoji="🔥"
-            value={burn}
-            previousValue={previous?.burn}
-            format={formatMoney}
-            goodDirection="down"
-            alert={runwayIsShort}
-            icon={{ ios: 'flame.fill', android: 'local_fire_department', web: 'local_fire_department' }}
-            hint="Tap for breakdown"
-            onPress={() => {
-              track(EVENTS.BURN_BREAKDOWN_OPENED, { screen: 'hq' });
-              setBurnBreakdownOpen(true);
-            }}
-          />
-          <StatTile
-            label="Hype"
-            emoji="⚡"
-            value={state.hype * HYPE_SCORE_SCALE}
-            previousValue={previousState ? previousState.hype * HYPE_SCORE_SCALE : undefined}
-            format={(n) => `${Math.round(n)}`}
-            goodDirection="up"
-            icon={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
-            explainer={STAT_EXPLAINERS.hype}
-          />
-          <StatTile
-            label="Active users"
-            art="team"
-            value={state.customers}
-            previousValue={previousState?.customers}
-            format={formatCount}
-            goodDirection="up"
-            icon={{ ios: 'person.2.fill', android: 'groups', web: 'groups' }}
-            explainer={STAT_EXPLAINERS.customers}
-          />
-        </View>
-
-        {/* The whole card is the tap target, so "Change" is a label, not a
-            nested button — nesting one would be invalid and unreachable. */}
-        <Pressable onPress={openFocusPicker} accessibilityRole="button" accessibilityLabel="Change company focus">
-          <Card>
-            <View style={styles.strategyHeader}>
-              <ThemedText type="sectionLabel">Strategy</ThemedText>
-              <ThemedText type="small" themeColor="accent">
-                Change
-              </ThemedText>
-            </View>
-            <ThemedText type="default">{FOCUS_LABEL[state.focus]} · {ERA_LABEL[state.era]} era</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {trendAlignmentFor(state.focus, state.trend)}
-            </ThemedText>
-            <ThemedText type="small" themeColor="textMuted">
-              Bottleneck: {BOTTLENECK_LABEL[report.bottleneck]}
-            </ThemedText>
-          </Card>
-        </Pressable>
-
-        <View style={styles.newsSection}>
-          <SectionHeader
-            label="This week"
-            action={state.newsLog.length > COMPACT_NEWS_COUNT ? (allNewsOpen ? 'Show less' : 'View all') : undefined}
-            onPressAction={() => setAllNewsOpen((open) => !open)}
-          />
-          <NewsFeed entries={newsShown} variant={allNewsOpen ? 'full' : 'compact'} />
-        </View>
-      </ScrollView>
-
-      <BottomSheet visible={pendingFocus !== null} onClose={() => setPendingFocus(null)} title="Switch focus?">
-        <FirstRunHint
-          id="focus-switch"
-          text={`Switching focus costs ~${FOCUS_TRANSITION_WEEKS} weeks of drag — commit, don't flip-flop.`}
-        />
-        <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
-          {pendingFocus
-            ? `Switching to ${FOCUS_LABEL[pendingFocus]} costs ${FOCUS_TRANSITION_WEEKS} weeks of reduced dev effort and conversion while the team retools.`
-            : ''}
-        </ThemedText>
-        <View style={styles.sheetActions}>
-          <PrimaryButton
-            variant="secondary"
-            label="Cancel"
-            onPress={() => setPendingFocus(null)}
-            style={styles.sheetButton}
-          />
-          <PrimaryButton variant="primary" label="Confirm switch" onPress={confirmFocus} style={styles.sheetButton} />
-        </View>
+      <BottomSheet visible={newsOpen} onClose={() => setNewsOpen(false)} title="News">
+        <SectionHeader label={`Week ${state.week}`} />
+        <NewsFeed entries={state.newsLog} variant="full" />
       </BottomSheet>
-
-      <BurnBreakdownModal state={state} visible={burnBreakdownOpen} onClose={() => setBurnBreakdownOpen(false)} />
 
       <LogoPickerSheet
         visible={logoPickerOpen}
@@ -289,89 +176,72 @@ export default function HqScreen() {
         onCommit={(logo) => dispatch({ type: 'SET_COMPANY_LOGO', logo })}
         onClose={() => setLogoPickerOpen(false)}
       />
-
-      <FocusPicker
-        ref={focusPickerRef}
-        focus={state.focus}
-        productQuality={state.productQuality}
-        rivals={state.rivals}
-        trend={state.trend}
-        onSelect={requestFocus}
-      />
     </View>
+  );
+}
+
+/**
+ * The living office, zoomed slightly past the card's width (side tips
+ * cropped) and with the card hugging the scene, so no empty band sits above
+ * or below the room. Shrinks only when the screen is too short to fit it.
+ */
+function OfficeStage({ state, valuation, cardWidth, maxHeight }: {
+  state: GameState;
+  valuation: number;
+  cardWidth: number;
+  maxHeight: number;
+}) {
+  const theme = useTheme();
+  const employees = officeHeadcount(state);
+  const tier = useOfficeTier(employees, valuation, state.week);
+  const { visible, overflow, crowded } = peopleShown(employees, sceneryFor(tier).map.capacity);
+  const width = Math.min(cardWidth * OFFICE_MAX_ZOOM, maxHeight / SCENE_ASPECT);
+  const height = width * SCENE_ASPECT;
+
+  return (
+    <Card tone="plain" style={[styles.officeCard, { height }]}>
+      <View style={styles.sceneClip}>
+        <OfficeScene tier={tier} people={visible} width={width} />
+      </View>
+      <View pointerEvents="none" style={styles.officeCaption}>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+          {OFFICE_NAMES[tier]} · {formatCount(employees)} {employees === 1 ? 'person' : 'people'}
+          {crowded ? ' · cramped' : ''}
+        </ThemedText>
+      </View>
+      {overflow > 0 ? (
+        <View style={[styles.overflowBadge, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <ThemedText type="smallBold">+{formatCount(overflow)}</ThemedText>
+        </View>
+      ) : null}
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-  },
-  content: {
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
-    paddingBottom: Spacing.six,
+    paddingBottom: Spacing.two,
     gap: Spacing.two,
   },
-  companyMetrics: { flexDirection: 'row', gap: 8 },
-  companyMetric: { flex: 1, padding: 8, gap: 0, borderRadius: 16 },
-  companyCard: { gap: Spacing.two },
-  companyTop: { flexDirection: 'row', alignItems: 'center', minHeight: 100 },
-  companyIdentity: { flex: 1, zIndex: 1 },
-  headquartersArt: { marginRight: -16, marginLeft: -12 },
-  weekBadge: { alignSelf: 'flex-start', marginTop: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, backgroundColor: '#173454' },
-  hero: {
-    paddingTop: Spacing.three,
-    paddingHorizontal: Spacing.three,
+  companyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  companyIdentity: { flex: 1 },
+  weekPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: Radius.pill },
+  officeCard: { padding: 0, overflow: 'hidden', justifyContent: 'center' },
+  sceneClip: { alignItems: 'center', justifyContent: 'center' },
+  officeCaption: { position: 'absolute', top: Spacing.three, left: Spacing.three },
+  overflowBadge: {
+    position: 'absolute',
+    right: Spacing.two,
+    bottom: Spacing.two,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
   },
-  // No chart yet: the card closes up instead of leaving the slot empty.
-  heroCompact: {
-    paddingBottom: Spacing.three,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.three,
-  },
-  heroNumbers: {
-    flex: 1,
-    gap: Spacing.half,
-  },
-  heroValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.two,
-    flexWrap: 'wrap',
-  },
-  chart: {
-    marginTop: Spacing.three,
-    marginHorizontal: -Spacing.three,
-    height: 92,
-    justifyContent: 'flex-end',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-  },
-  strategyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: Spacing.one,
-  },
-  newsSection: {
-    gap: Spacing.two,
-    marginTop: Spacing.two,
-  },
-  sheetBody: {
-    lineHeight: 20,
-  },
-  sheetActions: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-  },
-  sheetButton: {
-    flex: 1,
-  },
+  vitalsRow: { flexDirection: 'row', gap: Spacing.two },
+  vital: { flex: 1, padding: Spacing.two, gap: 0, borderRadius: Radius.lg },
+  news: { flex: 1, overflow: 'hidden' },
 });

@@ -1,18 +1,32 @@
 import { Redirect } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
 import { useTabView } from '@/analytics/use-tab-view';
+import { BottomSheet } from '@/components/game/bottom-sheet';
 import { Card } from '@/components/game/card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
+import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
+import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
+import { PrimaryButton } from '@/components/game/primary-button';
 import { ProgressBar } from '@/components/game/progress-bar';
 import { SectionHeader } from '@/components/game/section-header';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { FOCUS_TRANSITION_WEEKS, weeklyReportFor } from '@/game/balance';
 import type { Era } from '@/game/events/types';
 import type { FocusId } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCount } from '@/lib/format';
-import { ERA_LABEL, FOCUS_LABEL, TREND_LABEL, TREND_PHASE_LABEL, trendAlignmentFor } from '@/lib/strategy-copy';
+import {
+  BOTTLENECK_LABEL,
+  ERA_LABEL,
+  FOCUS_LABEL,
+  TREND_LABEL,
+  TREND_PHASE_LABEL,
+  trendAlignmentFor,
+} from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
 
 const HYPE_MIN = 0.5;
@@ -20,8 +34,10 @@ const HYPE_MAX = 2.5;
 const ERA_ORDER: Era[] = ['scrappy', 'boom', 'reckoning'];
 
 export default function MarketScreen() {
-  const { state } = useGame();
+  const { state, dispatch } = useGame();
   const theme = useTheme();
+  const [pendingFocus, setPendingFocus] = useState<FocusId | null>(null);
+  const focusPickerRef = useRef<FocusPickerHandle>(null);
   useTabView('market');
 
   if (!state) return <Redirect href="/" />;
@@ -33,6 +49,22 @@ export default function MarketScreen() {
   const rivalShareTotal = state.rivals.reduce((sum, rival) => sum + rival.marketShare, 0);
   const restOfMarket = Math.max(0, 1 - state.marketShare - rivalShareTotal);
   const hypePercent = ((state.hype - HYPE_MIN) / (HYPE_MAX - HYPE_MIN)) * 100;
+  const report = weeklyReportFor(state);
+
+  const openFocusPicker = () => {
+    track(EVENTS.FOCUS_PICKER_OPENED, { focus: state.focus });
+    focusPickerRef.current?.present();
+  };
+
+  const requestFocus = (focus: FocusId) => {
+    focusPickerRef.current?.dismiss();
+    setPendingFocus(focus);
+  };
+
+  const confirmFocus = () => {
+    if (pendingFocus) dispatch({ type: 'SET_FOCUS', focus: pendingFocus });
+    setPendingFocus(null);
+  };
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -40,6 +72,23 @@ export default function MarketScreen() {
         <ThemedText type="sheetTitle">Market</ThemedText>
 
         <FirstRunHint id="market" text="Two rivals want your customers. Quality and hype decide who wins the market." />
+
+        {/* The whole card is the tap target, so "Change" is a label, not a
+            nested button — nesting one would be invalid and unreachable. */}
+        <Pressable onPress={openFocusPicker} accessibilityRole="button" accessibilityLabel="Change company focus">
+          <Card>
+            <View style={styles.trendHeader}>
+              <ThemedText type="sectionLabel">Strategy</ThemedText>
+              <ThemedText type="small" themeColor="accent">
+                Change
+              </ThemedText>
+            </View>
+            <ThemedText type="default">{FOCUS_LABEL[state.focus]} · {ERA_LABEL[state.era]} era</ThemedText>
+            <ThemedText type="small" themeColor="textMuted">
+              Bottleneck: {BOTTLENECK_LABEL[report.bottleneck]}
+            </ThemedText>
+          </Card>
+        </Pressable>
 
         <Card>
           <View style={styles.trendHeader}>
@@ -95,7 +144,34 @@ export default function MarketScreen() {
             ))}
           </View>
         </Card>
+
+        <LeaderboardRankCard />
       </ScrollView>
+
+      <BottomSheet visible={pendingFocus !== null} onClose={() => setPendingFocus(null)} title="Switch focus?">
+        <FirstRunHint
+          id="focus-switch"
+          text={`Switching focus costs ~${FOCUS_TRANSITION_WEEKS} weeks of drag — commit, don't flip-flop.`}
+        />
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
+          {pendingFocus
+            ? `Switching to ${FOCUS_LABEL[pendingFocus]} costs ${FOCUS_TRANSITION_WEEKS} weeks of reduced dev effort and conversion while the team retools.`
+            : ''}
+        </ThemedText>
+        <View style={styles.sheetActions}>
+          <PrimaryButton variant="secondary" label="Cancel" onPress={() => setPendingFocus(null)} style={styles.sheetButton} />
+          <PrimaryButton variant="primary" label="Confirm switch" onPress={confirmFocus} style={styles.sheetButton} />
+        </View>
+      </BottomSheet>
+
+      <FocusPicker
+        ref={focusPickerRef}
+        focus={state.focus}
+        productQuality={state.productQuality}
+        rivals={state.rivals}
+        trend={state.trend}
+        onSelect={requestFocus}
+      />
     </View>
   );
 }
@@ -211,5 +287,15 @@ const styles = StyleSheet.create({
   eraStop: {
     alignItems: 'center',
     gap: Spacing.half,
+  },
+  sheetBody: {
+    lineHeight: 20,
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+  },
+  sheetButton: {
+    flex: 1,
   },
 });

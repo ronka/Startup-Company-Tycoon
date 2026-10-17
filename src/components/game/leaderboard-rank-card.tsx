@@ -27,7 +27,7 @@ export function LeaderboardRankCard() {
       opted_in: joined,
       rank: rank.rank,
     });
-    if (offerJoin) openJoin('hq');
+    if (offerJoin) openJoin('market');
     else router.push('/leaderboard');
   };
 

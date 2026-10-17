@@ -9,8 +9,10 @@ import { BurnBreakdownModal } from '@/components/game/burn-breakdown-modal';
 import { Card } from '@/components/game/card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
+import { AnimatedNumber } from '@/components/game/animated-number';
 import { ProgressBar } from '@/components/game/progress-bar';
 import { SectionHeader } from '@/components/game/section-header';
+import { Sparkline } from '@/components/game/sparkline';
 import { StatTile } from '@/components/game/stat-tile';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -50,6 +52,7 @@ export default function MoneyScreen() {
   const [confirming, setConfirming] = useState(false);
   const [ipoConfirming, setIpoConfirming] = useState(false);
   const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
+  const [chartWidth, setChartWidth] = useState(0);
   useTabView('money');
 
   if (!state) return <Redirect href="/" />;
@@ -80,6 +83,13 @@ export default function MoneyScreen() {
   const runwayAfterRaise = terms ? runwayWeeks(state.cash + terms.amount, burn - revenue) : 0;
   const nextRoundLikelyBridgeToo = Boolean(terms?.isBridge) && runwayAfterRaise < BRIDGE_RUNWAY_THRESHOLD_WEEKS;
 
+  // Week-over-week valuation move, shown as the hero's delta chip.
+  const valuationChange =
+    previous && previous.valuation > 0 ? ((valuation - previous.valuation) / previous.valuation) * 100 : null;
+  const valuationUp = (valuationChange ?? 0) >= 0;
+  const history = state.valuationHistory ?? [];
+  const hasChart = history.length > 1;
+
   const ipoEligible = isIpoEligible(state.stage, state.ipoWindowOpen, state.weeksRevenueAboveIpoBar);
 
   const raise = () => {
@@ -103,6 +113,30 @@ export default function MoneyScreen() {
         </View>
 
         <FirstRunHint id="money" text="Raise before runway drops under 8 weeks or terms get worse." />
+
+        <Card tone="plain" style={[styles.hero, !hasChart && styles.heroCompact]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Company valuation
+          </ThemedText>
+          <View style={styles.heroValueRow}>
+            <AnimatedNumber value={valuation} format={formatMoney} goodDirection="up" type="hero" />
+            {valuationChange !== null && Math.abs(valuationChange) >= 0.1 ? (
+              <ThemedText type="smallBold" themeColor={valuationUp ? 'success' : 'danger'}>
+                {valuationUp ? '↗' : '↘'} {Math.abs(valuationChange).toFixed(1)}%
+              </ThemedText>
+            ) : null}
+          </View>
+          <ThemedText type="small" themeColor="textMuted">
+            Week {state.week} · post-money est.
+          </ThemedText>
+          {/* Bleeds to the card's bottom edge, like a chart footer. Kept out of
+              the tree until there's a series to draw. */}
+          {hasChart ? (
+            <View style={styles.chart} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
+              {chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={92} color={theme.success} /> : null}
+            </View>
+          ) : null}
+        </Card>
 
         <View style={styles.grid}>
           <StatTile
@@ -128,13 +162,13 @@ export default function MoneyScreen() {
             explainer={STAT_EXPLAINERS.runway}
           />
           <StatTile
-            label="Valuation"
-            value={valuation}
-            previousValue={previous?.valuation}
+            label="Revenue / wk"
+            value={revenue}
+            previousValue={previous?.revenue}
             format={formatMoney}
             goodDirection="up"
-            icon={{ ios: 'building.columns.fill', android: 'account_balance', web: 'account_balance' }}
-            explainer={STAT_EXPLAINERS.valuation}
+            icon={{ ios: 'chart.line.uptrend.xyaxis', android: 'trending_up', web: 'trending_up' }}
+            explainer={STAT_EXPLAINERS.revenue}
           />
           <StatTile
             label="Your stake"
@@ -310,6 +344,27 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.four,
     paddingBottom: Spacing.six,
     gap: Spacing.four,
+  },
+  hero: {
+    gap: Spacing.half,
+    paddingTop: Spacing.three,
+    paddingHorizontal: Spacing.three,
+  },
+  // No chart yet: the card closes up instead of leaving the slot empty.
+  heroCompact: {
+    paddingBottom: Spacing.three,
+  },
+  heroValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.two,
+    flexWrap: 'wrap',
+  },
+  chart: {
+    marginTop: Spacing.three,
+    marginHorizontal: -Spacing.three,
+    height: 92,
+    justifyContent: 'flex-end',
   },
   grid: {
     flexDirection: 'row',

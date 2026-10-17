@@ -17,8 +17,11 @@ function dotTone(entry: NewsEntry): ThemeColor {
 export function NewsFeed({
   entries,
   variant = 'full',
+  titleLines = 2,
 }: {
   entries: NewsEntry[];
+  /** `compact` only: how many lines a title may wrap to. */
+  titleLines?: number;
   /** `compact` is the dot-marked "this week" list on HQ; `full` is the card feed. */
   variant?: 'full' | 'compact';
 }) {
@@ -39,7 +42,7 @@ export function NewsFeed({
           <View key={`${entry.week}-${entry.title}-${index}`} style={styles.compactRow}>
             <View style={[styles.dot, { backgroundColor: theme[dotTone(entry)] }]} />
             <View style={styles.compactText}>
-              <ThemedText type="default" numberOfLines={2}>
+              <ThemedText type="default" numberOfLines={titleLines}>
                 {entry.title}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>

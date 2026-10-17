@@ -40,7 +40,7 @@ const UPLOAD_DEBOUNCE_MS = 1_500;
 const RETRY_MS = 60_000;
 const RANK_DEBOUNCE_MS = 800;
 
-export type JoinSource = 'week5' | 'hq' | 'settings' | 'board';
+export type JoinSource = 'week5' | 'hq' | 'market' | 'settings' | 'board';
 
 interface LeaderboardContextValue {
   /** Null until loaded. */
