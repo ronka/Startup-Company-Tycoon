@@ -16,6 +16,7 @@ export const RECKONING_DECK: EventCard[] = [
     kind: 'decision',
     title: 'Second Thoughts',
     flavor: 'Remember that early acquisition offer you turned down? An investor brings it up, unprompted, at exactly the wrong moment.',
+    teaser: 'An investor wants to talk about a decision you made a long time ago.',
     requiresFlag: 'declined-early-acquisition',
     choices: [
       {
@@ -34,6 +35,7 @@ export const RECKONING_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Only Term Sheet',
     flavor: "It's 40% below your last valuation, with control provisions attached. It's also the only offer on the table.",
+    teaser: "One investor is still returning your calls. You won't love the terms.",
     choices: [
       {
         label: 'Take the humiliating down round',
@@ -61,6 +63,7 @@ export const RECKONING_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Board Wants Cuts',
     flavor: 'The board is pushing hard for a 20% headcount reduction to stretch the runway.',
+    teaser: 'The board has called an emergency meeting about headcount.',
     choices: [
       {
         label: 'Lay off 20% of the team',
@@ -134,6 +137,7 @@ export const RECKONING_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Frugal Pivot',
     flavor: 'You could cut a vendor contract and simplify the product to stretch runway, or keep the full vision alive.',
+    teaser: 'The runway math stopped working. Something has to be cut.',
     choices: [
       {
         label: 'Pivot to a leaner model',
@@ -169,6 +173,7 @@ export const RECKONING_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Comeback Story',
     flavor: 'A journalist offers to write you up as the scrappy survivor bucking the downturn.',
+    teaser: "A journalist is asking how you're still standing.",
     choices: [
       {
         label: 'Lean into the comeback story',

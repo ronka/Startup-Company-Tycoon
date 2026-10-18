@@ -150,9 +150,9 @@ export function BuyWeeksSheet({
   return (
     <BottomSheet visible={visible} onClose={handleDismiss} title="Buy weeks">
       <ThemedText type="small" themeColor="textSecondary">
-        {trigger === 'out_of_weeks'
-          ? "That's the free weeks planned out — grab more to keep going now."
-          : 'Stock up on weeks for whenever you run out.'}
+        {trigger === 'hud'
+          ? 'Stock up on weeks for whenever you run out.'
+          : "That's the free weeks planned out — grab more to keep going now."}
       </ThemedText>
 
       <View style={styles.packs}>

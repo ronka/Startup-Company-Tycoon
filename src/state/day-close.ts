@@ -8,6 +8,7 @@
  */
 
 import { canRaiseRound } from '@/game/balance';
+import { cliffhangerCardFor } from '@/game/engine';
 import { ROUND_ORDER, type GameState } from '@/game/types';
 import { isUnlocked } from '@/game/unlocks';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
@@ -19,7 +20,7 @@ export const AGENDA_EVENT_HORIZON_WEEKS = 3;
 
 export interface TomorrowAgenda {
   /** Stable id for analytics — never rendered. */
-  kind: 'decision' | 'runway' | 'event-soon' | 'steady';
+  kind: 'cliffhanger' | 'decision' | 'runway' | 'event-soon' | 'steady';
   /** One short sentence naming what is waiting. Rendered verbatim. */
   line: string;
 }
@@ -44,6 +45,11 @@ export function tomorrowAgendaFor(state: GameState | null): TomorrowAgenda | nul
     return { kind: 'decision', line: `${state.pendingEvent.title} is waiting on your call.` };
   }
 
+  // The card the wall pinned lands with the very next week, so it outranks
+  // everything that is only a forecast.
+  const cliffhanger = cliffhangerTeaserFor(state);
+  if (cliffhanger) return { kind: 'cliffhanger', line: cliffhanger.line };
+
   const { runway } = deriveWeeklyStats(state);
   if (Number.isFinite(runway) && runway <= AGENDA_RUNWAY_WEEKS) {
     return {
@@ -66,6 +72,26 @@ export function tomorrowAgendaFor(state: GameState | null): TomorrowAgenda | nul
   }
 
   return { kind: 'steady', line: `${state.companyName} keeps building while you're away — check back soon.` };
+}
+
+/** The card pinned to land next week, as the wall teases it. */
+export interface CliffhangerTeaser {
+  /** Card id, for analytics — never rendered. */
+  cardId: string;
+  /** One or two short sentences hinting at the dilemma. Rendered verbatim. */
+  line: string;
+}
+
+/**
+ * The cliffhanger the week wall shows: the pinned card's teaser, or its title
+ * for a card written before teasers. Null when nothing is pinned, or while a
+ * decision is already on screen.
+ */
+export function cliffhangerTeaserFor(state: GameState | null): CliffhangerTeaser | null {
+  if (!state || state.gameOver || state.pendingEvent) return null;
+  const card = cliffhangerCardFor(state);
+  if (!card) return null;
+  return { cardId: card.id, line: card.teaser ?? `${card.title} is coming.` };
 }
 
 /** Something the player can do right now, even with no weeks left today. */

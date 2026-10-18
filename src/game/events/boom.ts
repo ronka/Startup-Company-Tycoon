@@ -17,6 +17,7 @@ export const BOOM_DECK: EventCard[] = [
     title: 'Co-founder Drama, Part Two',
     flavor:
       "The product-led bet from your Scrappy days is paying off, but your growth-minded co-founder still isn't over it.",
+    teaser: "Your co-founder asked for a word in private. It's about that old roadmap fight.",
     requiresFlag: 'cofounder-product-led',
     choices: [
       {
@@ -41,6 +42,7 @@ export const BOOM_DECK: EventCard[] = [
     title: 'That First Customer, All Grown Up',
     flavor:
       'The customer you crunched for back in the Scrappy days is now demanding a dedicated support line as the price of renewal.',
+    teaser: "An old customer is back, and they're not asking nicely this time.",
     requiresFlag: 'crunched-for-first-customer',
     choices: [
       {
@@ -99,6 +101,7 @@ export const BOOM_DECK: EventCard[] = [
     kind: 'decision',
     title: 'Talent Poaching War',
     flavor: 'A flush competitor offers your best engineer a package you can barely believe.',
+    teaser: 'A rival with fresh millions is circling your best engineer.',
     choices: [
       {
         label: 'Counter with a raise',
@@ -134,6 +137,7 @@ export const BOOM_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Keynote Invite',
     flavor: 'You are invited to keynote the industry\'s biggest conference of the year.',
+    teaser: 'An invitation lands in your inbox. The whole industry will be watching.',
     choices: [
       {
         label: 'Accept, put the founder on stage',
@@ -164,6 +168,7 @@ export const BOOM_DECK: EventCard[] = [
     kind: 'decision',
     title: 'Viral Backlash',
     flavor: 'A screenshot of an old internal joke goes viral for all the wrong reasons.',
+    teaser: "Someone dug up an old screenshot. It's starting to spread.",
     choices: [
       {
         label: 'Fight back publicly',
@@ -199,6 +204,7 @@ export const BOOM_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Board Seat',
     flavor: 'A prominent investor will only write the check if they get a board seat.',
+    teaser: 'A big check is on the table — with strings attached.',
     choices: [
       {
         label: 'Grant the board seat',
@@ -221,6 +227,7 @@ export const BOOM_DECK: EventCard[] = [
     kind: 'decision',
     title: "Everyone's Raising",
     flavor: 'Every founder you know is closing a bigger round than the last. It is tempting to spend like they did.',
+    teaser: 'Every founder you know just closed a bigger round. Your phone keeps buzzing.',
     choices: [
       {
         label: 'Chase the hype, spend on growth marketing',

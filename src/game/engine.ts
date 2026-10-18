@@ -575,8 +575,67 @@ function advanceMarket(
   };
 }
 
-/** Ticks down the event countdown and draws/resolves a card once it hits 0. */
+/**
+ * Weeks between cliffhangers. The first wall pins one; a player who then
+ * plays one regenerated week at a time hits the wall every week, and pinning
+ * each time would turn every week into a decision card.
+ */
+export const CLIFFHANGER_COOLDOWN_WEEKS = 5;
+
+/**
+ * Cards a cliffhanger may pin: this era's undrawn decision cards, never an
+ * acquisition offer. Accepting one ends the run, and a player who waited or
+ * paid to see what happens next should not find the game over a tap later.
+ */
+function pinnableDeck(era: Era): EventCard[] {
+  return ERA_DECKS[era].filter(
+    (card) => card.kind === 'decision' && !card.choices?.some((choice) => choice.effects.acquisitionOffer),
+  );
+}
+
+/**
+ * Pins the next decision card for the week wall to tease. Draws from the
+ * seeded RNG like any other card, so replays stay deterministic. Pinning while
+ * a card is pending is allowed: the pending card is already in
+ * `drawnEventIds`, and the wall is where the teaser earns its keep.
+ */
+function pinCliffhanger(state: GameState): GameState {
+  if (state.gameOver || state.cliffhangerCardId) return state;
+  if (state.lastCliffhangerWeek !== undefined && state.week - state.lastCliffhangerWeek < CLIFFHANGER_COOLDOWN_WEEKS) {
+    return state;
+  }
+  const draw = drawCard(pinnableDeck(state.era), state.drawnEventIds, state.storyFlags, state.rng);
+  if (!draw.card) return state;
+  return { ...state, rng: draw.rng, cliffhangerCardId: draw.card.id, lastCliffhangerWeek: state.week };
+}
+
+/** The card pinned to land next week, or null. Looks across every era: an era can turn over on the very tick that delivers it. */
+export function cliffhangerCardFor(state: GameState | null): EventCard | null {
+  const id = state?.cliffhangerCardId;
+  if (!id) return null;
+  for (const deck of Object.values(ERA_DECKS)) {
+    const card = deck.find((c) => c.id === id);
+    if (card) return card;
+  }
+  return null;
+}
+
+/** Ticks down the event countdown and draws/resolves a card once it hits 0. A pinned cliffhanger lands first, whatever the countdown says. */
 function drawEventIfDue(state: GameState): GameState {
+  const pinned = cliffhangerCardFor(state);
+  if (pinned && !state.drawnEventIds.includes(pinned.id)) {
+    const [cadence, rng] = drawCadenceWeeks(state.rng);
+    return {
+      ...state,
+      rng,
+      drawnEventIds: [...state.drawnEventIds, pinned.id],
+      weeksUntilNextEvent: cadence,
+      pendingEvent: pinned,
+      cliffhangerCardId: null,
+    };
+  }
+  if (state.cliffhangerCardId) state = { ...state, cliffhangerCardId: null };
+
   const weeksUntilNextEvent = state.weeksUntilNextEvent - 1;
   if (weeksUntilNextEvent > 0) {
     return { ...state, weeksUntilNextEvent };
@@ -719,6 +778,8 @@ export function reduce(state: GameState, action: GameAction): GameState {
         finalScore: scoreFor('ipo', state.founderEquity, valuation),
       };
     }
+    case 'PIN_CLIFFHANGER':
+      return pinCliffhanger(state);
     case 'ANSWER_EVENT': {
       const card = state.pendingEvent;
       if (!card || card.kind !== 'decision') return state;

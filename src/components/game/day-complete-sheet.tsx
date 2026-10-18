@@ -53,10 +53,13 @@ export function DayCompleteSheet({
   /** The sheet has finished animating away — see `BottomSheet`'s `onDismissed`. */
   onDismissed?: () => void;
 }) {
+  // A pinned card turns the close into a cliffhanger: the panel ends on what
+  // next week brings, and buying weeks becomes finding out.
+  const cliffhanger = agenda?.kind === 'cliffhanger';
   return (
     <BottomSheet visible={visible} onClose={onDismiss} onDismissed={onDismissed}>
       <View style={styles.header}>
-        <ThemedText type="title">That&apos;s the week planned out</ThemedText>
+        <ThemedText type="title">{cliffhanger ? 'To be continued…' : "That's the week planned out"}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {companyName} — week {week}
         </ThemedText>
@@ -74,7 +77,7 @@ export function DayCompleteSheet({
       {agenda ? (
         <View style={styles.agenda}>
           <ThemedText type="small" themeColor="textSecondary">
-            Next up
+            {cliffhanger ? 'Next week' : 'Next up'}
           </ThemedText>
           <ThemedText type="smallBold">{agenda.line}</ThemedText>
         </View>
@@ -95,7 +98,13 @@ export function DayCompleteSheet({
       ) : (
         <PrimaryButton label="Back soon" onPress={onDismiss} />
       )}
-      {onBuyWeeks ? <PrimaryButton label="Pull an all-nighter" variant="secondary" onPress={onBuyWeeks} /> : null}
+      {onBuyWeeks ? (
+        <PrimaryButton
+          label={cliffhanger ? 'Find out now' : 'Pull an all-nighter'}
+          variant="secondary"
+          onPress={onBuyWeeks}
+        />
+      ) : null}
     </BottomSheet>
   );
 }

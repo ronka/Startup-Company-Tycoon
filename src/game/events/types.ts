@@ -73,6 +73,12 @@ export interface EventCard {
   effects?: EventEffects;
   /** 'decision' cards only — 2–3 choices, each with its own effects. */
   choices?: EventChoice[];
+  /**
+   * 'decision' cards only — the cliffhanger line shown at the week wall when
+   * this card is pinned to land next week. Hints at the dilemma without
+   * giving away the choices. Absent, the UI falls back to the title.
+   */
+  teaser?: string;
   /** Only drawable once this story flag has been set by an earlier card. */
   requiresFlag?: string;
   /**

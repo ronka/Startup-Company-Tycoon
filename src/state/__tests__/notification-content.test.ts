@@ -87,6 +87,13 @@ describe('notificationContentFor', () => {
     expect(content?.body).toBe(tomorrowAgendaFor(s)?.line);
   });
 
+  it('names the pinned cliffhanger, even with a raise waiting', () => {
+    const s: GameState = { ...newGame('Acme', 1), cash: 50_000_000, cliffhangerCardId: 'scrappy-cofounder-drama' };
+    const content = notificationContentFor(s);
+    expect(content?.kind).toBe('cliffhanger');
+    expect(content?.body).toBe(tomorrowAgendaFor(s)?.line);
+  });
+
   it('climbs the same rung as the end-of-day panel, except where a raise is waiting', () => {
     for (let seed = 1; seed <= 20; seed++) {
       for (const s of [newGame('Acme', seed), { ...newGame('Acme', seed), roundsRaised: ROUND_ORDER.length }]) {

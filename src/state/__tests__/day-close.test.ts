@@ -2,13 +2,38 @@ import { describe, expect, it } from 'vitest';
 
 import { newGame } from '../../game/engine';
 import { GameState } from '../../game/types';
-import { actionNowFor, raiseAvailable, tomorrowAgendaFor } from '../day-close';
+import { actionNowFor, cliffhangerTeaserFor, raiseAvailable, tomorrowAgendaFor } from '../day-close';
 import { ROUND_ORDER } from '../../game/types';
 
 /** A run with enough cash that the runway branch can never fire. */
 function healthy(overrides: Partial<GameState> = {}): GameState {
   return { ...newGame('Acme', 1), cash: 50_000_000, ...overrides };
 }
+
+describe('cliffhangerTeaserFor', () => {
+  it('is null when nothing is pinned', () => {
+    expect(cliffhangerTeaserFor(healthy())).toBeNull();
+  });
+
+  it("names the pinned card's teaser", () => {
+    const teaser = cliffhangerTeaserFor(healthy({ cliffhangerCardId: 'scrappy-cofounder-drama' }));
+    expect(teaser).toEqual({ cardId: 'scrappy-cofounder-drama', line: expect.stringContaining('meeting-room door') });
+  });
+
+  it('steps aside while a decision is on screen', () => {
+    const s = healthy({
+      cliffhangerCardId: 'scrappy-cofounder-drama',
+      pendingEvent: { id: 'x', era: 'scrappy', kind: 'decision', title: 'X', flavor: '...', choices: [] },
+    });
+    expect(cliffhangerTeaserFor(s)).toBeNull();
+    expect(tomorrowAgendaFor(s)?.kind).toBe('decision');
+  });
+
+  it('outranks a runway scare on the agenda', () => {
+    const agenda = tomorrowAgendaFor(healthy({ cash: 10, cliffhangerCardId: 'scrappy-cofounder-drama' }));
+    expect(agenda?.kind).toBe('cliffhanger');
+  });
+});
 
 describe('tomorrowAgendaFor', () => {
   it('is null with no active game', () => {

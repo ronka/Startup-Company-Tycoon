@@ -151,6 +151,8 @@ export const EVENTS = {
   NOTIFICATION_OPENED: 'notification_opened',
   /** The end-of-day panel was shown — `{ agenda_kind, action_kind }`: the tomorrow hook, and the 💡 tip if any. */
   DAY_COMPLETE_SHOWN: 'day_complete_shown',
+  /** "Find out now" on the wall's cliffhanger banner — opens the week-pack paywall with trigger `cliffhanger`. */
+  CLIFFHANGER_FIND_OUT_TAPPED: 'cliffhanger_find_out_tapped',
   /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me' | 'action_tip'. */
   DAY_COMPLETE_DISMISSED: 'day_complete_dismissed',
   /**

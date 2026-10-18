@@ -275,6 +275,15 @@ export interface GameState {
   storyFlags: string[];
   /** Ticks remaining until the next card is drawn (2–4, reset on every draw). */
   weeksUntilNextEvent: number;
+  /**
+   * A decision card pinned by `PIN_CLIFFHANGER` at the week wall: the next
+   * tick draws it whatever `weeksUntilNextEvent` says, so the teaser shown
+   * while the player waits is the card they get. Unset on older saves and
+   * whenever nothing is pinned.
+   */
+  cliffhangerCardId?: string | null;
+  /** Week the last cliffhanger was pinned, for the cooldown. Unset until the first one. */
+  lastCliffhangerWeek?: number;
 
   // Eras
   era: Era;
@@ -324,6 +333,12 @@ export type GameAction =
   | { type: 'FIRE_CLEVEL'; role: CLevelRole }
   | { type: 'RAISE_ROUND' }
   | { type: 'ANSWER_EVENT'; choiceIndex: number }
+  /**
+   * Pins the next decision card so the week wall can tease it. Dispatched by
+   * the store when a spend empties the play-week pools; the engine only knows
+   * it as "the next tick brings this card". No-op when nothing is eligible.
+   */
+  | { type: 'PIN_CLIFFHANGER' }
   | { type: 'GO_PUBLIC' }
   | { type: 'SET_FOCUS'; focus: FocusId }
   /**

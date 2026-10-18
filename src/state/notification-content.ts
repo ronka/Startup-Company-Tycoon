@@ -48,6 +48,8 @@ export function notificationContentFor(state: GameState | null): NotificationCon
   }
 
   switch (agenda.kind) {
+    case 'cliffhanger':
+      return { kind: agenda.kind, title: `${state.companyName}: next week`, body: agenda.line };
     case 'decision':
       return {
         kind: agenda.kind,

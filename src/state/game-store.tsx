@@ -1079,6 +1079,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return;
       }
       setPreviousState(state);
+      let hitWall = false;
       if (!devFreePlay && freshBudget && purchasedWeeks) {
         if (weekBudget && freshBudget !== weekBudget && regenCreditedFromRef.current !== weekBudget) {
           regenCreditedFromRef.current = weekBudget;
@@ -1097,10 +1098,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
         // Stamped by the spend that empties both pools rather than by the
         // blocked press: that press must leave the budget object alone.
         const wallHitAt = canSpendAnyWeek(spent.budget, spent.purchased) ? null : now.getTime();
+        hitWall = wallHitAt !== null;
         setWeekBudget({ ...spent.budget, wallHitAt });
         setPurchasedWeeks(spent.purchased);
       }
       dispatch(action);
+      // The week that empties the pools pins next week's card, so the wall
+      // can tease it — the cliffhanger. Raw `dispatch`, not a player action:
+      // it batches into this commit and stays out of action analytics.
+      if (hitWall) dispatch({ type: 'PIN_CLIFFHANGER' });
       // `week_advanced` itself is emitted by the state-diff effect, with the
       // fresh post-tick numbers, once the reducer commits.
       return;

@@ -8,6 +8,7 @@ import { purchasesAvailable } from '@/purchases';
 import { EVENTS, track } from '@/analytics/events';
 import { ActionTip } from '@/components/game/action-tip';
 import { BuyWeeksSheet } from '@/components/game/buy-weeks-sheet';
+import { CliffhangerBanner } from '@/components/game/cliffhanger-banner';
 import { DayCompleteSheet } from '@/components/game/day-complete-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
 import { NotificationPermissionAsk } from '@/components/game/notification-permission-ask';
@@ -16,7 +17,7 @@ import { WeekTicker } from '@/components/game/week-ticker';
 import { Spacing } from '@/constants/theme';
 import { isNotableWeek } from '@/game/digest';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
-import { actionNowFor, tomorrowAgendaFor, type ActionNow } from '@/state/day-close';
+import { actionNowFor, cliffhangerTeaserFor, tomorrowAgendaFor, type ActionNow } from '@/state/day-close';
 import type { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
 import { useLeaderboard } from '@/state/leaderboard-provider';
@@ -123,6 +124,8 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   const notable = isNotableWeek(weekEntries);
   const agenda = useMemo(() => tomorrowAgendaFor(state), [state]);
   const actionNow = useMemo(() => actionNowFor(state), [state]);
+  // The card the wall pinned for next week — the cliffhanger (see `PIN_CLIFFHANGER`).
+  const cliffhanger = useMemo(() => cliffhangerTeaserFor(state), [state]);
 
   // Every condition that has to hold before the day can be closed out. The
   // ordering ones are what matter: each names another surface that owns the
@@ -157,6 +160,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
       track(EVENTS.DAY_COMPLETE_SHOWN, {
         agenda_kind: agenda?.kind ?? null,
         action_kind: actionNow?.kind ?? null,
+        teaser_card_id: cliffhanger?.cardId ?? null,
         week: dayCompleteWeek,
       });
       notificationAskSpentOnDateKey()
@@ -164,7 +168,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
         .catch(() => {});
     }, DAY_COMPLETE_ARM_MS);
     return () => clearTimeout(timer);
-  }, [dayCompleteDue, dayCompleteShownFor, agenda, actionNow, dayCompleteWeek]);
+  }, [dayCompleteDue, dayCompleteShownFor, agenda, actionNow, cliffhanger, dayCompleteWeek]);
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -246,11 +250,27 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
           into the sheet's frame hangs iOS (docs/bug-stuck-decision-modal.md). */}
       {reminderOptedIn ? <NotificationPermissionAsk trigger="reminder_optin" /> : null}
 
-      {/* At the wall, the one thing still worth doing while the Hud's Next Week
-          chip counts down to the next free week. */}
-      {budgetExhausted && actionNow ? (
+      {/* At the wall: what next week brings (the cliffhanger), and the one
+          thing still worth doing while the Hud's Next Week chip counts down to
+          the next free week. */}
+      {budgetExhausted && (cliffhanger || actionNow) ? (
         <View style={[styles.chrome, { paddingBottom: insets.bottom + Spacing.two }]}>
-          <ActionTip action={actionNow} onPress={() => openActionTip(actionNow, 'wall')} />
+          {cliffhanger ? (
+            <CliffhangerBanner
+              companyName={state.companyName}
+              teaser={cliffhanger}
+              weekBudget={weekBudget}
+              onFindOut={
+                purchasesAvailable
+                  ? () => {
+                      track(EVENTS.CLIFFHANGER_FIND_OUT_TAPPED, { teaser_card_id: cliffhanger.cardId, week: state.week });
+                      openBuyWeeks('cliffhanger');
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+          {actionNow ? <ActionTip action={actionNow} onPress={() => openActionTip(actionNow, 'wall')} /> : null}
         </View>
       ) : null}
 
@@ -377,6 +397,7 @@ function maybeAskForReviewAtWall(streakDays: number, insolvent: boolean): void {
 
 const styles = StyleSheet.create({
   chrome: {
+    gap: Spacing.two,
     paddingTop: Spacing.two,
     paddingHorizontal: Spacing.four,
   },

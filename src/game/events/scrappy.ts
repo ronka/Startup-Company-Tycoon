@@ -56,6 +56,7 @@ export const SCRAPPY_DECK: EventCard[] = [
     kind: 'decision',
     title: 'First Big Customer',
     flavor: 'A mid-size company wants in — but only with a custom integration, due Friday.',
+    teaser: 'A company ten times your size just asked for a call. They want something — by Friday.',
     choices: [
       {
         label: 'Take the deal, crunch the week',
@@ -79,6 +80,7 @@ export const SCRAPPY_DECK: EventCard[] = [
     kind: 'decision',
     title: 'The Shortcut',
     flavor: 'You can ship the feature today by cutting corners, or ship it right next week.',
+    teaser: "Your lead dev found a way to ship next week's feature tonight. There's a catch.",
     choices: [
       {
         label: 'Take the shortcut: ship faster now, pay for it later',
@@ -99,6 +101,7 @@ export const SCRAPPY_DECK: EventCard[] = [
     kind: 'decision',
     title: 'Co-founder Drama',
     flavor: 'Your co-founders disagree loudly about the roadmap. The team is watching.',
+    teaser: 'Raised voices behind the meeting-room door. The team heard everything.',
     choices: [
       {
         label: 'Back the product-led plan',
@@ -175,6 +178,7 @@ export const SCRAPPY_DECK: EventCard[] = [
     kind: 'decision',
     title: 'Pricing Pressure',
     flavor: 'A prospect says they will only sign at a steep discount. It is a real deal, if you want it that way.',
+    teaser: "Your biggest prospect is ready to sign — at a price you won't like.",
     choices: [
       {
         label: 'Cut the price to win the deal',
@@ -202,6 +206,7 @@ export const SCRAPPY_DECK: EventCard[] = [
     kind: 'decision',
     title: 'Crunch or Coast',
     flavor: 'The launch date is tight. You can hit it by pushing hard, or slip it to protect the team.',
+    teaser: 'The launch date just got very real. Someone has to decide what gives.',
     choices: [
       {
         label: 'Crunch through the deadline',

@@ -8,7 +8,7 @@ import { notePurchaseAttemptFailed, notePurchaseSurfaceWorked, purchasesBlocked 
 import { notePurchaseFailed } from '@/state/store-review';
 
 /** Where the player asked for more weeks from — carried through to analytics. */
-export type BuyWeeksTrigger = 'out_of_weeks' | 'hud';
+export type BuyWeeksTrigger = 'out_of_weeks' | 'hud' | 'cliffhanger';
 
 /**
  * How long to wait before re-running the ledger diff when a completed purchase
