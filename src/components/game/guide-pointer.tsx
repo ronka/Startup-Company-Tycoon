@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,20 +9,24 @@ import type { GuideStep, GuideTarget } from '@/lib/guide';
 
 export const CARET_HALF = 7;
 
-/** The guided run's current step, worked out once in the tabs layout. */
-export const GuideContext = createContext<GuideStep | null>(null);
+/** The guided run's current step, worked out once in the tabs layout, and how to tap it away. */
+export const GuideContext = createContext<{ step: GuideStep | null; dismiss: () => void }>({
+  step: null,
+  dismiss: () => {},
+});
 
 /** The step when it points at this control, else null. */
 export function useGuideFor(match: (target: GuideTarget) => boolean): GuideStep | null {
-  const step = useContext(GuideContext);
+  const { step } = useContext(GuideContext);
   return step && match(step.target) ? step : null;
 }
 
 /**
  * The coach's tooltip: the mission on a small line, the instruction in bold,
  * and a caret aimed at the control to tap. Always positioned absolutely by its
- * caller, so it floats over the screen instead of pushing it down, and it
- * ignores touches so the tap it asks for goes straight through.
+ * caller, so it floats over the screen instead of pushing it down. Only the
+ * pill takes touches — tapping it hides the tooltip — so the control it points
+ * at stays tappable.
  *
  * `align` picks which edge of the pill lines up with the caller's box;
  * `inset` is how far in from that edge the caret's centre sits.
@@ -41,6 +45,7 @@ export function GuidePointer({
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
+  const { dismiss } = useContext(GuideContext);
   const pulse = useSharedValue(0);
   const dimmed = step.dimmed ?? false;
 
@@ -65,27 +70,33 @@ export function GuidePointer({
     <Animated.View
       key={`${step.label}-${step.text}`}
       entering={FadeIn.duration(250)}
-      pointerEvents="none"
+      pointerEvents="box-none"
       accessibilityLiveRegion="polite"
-      accessibilityLabel={[step.label, step.text].filter(Boolean).join('. ')}
       style={[styles.wrap, style]}>
-      {caret === 'up' ? <View style={caretStyle} /> : null}
-      <Animated.View
-        style={[
-          styles.pill,
-          { backgroundColor: fill, alignSelf, minWidth: align === 'center' ? undefined : inset + CARET_HALF + Spacing.three },
-          pulseStyle,
-        ]}>
-        {step.label ? (
-          <ThemedText type="footnote" numberOfLines={1} style={{ color: ink, opacity: 0.85 }}>
-            {step.label}
+      {caret === 'up' ? <View pointerEvents="none" style={caretStyle} /> : null}
+      <Pressable
+        onPress={dismiss}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={`${[step.label, step.text].filter(Boolean).join('. ')}. Tap to hide.`}
+        style={{ alignSelf }}>
+        <Animated.View
+          style={[
+            styles.pill,
+            { backgroundColor: fill, alignSelf, minWidth: align === 'center' ? undefined : inset + CARET_HALF + Spacing.three },
+            pulseStyle,
+          ]}>
+          {step.label ? (
+            <ThemedText type="footnote" numberOfLines={1} style={{ color: ink, opacity: 0.85 }}>
+              {step.label}
+            </ThemedText>
+          ) : null}
+          <ThemedText type="smallBold" numberOfLines={2} style={{ color: ink }}>
+            {step.text}
           </ThemedText>
-        ) : null}
-        <ThemedText type="smallBold" numberOfLines={2} style={{ color: ink }}>
-          {step.text}
-        </ThemedText>
-      </Animated.View>
-      {caret === 'down' ? <View style={caretStyle} /> : null}
+        </Animated.View>
+      </Pressable>
+      {caret === 'down' ? <View pointerEvents="none" style={caretStyle} /> : null}
     </Animated.View>
   );
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame } from '@/game/engine';
 import type { EventCard } from '@/game/events/types';
 import type { GameState } from '@/game/types';
-import { guideStep, guideTabFor } from '@/lib/guide';
+import { guideKey, guideStep, guideTabFor } from '@/lib/guide';
 
 const team = (devs: number, sales: number, support = 0) => ({ devs, sales, support });
 
@@ -54,6 +54,16 @@ describe('guideStep', () => {
       questsDone: ['hire-dev', 'hire-sales', 'first-customer', 'five-customers', 'income', 'customers'],
     });
     expect(guideStep(done, 'hq')).toBeNull();
+  });
+});
+
+describe('guideKey', () => {
+  it('ignores progress but changes with the mission and the control', () => {
+    const at = (customers: number) => run({ pendingHeadcount: team(1, 1), questsDone: ['hire-dev', 'hire-sales', 'first-customer'], customers });
+    const key = (state: GameState) => guideKey(state, guideStep(state, 'hq')!);
+    expect(key(at(2))).toBe(key(at(3)));
+    expect(key(at(2))).not.toBe(key(at(5))); // five-customers done: the income mission
+    expect(key(run())).not.toBe(key(run({ pendingHeadcount: team(1, 0) })));
   });
 });
 

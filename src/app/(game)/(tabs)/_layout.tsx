@@ -1,5 +1,5 @@
 import { Tabs, usePathname } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,7 +10,7 @@ import { Hud } from '@/components/game/hud';
 import { QuestStrip, useUnlockMoment } from '@/components/game/quest-strip';
 import { isUnlocked, type Feature } from '@/game/unlocks';
 import { useTheme } from '@/hooks/use-theme';
-import { guideStep, guideTabFor } from '@/lib/guide';
+import { guideKey, guideStep, guideTabFor } from '@/lib/guide';
 import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { raiseAvailable } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
@@ -47,11 +47,16 @@ export default function GameTabsLayout() {
   );
   const route = guideTabFor(usePathname());
   const atWall = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
-  const step = guideStep(state, route, { freshUnlocks, atWall });
+  const next = guideStep(state, route, { freshUnlocks, atWall });
+  // A tapped tooltip stays hidden until the guide moves to another control or mission.
+  const [hiddenKey, setHiddenKey] = useState<string | null>(null);
+  const nextKey = state && next ? guideKey(state, next) : null;
+  const step = next && nextKey !== hiddenKey ? next : null;
+  const guide = { step, dismiss: () => setHiddenKey(nextKey) };
   const glowRoute = step?.target.kind === 'tab' ? step.target.tab : null;
 
   return (
-    <GuideContext.Provider value={step}>
+    <GuideContext.Provider value={guide}>
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         <Hud onBuyWeeks={buyWeeks.open}>
           <QuestStrip freshUnlocks={freshUnlocks} onDismissUnlocks={dismissUnlocks} />

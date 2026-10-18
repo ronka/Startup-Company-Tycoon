@@ -41,9 +41,9 @@ const FEATURE_TAB: Record<Feature, Exclude<GuideTab, 'hq'>> = {
 
 const TAB_LABEL: Record<Exclude<GuideTab, 'hq'>, string> = { team: 'Team', money: 'Money', market: 'Market' };
 
-/** "2/5 customers", "$600 / $1.5K a month". */
+/** "2/5 customers", "$600/$1.5K a mo" — short enough for the one-line Next Week tooltip. */
 function progressText(quest: QuestProgress): string {
-  if (quest.unit === 'money') return `${formatMoney(quest.progress)} / ${formatMoney(quest.goal)} a month`;
+  if (quest.unit === 'money') return `${formatMoney(quest.progress)}/${formatMoney(quest.goal)} a mo`;
   return `${Math.floor(quest.progress)}/${quest.goal} customer${quest.goal === 1 ? '' : 's'}`;
 }
 
@@ -110,4 +110,15 @@ export function guideStep(
 export function guideTabFor(pathname: string): GuideTab {
   const tab = pathname.split('/').filter(Boolean).pop();
   return tab === 'team' || tab === 'money' || tab === 'market' ? tab : 'hq';
+}
+
+/**
+ * What a tapped-away tooltip is remembered by: the control it points at and
+ * the mission it's for. It stays hidden while both hold — progress ticking
+ * over doesn't bring it back, a new mission or a different control does.
+ */
+export function guideKey(state: GameState, step: GuideStep): string {
+  const { target } = step;
+  const where = target.kind === 'tab' ? `tab:${target.tab}` : target.kind === 'hire' ? `hire:${target.role}` : target.kind;
+  return `${where}|${nextQuest(state)?.id ?? 'done'}`;
 }
