@@ -5,6 +5,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { EVENTS, track } from '@/analytics/events';
 import { Glow } from '@/components/game/glow';
+import { NextWeekBubble } from '@/components/game/next-week-bubble';
 import { SurfaceSheen } from '@/components/game/surface-sheen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -12,7 +13,7 @@ import { FEATURE_LABELS, FEATURE_TERMS, isGuided, nextQuest, unlockedFeatures, t
 import type { GameState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
-import { hudSlotAction, recommendedAction } from '@/lib/recommended-action';
+import { hudSlotAction, questToPlay, recommendedAction } from '@/lib/recommended-action';
 import { purchasesAvailable } from '@/purchases';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
@@ -56,6 +57,8 @@ export function useUnlockMoment(state: GameState | null): [Feature[], () => void
  * The guided first weeks' one pinned goal (plans/2026-10-18-first-weeks-journey-plan.md):
  * mission number, progress and reward, with the unlock moment above it and,
  * when the best move lives on another tab, a pill that takes you there.
+ * While only playing weeks moves the mission, the card gives way to a bubble
+ * under Next Week (`NextWeekBubble`).
  * Renders nothing outside a guided run, so existing saves are untouched.
  */
 export function QuestStrip({
@@ -94,6 +97,9 @@ export function QuestStrip({
   // The best move when it lives on another tab: a pill that takes you there.
   const goTo = action.id === 'raise' ? '/money' : action.id === 'hire-support' ? '/team' : null;
   const terms = freshUnlocks.flatMap((f) => FEATURE_TERMS[f] ?? []);
+  // Only playing weeks moves the mission: the card shrinks to a bubble under Next Week.
+  const playing = questToPlay(state);
+  const atWall = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
 
   // The HUD slot is showing a hire instead of Next Week; this is the way past
   // it for a player who'd rather not. Same behaviour as the Next Week chip.
@@ -125,6 +131,9 @@ export function QuestStrip({
 
   return (
     <View style={styles.wrap}>
+      {/* First, so its caret meets the chip whatever else the strip is showing. */}
+      {playing ? <NextWeekBubble quest={playing} atWall={atWall} /> : null}
+
       {freshUnlocks.length ? (
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)}>
           <Pressable
@@ -150,7 +159,7 @@ export function QuestStrip({
           <ThemedText type="sectionLabel" themeColor="success">Mission complete</ThemedText>
           <ThemedText type="smallBold">✓ {completed}</ThemedText>
         </Animated.View>
-      ) : quest ? (
+      ) : quest && !playing ? (
         <Animated.View
           key={quest.id}
           entering={FadeIn.duration(300)}

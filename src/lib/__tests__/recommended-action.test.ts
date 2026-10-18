@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame } from '@/game/engine';
 import type { EventCard } from '@/game/events/types';
 import type { GameState } from '@/game/types';
-import { hudSlotAction, recommendedAction } from '@/lib/recommended-action';
+import { hudSlotAction, questToPlay, recommendedAction } from '@/lib/recommended-action';
 
 const team = (devs: number, sales: number, support = 0) => ({ devs, sales, support });
 
@@ -55,7 +55,28 @@ describe('hudSlotAction', () => {
 
   it('never takes the slot back once the hiring quests are done', () => {
     // The only dev was let go at week 8; Next Week must stay reachable.
-    const later = run({ week: 8, questsDone: ['hire-dev', 'hire-sales', 'first-customer', 'ten-customers'], pendingHeadcount: team(0, 1) });
+    const later = run({ week: 8, questsDone: ['hire-dev', 'hire-sales', 'first-customer', 'five-customers'], pendingHeadcount: team(0, 1) });
     expect(hudSlotAction(later)).toBeNull();
+  });
+});
+
+describe('questToPlay', () => {
+  it('is null while a hire is the move', () => {
+    expect(questToPlay(run())).toBeNull();
+    expect(questToPlay(run({ pendingHeadcount: team(1, 0) }))).toBeNull();
+  });
+
+  it('is the pinned quest once only playing weeks moves it', () => {
+    expect(questToPlay(run({ pendingHeadcount: team(1, 1) }))?.id).toBe('first-customer');
+  });
+
+  it('gives way to a waiting card and to a better recommendation', () => {
+    const card: EventCard = { id: 'x', era: 'scrappy', kind: 'decision', title: 'X', flavor: '', choices: [] };
+    expect(questToPlay(run({ pendingHeadcount: team(1, 1), pendingEvent: card }))).toBeNull();
+    expect(questToPlay(run({ pendingHeadcount: team(1, 1), customers: 25 }))).toBeNull(); // hire support
+  });
+
+  it('is null outside a guided run', () => {
+    expect(questToPlay({ ...newGame('Test Co', 1), pendingHeadcount: team(1, 1) })).toBeNull();
   });
 });

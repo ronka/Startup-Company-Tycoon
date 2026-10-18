@@ -10,7 +10,7 @@
 
 import { canRaiseRound, CUSTOMERS_PER_SUPPORT } from '@/game/balance';
 import { ROUND_ORDER, type GameState } from '@/game/types';
-import { isGuided, isUnlocked, nextQuest } from '@/game/unlocks';
+import { isGuided, isUnlocked, nextQuest, type QuestProgress } from '@/game/unlocks';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 
 export type RecommendedActionId = 'answer-card' | 'hire-dev' | 'hire-sales' | 'hire-support' | 'raise' | 'next-week';
@@ -79,4 +79,18 @@ export function hudSlotAction(state: GameState): RecommendedAction | null {
   if (quest !== 'hire-dev' && quest !== 'hire-sales') return null;
   const action = recommendedAction(state);
   return action.id === quest ? action : null;
+}
+
+/**
+ * The pinned quest when the only move is to play weeks — winning customers or
+ * income with nothing better to do. The quest strip shrinks to a bubble under
+ * Next Week and the chip glows, so "keep pressing Next Week" is said by the
+ * button itself. Null for the hires, a waiting card, or a raise / support
+ * recommendation, which keep the full mission card.
+ */
+export function questToPlay(state: GameState): QuestProgress | null {
+  if (!isGuided(state) || state.pendingEvent || state.gameOver) return null;
+  const quest = nextQuest(state);
+  if (!quest || quest.id === 'hire-dev' || quest.id === 'hire-sales') return null;
+  return recommendedAction(state).id === 'next-week' ? quest : null;
 }

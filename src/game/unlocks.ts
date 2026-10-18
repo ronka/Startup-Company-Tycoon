@@ -30,13 +30,19 @@ export const FEATURE_TERMS: Partial<Record<Feature, string[]>> = {
   money: ['MRR', 'Burn', 'Runway'],
 };
 
-/** Placeholder goals until a playtest (the plan's $X and Y). */
-export const INCOME_QUEST_MONTHLY = 3_500;
-export const CUSTOMERS_QUEST = 50;
+/**
+ * Goals sized so the whole ladder fits one day's free weeks (`WEEKS_BANK_CAP`,
+ * 10). Measured over 30 engine seeds with 1 dev + 1 sales and nothing else:
+ * 5 customers ≈ week 4, $1.5K a month ≈ week 6, 15 customers ≈ week 7–8.
+ * The backstops (5 / 7 / 9) finish a stalled run inside the same day.
+ */
+export const EARLY_CUSTOMERS_QUEST = 5;
+export const INCOME_QUEST_MONTHLY = 1_500;
+export const CUSTOMERS_QUEST = 15;
 /** Money unlocks straight away once runway drops below this — a struggling player is never locked out of the rescue. */
 export const MONEY_CRISIS_RUNWAY_WEEKS = 10;
 
-export type QuestId = 'hire-dev' | 'hire-sales' | 'first-customer' | 'ten-customers' | 'income' | 'customers';
+export type QuestId = 'hire-dev' | 'hire-sales' | 'first-customer' | 'five-customers' | 'income' | 'customers';
 
 export interface QuestDef {
   id: QuestId;
@@ -91,15 +97,15 @@ export const QUESTS: readonly QuestDef[] = [
     reward: 'Somebody is paying for this',
   },
   {
-    id: 'ten-customers',
-    title: 'Reach 10 customers',
-    goal: 10,
+    id: 'five-customers',
+    title: `Reach ${EARLY_CUSTOMERS_QUEST} customers`,
+    goal: EARLY_CUSTOMERS_QUEST,
     unit: 'count',
     progress: customers,
     unlocks: ['money'],
     reward: 'Unlocks Money: raise your first round',
-    backstop: (s) => s.week >= 6 || weeklyStatsFor(s).runway < MONEY_CRISIS_RUNWAY_WEEKS,
-    condition: 'Unlocks at 10 customers, or week 6',
+    backstop: (s) => s.week >= 5 || weeklyStatsFor(s).runway < MONEY_CRISIS_RUNWAY_WEEKS,
+    condition: `Unlocks at ${EARLY_CUSTOMERS_QUEST} customers, or week 5`,
   },
   {
     id: 'income',
@@ -109,8 +115,8 @@ export const QUESTS: readonly QuestDef[] = [
     progress: monthlyIncome,
     unlocks: ['focus'],
     reward: 'Unlocks Focus: pick your strategic bet',
-    backstop: (s) => s.week >= 10,
-    condition: `Unlocks at $${INCOME_QUEST_MONTHLY / 1000}K monthly income, or week 10`,
+    backstop: (s) => s.week >= 7,
+    condition: `Unlocks at $${INCOME_QUEST_MONTHLY / 1000}K monthly income, or week 7`,
   },
   {
     id: 'customers',
@@ -120,8 +126,8 @@ export const QUESTS: readonly QuestDef[] = [
     progress: customers,
     unlocks: ['morale', 'leadership'],
     reward: 'Unlocks Leadership and Team perks',
-    backstop: (s) => s.week >= 12,
-    condition: `Unlocks at ${CUSTOMERS_QUEST} customers, or week 12`,
+    backstop: (s) => s.week >= 9,
+    condition: `Unlocks at ${CUSTOMERS_QUEST} customers, or week 9`,
   },
 ];
 
@@ -189,7 +195,7 @@ export function nextQuest(state: GameState): QuestProgress | null {
   };
 }
 
-/** "Unlocks at 10 customers, or week 6" — what a locked feature tells the player. */
+/** "Unlocks at 5 customers, or week 5" — what a locked feature tells the player. */
 export function unlockConditionFor(feature: Feature): string {
   return QUESTS.find((q) => q.unlocks.includes(feature))?.condition ?? 'Unlocks soon';
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { newGame, reduce } from '../engine';
 import type { GameState } from '../types';
+import { WEEKS_BANK_CAP } from '../../state/week-budget';
 import {
   FEATURES,
   isGuided,
@@ -40,16 +41,16 @@ describe('unlock ladder', () => {
     expect(nextQuest(state)?.id).toBe('hire-sales');
   });
 
-  it('unlocks Money at 10 customers', () => {
-    const state = guided({ questsDone: ['hire-dev', 'hire-sales', 'first-customer'], customers: 10.4 });
-    expect(newlyCompletedQuests(state)).toEqual(['ten-customers']);
+  it('unlocks Money at 5 customers', () => {
+    const state = guided({ questsDone: ['hire-dev', 'hire-sales', 'first-customer'], customers: 5.4 });
+    expect(newlyCompletedQuests(state)).toEqual(['five-customers']);
     expect(unlockedFeatures(state).has('money')).toBe(true);
     expect(nextQuest(state)?.id).toBe('income');
   });
 
-  it('backstops Money at week 6 even with no customers', () => {
-    expect(unlockedFeatures(guided({ week: 5 })).has('money')).toBe(false);
-    expect(unlockedFeatures(guided({ week: 6 })).has('money')).toBe(true);
+  it('backstops Money at week 5 even with no customers', () => {
+    expect(unlockedFeatures(guided({ week: 4 })).has('money')).toBe(false);
+    expect(unlockedFeatures(guided({ week: 5 })).has('money')).toBe(true);
   });
 
   it('opens Money straight away in a runway crisis', () => {
@@ -58,8 +59,8 @@ describe('unlock ladder', () => {
   });
 
   it('keeps a recorded unlock open when the numbers fall back', () => {
-    // Money was unlocked at 10 customers; churn has since taken them back to 4.
-    const state = guided({ questsDone: ['hire-dev', 'hire-sales', 'first-customer', 'ten-customers'], customers: 4 });
+    // Money was unlocked at 5 customers; churn has since taken them back to 3.
+    const state = guided({ questsDone: ['hire-dev', 'hire-sales', 'first-customer', 'five-customers'], customers: 3 });
     expect(unlockedFeatures(state).has('money')).toBe(true);
     expect(newlyCompletedQuests(state)).toEqual([]);
   });
@@ -76,9 +77,15 @@ describe('unlock ladder', () => {
     expect(nextQuest(state)?.id).toBe('hire-sales');
   });
 
-  it('opens everything by the week-12 backstop', () => {
-    const state = guided({ week: 12, pendingHeadcount: { devs: 1, sales: 1, support: 0 }, customers: 1 });
+  it('opens everything by the week-9 backstop', () => {
+    const state = guided({ week: 9, pendingHeadcount: { devs: 1, sales: 1, support: 0 }, customers: 1 });
     expect([...unlockedFeatures(state)].sort()).toEqual([...FEATURES].sort());
+    expect(nextQuest(state)).toBeNull();
+  });
+
+  it('fits the whole ladder inside one day of free weeks', () => {
+    // A run that only made the two hires still finishes every quest by its backstops.
+    const state = guided({ week: WEEKS_BANK_CAP - 1, pendingHeadcount: { devs: 1, sales: 1, support: 0 }, customers: 1 });
     expect(nextQuest(state)).toBeNull();
   });
 

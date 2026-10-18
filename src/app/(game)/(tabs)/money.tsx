@@ -65,7 +65,7 @@ export default function MoneyScreen() {
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
 
-  // Guided first weeks: Money opens with the "Reach 10 customers" quest. Cash
+  // Guided first weeks: Money opens with the "Reach 5 customers" quest. Cash
   // and runway stay on the HUD meanwhile, so nothing the player needs is hidden.
   if (!isUnlocked(state, 'money')) {
     return (

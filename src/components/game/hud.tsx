@@ -18,7 +18,7 @@ import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { isUnlocked } from '@/game/unlocks';
-import { hudSlotAction } from '@/lib/recommended-action';
+import { hudSlotAction, questToPlay } from '@/lib/recommended-action';
 import { useGame } from '@/state/game-store';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/week-budget';
 
@@ -51,9 +51,13 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
   const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
   // Guided week 0: the first two hires take Next Week's slot until they're made.
   const slotAction = hudSlotAction(state);
+  // A guided run's play missions: the quest strip's bubble hangs off Next
+  // Week, and the chip glows — while there are weeks to play.
+  const playing = questToPlay(state) !== null;
   // Only pitch "advance a week" while advancing is actually possible — and
-  // while the chip it points at is actually there.
-  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted && !slotAction;
+  // while the chip it points at is actually there. The bubble says it in a
+  // guided run.
+  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted && !slotAction && !playing;
   // Down to the final free dot, with nothing purchased to fall back on — the
   // moment the daily budget is worth explaining, before it bites.
   const onLastFreeWeek =
@@ -134,14 +138,17 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
           }}
         />
       ) : (
-        <NextWeekChip
-          onBuyWeeks={onBuyWeeks}
-          onLayout={(event) => {
-            // The chip is the strip's last child and the callouts share the strip's
-            // horizontal inset, so the chip's centre is half its width in from their right edge.
-            setCaretFromRight(event.nativeEvent.layout.width / 2);
-          }}
-        />
+        <Glow on={playing && !budgetExhausted} style={styles.actionSlot}>
+          <NextWeekChip
+            onBuyWeeks={onBuyWeeks}
+            style={styles.actionChip}
+            onLayout={(event) => {
+              // The chip is the strip's last child and the callouts share the strip's
+              // horizontal inset, so the chip's centre is half its width in from their right edge.
+              setCaretFromRight(event.nativeEvent.layout.width / 2);
+            }}
+          />
+        </Glow>
       )}
 
       {caretFromRight !== null && hudHeight !== null ? (
@@ -172,6 +179,19 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
       ) : null}
     </View>
   );
+}
+
+const MENU_WIDTH = 20;
+const ROW_GAP = 6;
+
+/**
+ * How far in from the right edge of a `Spacing.three`-inset row the Next Week
+ * chip's centre sits — for the quest strip's bubble, which lives below the Hud
+ * and can't measure it. Menu, then three equal chips, with `ROW_GAP` between.
+ */
+export function nextWeekCaretFromRight(windowWidth: number): number {
+  const chip = (windowWidth - 2 * Spacing.three - MENU_WIDTH - 3 * ROW_GAP) / 3;
+  return chip / 2;
 }
 
 /**
@@ -223,7 +243,7 @@ const styles = StyleSheet.create({
     elevation: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: ROW_GAP,
     paddingBottom: Spacing.two,
     paddingHorizontal: Spacing.three,
   },
@@ -234,7 +254,7 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     justifyContent: 'center',
-    width: 20,
+    width: MENU_WIDTH,
   },
   menuGlyph: {
     fontSize: 19,
