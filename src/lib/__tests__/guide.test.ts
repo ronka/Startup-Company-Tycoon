@@ -29,6 +29,13 @@ describe('guideStep', () => {
     expect(step).toMatchObject({ target: { kind: 'next-week' }, text: '🎯 0/1 customer · Tap Next Week', label: null });
   });
 
+  it('after the first customer, points at the support + and then back at Next Week', () => {
+    const won = run({ pendingHeadcount: team(1, 1), headcount: team(1, 1), customers: 1, week: 2 });
+    expect(guideStep(won, 'hq')).toMatchObject({ target: { kind: 'tab', tab: 'team' } });
+    expect(guideStep(won, 'team')?.target).toEqual({ kind: 'hire', role: 'support' });
+    expect(guideStep({ ...won, pendingHeadcount: team(1, 1, 1) }, 'team')?.target).toEqual({ kind: 'next-week' });
+  });
+
   it('dims the Next Week tooltip out of free weeks', () => {
     expect(guideStep(run({ pendingHeadcount: team(1, 1) }), 'hq', { atWall: true })).toMatchObject({ dimmed: true });
   });

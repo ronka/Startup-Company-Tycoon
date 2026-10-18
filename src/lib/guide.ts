@@ -66,6 +66,17 @@ function onTab(
 }
 
 /**
+ * The recommended move, plus one lesson of the guide's own: once the first
+ * customer lands, hire a support person before playing on — long before
+ * `recommendedAction` would ask for one on uncovered customers alone.
+ */
+function guidedAction(state: GameState) {
+  const id = recommendedAction(state).id;
+  if (id === 'next-week' && Math.floor(state.customers) >= 1 && state.pendingHeadcount.support === 0) return 'hire-support';
+  return id;
+}
+
+/**
  * The one control to point at, or null for none (outside a guided run, while a
  * decision card is up, or once the ladder is climbed and there's nothing to do
  * but play).
@@ -86,7 +97,7 @@ export function guideStep(
   }
 
   const label = missionLabel(quest);
-  switch (recommendedAction(state).id) {
+  switch (guidedAction(state)) {
     case 'hire-dev':
       return onTab('team', route, label, 'to hire a developer', { kind: 'hire', role: 'devs' }, 'Tap + to hire a developer');
     case 'hire-sales':
