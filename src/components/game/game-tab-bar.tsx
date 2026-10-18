@@ -72,7 +72,8 @@ export function GameTabBar({
 const styles = StyleSheet.create({
   bar: { flexDirection: 'row', borderWidth: 1, borderRadius: 30, overflow: 'hidden' },
   tabSlot: { flex: 1 },
-  tab: { flex: 1, alignItems: 'center', paddingTop: 2, paddingBottom: 10, borderRadius: 28 },
+  // The Glow slot carries the row's flex: a `flex: 1` here, inside that column wrapper, collapses the tab to zero height on native.
+  tab: { alignItems: 'center', paddingTop: 2, paddingBottom: 10, borderRadius: 28 },
   lockedArt: { opacity: 0.35 },
   indicator: { position: 'absolute', bottom: 4, height: 3, width: 28, borderRadius: 2 },
   badge: { position: 'absolute', top: 10, right: 15, width: 8, height: 8, borderRadius: 4 },

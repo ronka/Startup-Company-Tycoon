@@ -197,6 +197,9 @@ function RecommendedActionChip({
         accessibilityLabel={accessibilityLabel}
         style={({ pressed }) => [
           styles.chip,
+          // The Glow slot carries the row's flex; inside its column wrapper a
+          // `flex: 1` would leave the chip's height to minHeight alone on native.
+          styles.actionChip,
           { backgroundColor: theme.accent, borderColor: theme.accent },
           pressed && { opacity: 0.8 },
         ]}>
@@ -212,6 +215,7 @@ function RecommendedActionChip({
 
 const styles = StyleSheet.create({
   actionSlot: { flex: 1 },
+  actionChip: { flex: 0 },
   actionLabel: { textAlign: 'center' },
   hud: {
     // Above the tab screens, so the callouts hanging off the bottom edge draw over them.
