@@ -39,9 +39,9 @@ import { STAT_EXPLAINERS } from '@/lib/stat-explainers';
 import { STAGE_LABEL } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
 import { isGuided, isUnlocked } from '@/game/unlocks';
-import { recommendedAction } from '@/lib/recommended-action';
 import { Glow } from '@/components/game/glow';
 import { LockedFeature } from '@/components/game/locked-feature';
+import { GuideAnchor, useGuideFor } from '@/components/game/guide-pointer';
 
 /** Below this the valuation chart is a squiggle, so it isn't drawn. */
 const MIN_CHART_HEIGHT = 32;
@@ -61,6 +61,8 @@ export default function MoneyScreen() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [chartBox, setChartBox] = useState<{ w: number; h: number } | null>(null);
   useTabView('money');
+  // The coach's tooltip, when it points at Raise.
+  const guideRaise = useGuideFor((target) => target.kind === 'raise');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
@@ -112,9 +114,7 @@ export default function MoneyScreen() {
 
   const ipoEligible = isIpoEligible(state.stage, state.ipoWindowOpen, state.weeksRevenueAboveIpoBar);
 
-  // The guided run's recommended action, or the week Money just opened.
   const guided = isGuided(state);
-  const raiseRecommended = guided && recommendedAction(state).id === 'raise';
 
   const raise = () => {
     dispatch({ type: 'RAISE_ROUND' });
@@ -205,22 +205,24 @@ export default function MoneyScreen() {
         </View>
 
         {round && terms && !raiseLocked ? (
-          <Card style={styles.actionCard}>
-            <View style={styles.actionText}>
-              <ThemedText type="smallBold">Raise {ROUND_LABEL[round]}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}%
-              </ThemedText>
-              {terms.isBridge ? (
-                <ThemedText type="footnote" themeColor="warning" numberOfLines={1}>
-                  Bridge round: worse terms
+          <GuideAnchor step={guideRaise} align="right" inset={RAISE_FROM_RIGHT}>
+            <Card style={styles.actionCard}>
+              <View style={styles.actionText}>
+                <ThemedText type="smallBold">Raise {ROUND_LABEL[round]}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}%
                 </ThemedText>
-              ) : null}
-            </View>
-            <Glow on={raiseRecommended}>
-              <PrimaryButton label="Raise" onPress={() => setConfirming(true)} />
-            </Glow>
-          </Card>
+                {terms.isBridge ? (
+                  <ThemedText type="footnote" themeColor="warning" numberOfLines={1}>
+                    Bridge round: worse terms
+                  </ThemedText>
+                ) : null}
+              </View>
+              <Glow on={guideRaise !== null}>
+                <PrimaryButton label="Raise" onPress={() => setConfirming(true)} />
+              </Glow>
+            </Card>
+          </GuideAnchor>
         ) : (
           <Card style={styles.actionCard}>
             <View style={styles.actionText}>
@@ -384,6 +386,9 @@ export default function MoneyScreen() {
     </View>
   );
 }
+
+/** Roughly the Raise button's centre, in from the action card's right edge. */
+const RAISE_FROM_RIGHT = Spacing.three + 40;
 
 const styles = StyleSheet.create({
   screen: {

@@ -20,7 +20,7 @@ export type Feature = (typeof FEATURES)[number];
 
 export const FEATURE_LABELS: Record<Feature, string> = {
   money: 'Money',
-  focus: 'Focus',
+  focus: 'Market & Focus',
   morale: 'Team perks',
   leadership: 'Leadership',
 };
@@ -114,7 +114,7 @@ export const QUESTS: readonly QuestDef[] = [
     unit: 'money',
     progress: monthlyIncome,
     unlocks: ['focus'],
-    reward: 'Unlocks Focus: pick your strategic bet',
+    reward: 'Unlocks Market: rivals and your strategic bet',
     backstop: (s) => s.week >= 7,
     condition: `Unlocks at $${INCOME_QUEST_MONTHLY / 1000}K monthly income, or week 7`,
   },

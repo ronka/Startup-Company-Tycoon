@@ -1,5 +1,5 @@
 import { useNavigation } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { Glow } from '@/components/game/glow';
 import { SurfaceSheen } from '@/components/game/surface-sheen';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { HintSlot, markHintSeen, useFirstRunHint } from '@/components/game/first-run-hint';
+import { GuidePointer, useGuideFor } from '@/components/game/guide-pointer';
 import { NextWeekChip } from '@/components/game/next-week-chip';
 import { SpotlightHint } from '@/components/game/spotlight-hint';
 import { ThemedText } from '@/components/themed-text';
@@ -17,8 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
-import { isUnlocked } from '@/game/unlocks';
-import { hudSlotAction, questToPlay } from '@/lib/recommended-action';
+import { isGuided, isUnlocked } from '@/game/unlocks';
 import { useGame } from '@/state/game-store';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/week-budget';
 
@@ -28,15 +28,17 @@ import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/we
  * the third slot. Owns the top safe-area inset, so tab screens no longer need
  * to.
  *
- * The callouts that belong to Next Week — the first-run spotlight and the
- * week-budget tips — hang off the strip's bottom edge as an overlay, so they
- * point at the chip without pushing the screen down.
+ * The callouts — the coach's Next Week tooltip, the first-run spotlight, the
+ * week-budget tips, and whatever the caller passes as `children` (the guided
+ * run's unlock and mission-complete banners) — hang off the strip's bottom
+ * edge as an overlay, so they float over the screen instead of pushing it down.
  */
-export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => void }) {
-  const { state, dispatch, weekBudget, purchasedWeeks, devFreePlay } = useGame();
+export function Hud({ onBuyWeeks, children }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => void; children?: ReactNode }) {
+  const { state, weekBudget, purchasedWeeks, devFreePlay } = useGame();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const theme = useTheme();
+  const guide = useGuideFor((target) => target.kind === 'next-week');
   // The one-time "this is the whole game" callout. Retired by the chip's first press.
   const spotlight = useFirstRunHint('next-week-spotlight');
   // How far in from the right the chip's centre sits, so the spotlight's caret
@@ -49,15 +51,9 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
   if (!state) return null;
 
   const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
-  // Guided week 0: the first two hires take Next Week's slot until they're made.
-  const slotAction = hudSlotAction(state);
-  // A guided run's play missions: the quest strip's bubble hangs off Next
-  // Week, and the chip glows — while there are weeks to play.
-  const playing = questToPlay(state) !== null;
-  // Only pitch "advance a week" while advancing is actually possible — and
-  // while the chip it points at is actually there. The bubble says it in a
-  // guided run.
-  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted && !slotAction && !playing;
+  // Only pitch "advance a week" while advancing is actually possible. A guided
+  // run's coach decides when Next Week is the move, so it never shows there.
+  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted && !isGuided(state);
   // Down to the final free dot, with nothing purchased to fall back on — the
   // moment the daily budget is worth explaining, before it bites.
   const onLastFreeWeek =
@@ -128,31 +124,21 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
           themeColor={insolvent ? 'danger' : undefined}
         />
       </View>
-      {slotAction ? (
-        <RecommendedActionChip
-          label={slotAction.shortLabel}
-          accessibilityLabel={slotAction.label}
-          onPress={() => {
-            track(EVENTS.RECOMMENDED_ACTION_TAPPED, { action: slotAction.id });
-            dispatch({ type: 'SET_PENDING_HIRES', role: slotAction.id === 'hire-dev' ? 'devs' : 'sales', delta: 1 });
+      <Glow on={guide !== null && !guide.dimmed} style={styles.actionSlot}>
+        <NextWeekChip
+          onBuyWeeks={onBuyWeeks}
+          style={styles.actionChip}
+          onLayout={(event) => {
+            // The chip is the strip's last child and the callouts share the strip's
+            // horizontal inset, so the chip's centre is half its width in from their right edge.
+            setCaretFromRight(event.nativeEvent.layout.width / 2);
           }}
         />
-      ) : (
-        <Glow on={playing && !budgetExhausted} style={styles.actionSlot}>
-          <NextWeekChip
-            onBuyWeeks={onBuyWeeks}
-            style={styles.actionChip}
-            onLayout={(event) => {
-              // The chip is the strip's last child and the callouts share the strip's
-              // horizontal inset, so the chip's centre is half its width in from their right edge.
-              setCaretFromRight(event.nativeEvent.layout.width / 2);
-            }}
-          />
-        </Glow>
-      )}
+      </Glow>
 
       {caretFromRight !== null && hudHeight !== null ? (
         <View pointerEvents="box-none" style={[styles.callouts, { top: hudHeight }]}>
+          {guide ? <GuidePointer step={guide} caret="up" align="right" inset={caretFromRight} /> : null}
           {showSpotlight ? (
             <SpotlightHint
               text="This is the whole game → advance a week"
@@ -171,10 +157,12 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
               {
                 id: 'out-of-weeks',
                 text: `Sprint done. A week comes back every ${WEEK_REGEN_MS / 60_000} minutes, the full ${WEEKS_BANK_CAP} in ${(WEEKS_BANK_CAP * WEEK_REGEN_MS) / 3_600_000} hours.`,
-                when: budgetExhausted && !spotlight.visible,
+                // The coach's greyed-out Next Week tooltip already says it in a guided run.
+                when: budgetExhausted && !spotlight.visible && !guide,
               },
             ]}
           />
+          {children}
         </View>
       ) : null}
     </View>
@@ -184,59 +172,9 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
 const MENU_WIDTH = 20;
 const ROW_GAP = 6;
 
-/**
- * How far in from the right edge of a `Spacing.three`-inset row the Next Week
- * chip's centre sits — for the quest strip's bubble, which lives below the Hud
- * and can't measure it. Menu, then three equal chips, with `ROW_GAP` between.
- */
-export function nextWeekCaretFromRight(windowWidth: number): number {
-  const chip = (windowWidth - 2 * Spacing.three - MENU_WIDTH - 3 * ROW_GAP) / 3;
-  return chip / 2;
-}
-
-/**
- * The guided run's recommended action, sitting where Next Week will be. One
- * tap makes the hire (it lands on the Team tab's stepper like any other), the
- * quest completes, and the slot goes back to the Next Week chip.
- */
-function RecommendedActionChip({
-  label,
-  accessibilityLabel,
-  onPress,
-}: {
-  label: string;
-  accessibilityLabel: string;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Glow on style={styles.actionSlot}>
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        style={({ pressed }) => [
-          styles.chip,
-          // The Glow slot carries the row's flex; inside its column wrapper a
-          // `flex: 1` would leave the chip's height to minHeight alone on native.
-          styles.actionChip,
-          { backgroundColor: theme.accent, borderColor: theme.accent },
-          pressed && { opacity: 0.8 },
-        ]}>
-        <SurfaceSheen />
-        <ThemedText type="small" style={{ color: theme.accentInk, opacity: 0.85 }}>Do this</ThemedText>
-        <ThemedText type="smallBold" style={[styles.actionLabel, { color: theme.accentInk }]} numberOfLines={2}>
-          {label}
-        </ThemedText>
-      </Pressable>
-    </Glow>
-  );
-}
-
 const styles = StyleSheet.create({
   actionSlot: { flex: 1 },
   actionChip: { flex: 0 },
-  actionLabel: { textAlign: 'center' },
   hud: {
     // Above the tab screens, so the callouts hanging off the bottom edge draw over them.
     zIndex: 10,
@@ -251,6 +189,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: Spacing.three,
     right: Spacing.three,
+    gap: Spacing.two,
   },
   menuButton: {
     justifyContent: 'center',

@@ -32,9 +32,9 @@ import { moraleTone } from '@/lib/stat-colors';
 import { teamContributionsFor } from '@/lib/team-contributions';
 import { useGame } from '@/state/game-store';
 import { isGuided, isUnlocked, unlockConditionFor } from '@/game/unlocks';
-import { recommendedAction } from '@/lib/recommended-action';
 import { Glow } from '@/components/game/glow';
 import { LockedFeature } from '@/components/game/locked-feature';
+import { GuideAnchor, useGuideFor } from '@/components/game/guide-pointer';
 import { isRollBudgetExhausted } from '@/state/roll-budget';
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -61,6 +61,8 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
 
 /** How long a closing sheet gets before the next one presents. */
 const SHEET_HANDOFF_MS = 350;
+/** The Stepper's + button centre, in from the card's right edge: card padding plus half the 36pt button. */
+const STEP_PLUS_FROM_RIGHT = Spacing.three + 18;
 
 export default function TeamScreen() {
   const { state, dispatch, rollBudget, devFreePlay } = useGame();
@@ -77,6 +79,8 @@ export default function TeamScreen() {
     cfo: cfoPickerRef,
   };
   useTabView('team');
+  // The coach's tooltip, when it points at one of the hire steppers.
+  const guideHire = useGuideFor((target) => target.kind === 'hire');
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
@@ -102,9 +106,7 @@ export default function TeamScreen() {
     support: `→ covers ${Math.round(contributions.supportCovered)}/${Math.round(contributions.supportTotal)} customers`,
   };
 
-  // The guided run's recommended action, pointed at the stepper that makes it.
   const guided = isGuided(state);
-  const supportRecommended = guided && recommendedAction(state).id === 'hire-support';
 
   const increment = (role: Role) => dispatch({ type: 'SET_PENDING_HIRES', role, delta: 1 });
 
@@ -249,23 +251,28 @@ export default function TeamScreen() {
         )}
 
         <View style={styles.steppers}>
-          {ROLES.map((role) => (
-            <Glow key={role} on={role === 'support' && supportRecommended}>
-              <Stepper
-                label={ROLE_LABEL[role]}
-                value={state.pendingHeadcount[role]}
-                hint={
-                  state.pendingHeadcount[role] !== state.headcount[role]
-                    ? `now ${state.headcount[role]}`
-                    : undefined
-                }
-                contribution={ROLE_CONTRIBUTION[role]}
-                contributionAlert={role === 'support' && supportShortfall}
-                onIncrement={() => increment(role)}
-                onDecrement={() => requestDecrement(role)}
-              />
-            </Glow>
-          ))}
+          {ROLES.map((role) => {
+            const guide = guideHire?.target.kind === 'hire' && guideHire.target.role === role ? guideHire : null;
+            return (
+              <GuideAnchor key={role} step={guide} align="right" inset={STEP_PLUS_FROM_RIGHT}>
+                <Glow on={guide !== null}>
+                  <Stepper
+                    label={ROLE_LABEL[role]}
+                    value={state.pendingHeadcount[role]}
+                    hint={
+                      state.pendingHeadcount[role] !== state.headcount[role]
+                        ? `now ${state.headcount[role]}`
+                        : undefined
+                    }
+                    contribution={ROLE_CONTRIBUTION[role]}
+                    contributionAlert={role === 'support' && supportShortfall}
+                    onIncrement={() => increment(role)}
+                    onDecrement={() => requestDecrement(role)}
+                  />
+                </Glow>
+              </GuideAnchor>
+            );
+          })}
         </View>
 
         {leadershipUnlocked ? (

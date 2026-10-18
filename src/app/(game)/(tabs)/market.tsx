@@ -9,6 +9,7 @@ import { Card } from '@/components/game/card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
 import { HeadlineStat } from '@/components/game/headline-stat';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
+import { LockedFeature } from '@/components/game/locked-feature';
 import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ProgressBar } from '@/components/game/progress-bar';
@@ -29,7 +30,7 @@ import {
   trendAlignmentFor,
 } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
-import { isGuided, isUnlocked, unlockConditionFor } from '@/game/unlocks';
+import { isGuided, isUnlocked } from '@/game/unlocks';
 
 const HYPE_MIN = 0.5;
 const HYPE_MAX = 2.5;
@@ -45,6 +46,18 @@ export default function MarketScreen() {
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
+
+  // Guided first weeks: the whole tab opens with Focus, the strategic bet it's built around.
+  if (!isUnlocked(state, 'focus')) {
+    return (
+      <View style={[styles.screen, { backgroundColor: theme.background }]}>
+        <View style={styles.content}>
+          <ThemedText type="sheetTitle">Market</ThemedText>
+          <LockedFeature feature="focus" title="Rivals, market share and your focus" />
+        </View>
+      </View>
+    );
+  }
 
   // Rivals are ranked bars, not identities to remember — amber then red, in
   // fixed order, so they never collide with the accent green that means "you".
@@ -63,8 +76,6 @@ export default function MarketScreen() {
     focusPickerRef.current?.dismiss();
     setPendingFocus(focus);
   };
-
-  const focusLocked = !isUnlocked(state, 'focus');
 
   const confirmFocus = () => {
     if (pendingFocus) dispatch({ type: 'SET_FOCUS', focus: pendingFocus });
@@ -102,24 +113,18 @@ export default function MarketScreen() {
 
         {/* The whole card is the tap target, so "Change" is a label, not a
             nested button — nesting one would be invalid and unreachable. */}
-        {/* A guided run keeps its onboarding focus until the picker unlocks;
-            the card still shows the bet, just not the way to change it. */}
-        <Pressable
-          onPress={focusLocked ? undefined : openFocusPicker}
-          disabled={focusLocked}
-          accessibilityRole="button"
-          accessibilityLabel={focusLocked ? `Company focus, locked. ${unlockConditionFor('focus')}.` : 'Change company focus'}>
+        <Pressable onPress={openFocusPicker} accessibilityRole="button" accessibilityLabel="Change company focus">
           <Card style={styles.compactCard}>
             <View style={styles.rowBetween}>
               <ThemedText type="default" numberOfLines={1} style={styles.strategyLine}>
                 {FOCUS_LABEL[state.focus]} · {ERA_LABEL[state.era]} era
               </ThemedText>
-              <ThemedText type="small" themeColor={focusLocked ? 'textMuted' : 'accent'}>
-                {focusLocked ? '🔒' : 'Change'}
+              <ThemedText type="small" themeColor="accent">
+                Change
               </ThemedText>
             </View>
             <ThemedText type="small" themeColor="textMuted">
-              {focusLocked ? unlockConditionFor('focus') : `Bottleneck: ${BOTTLENECK_LABEL[report.bottleneck]}`}
+              Bottleneck: {BOTTLENECK_LABEL[report.bottleneck]}
             </ThemedText>
           </Card>
         </Pressable>

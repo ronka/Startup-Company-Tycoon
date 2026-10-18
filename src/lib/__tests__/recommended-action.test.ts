@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame } from '@/game/engine';
 import type { EventCard } from '@/game/events/types';
 import type { GameState } from '@/game/types';
-import { hudSlotAction, questToPlay, recommendedAction } from '@/lib/recommended-action';
+import { recommendedAction } from '@/lib/recommended-action';
 
 const team = (devs: number, sales: number, support = 0) => ({ devs, sales, support });
 
@@ -39,44 +39,5 @@ describe('recommendedAction', () => {
     const short = { pendingHeadcount: team(2, 1), headcount: team(2, 1), cash: 100_000, week: 3 };
     expect(recommendedAction(run(short)).id).toBe('raise'); // runway < 10 opens Money as a crisis backstop
     expect(recommendedAction(run({ ...short, cash: 200_000 })).id).toBe('next-week');
-  });
-});
-
-describe('hudSlotAction', () => {
-  it('puts the week-0 hires in the Next Week slot, then gives the slot back', () => {
-    expect(hudSlotAction(run())?.id).toBe('hire-dev');
-    expect(hudSlotAction(run({ pendingHeadcount: team(1, 0), questsDone: ['hire-dev'] }))?.id).toBe('hire-sales');
-    expect(hudSlotAction(run({ pendingHeadcount: team(1, 1), questsDone: ['hire-dev', 'hire-sales'] }))).toBeNull();
-  });
-
-  it('never takes the slot outside a guided run', () => {
-    expect(hudSlotAction(newGame('Test Co', 1))).toBeNull();
-  });
-
-  it('never takes the slot back once the hiring quests are done', () => {
-    // The only dev was let go at week 8; Next Week must stay reachable.
-    const later = run({ week: 8, questsDone: ['hire-dev', 'hire-sales', 'first-customer', 'five-customers'], pendingHeadcount: team(0, 1) });
-    expect(hudSlotAction(later)).toBeNull();
-  });
-});
-
-describe('questToPlay', () => {
-  it('is null while a hire is the move', () => {
-    expect(questToPlay(run())).toBeNull();
-    expect(questToPlay(run({ pendingHeadcount: team(1, 0) }))).toBeNull();
-  });
-
-  it('is the pinned quest once only playing weeks moves it', () => {
-    expect(questToPlay(run({ pendingHeadcount: team(1, 1) }))?.id).toBe('first-customer');
-  });
-
-  it('gives way to a waiting card and to a better recommendation', () => {
-    const card: EventCard = { id: 'x', era: 'scrappy', kind: 'decision', title: 'X', flavor: '', choices: [] };
-    expect(questToPlay(run({ pendingHeadcount: team(1, 1), pendingEvent: card }))).toBeNull();
-    expect(questToPlay(run({ pendingHeadcount: team(1, 1), customers: 25 }))).toBeNull(); // hire support
-  });
-
-  it('is null outside a guided run', () => {
-    expect(questToPlay({ ...newGame('Test Co', 1), pendingHeadcount: team(1, 1) })).toBeNull();
   });
 });

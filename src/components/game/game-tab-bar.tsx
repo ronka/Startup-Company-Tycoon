@@ -1,13 +1,15 @@
 import { Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { GameArt, GAME_ART } from '@/components/game/game-art';
 import { Glow } from '@/components/game/glow';
+import { GuidePointer } from '@/components/game/guide-pointer';
 import { SurfaceSheen } from '@/components/game/surface-sheen';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
+import type { GuideStep } from '@/lib/guide';
 
 const EMPTY: ReadonlySet<string> = new Set();
 
@@ -31,7 +33,7 @@ export function GameTabBar({
 }) {
   const theme = useTheme();
   return (
-    <View style={{ paddingHorizontal: 12, paddingBottom: Math.max(bottomInset, 8), paddingTop: 4 }}>
+    <View style={{ paddingHorizontal: BAR_INSET, paddingBottom: Math.max(bottomInset, 8), paddingTop: 4 }}>
       <View style={[styles.bar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <SurfaceSheen />
         {state.routes.map((route, index) => {
@@ -69,7 +71,52 @@ export function GameTabBar({
   );
 }
 
+/**
+ * The bottom stack — the chrome's ticker or tip, then the tab bar — with the
+ * coach's tooltip floating above all of it when it points at a tab, so it
+ * never covers the ticker and never pushes the screen up.
+ */
+export function GameTabBarStack({
+  routes,
+  guide,
+  children,
+}: {
+  /** Every route the navigator knows; the ones with art are the tabs, in order. */
+  routes: readonly { name: string }[];
+  guide: GuideStep | null;
+  children: ReactNode;
+}) {
+  const theme = useTheme();
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null);
+  const tabs = routes.filter((route) => route.name in GAME_ART).map((route) => route.name);
+  const guideIndex = guide?.target.kind === 'tab' ? tabs.indexOf(guide.target.tab) : -1;
+  // The tab's centre, measured in from the nearer edge of the bar.
+  const slot = box ? (box.width - 2 * BAR_INSET) / tabs.length : 0;
+  const leftHalf = guideIndex < tabs.length / 2;
+  const caretInset = leftHalf ? slot * (guideIndex + 0.5) : slot * (tabs.length - guideIndex - 0.5);
+
+  return (
+    <View
+      onLayout={(event) => setBox({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
+      style={{ backgroundColor: theme.background, zIndex: 1 }}>
+      {children}
+      {guide && box && guideIndex >= 0 ? (
+        <GuidePointer
+          step={guide}
+          caret="down"
+          align={leftHalf ? 'left' : 'right'}
+          inset={caretInset}
+          style={[styles.guide, { bottom: box.height }]}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+const BAR_INSET = 12;
+
 const styles = StyleSheet.create({
+  guide: { position: 'absolute', left: BAR_INSET, right: BAR_INSET },
   bar: { flexDirection: 'row', borderWidth: 1, borderRadius: 30, overflow: 'hidden' },
   tabSlot: { flex: 1 },
   // The Glow slot carries the row's flex: a `flex: 1` here, inside that column wrapper, collapses the tab to zero height on native.

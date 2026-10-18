@@ -3,14 +3,13 @@
  * (plans/2026-10-18-first-weeks-journey-plan.md, A4). Grew out of
  * `actionNowFor` in `src/state/day-close.ts`, which only knows "raise".
  *
- * Pure rule table, first match wins. Callers decide where it shows: the two
- * week-0 hires take the HUD's Next Week slot, the rest are a glowing tab plus a
- * pill on the quest strip.
+ * Pure rule table, first match wins. The guide (`src/lib/guide.ts`) turns it
+ * into the tab and control to point at.
  */
 
 import { canRaiseRound, CUSTOMERS_PER_SUPPORT } from '@/game/balance';
 import { ROUND_ORDER, type GameState } from '@/game/types';
-import { isGuided, isUnlocked, nextQuest, type QuestProgress } from '@/game/unlocks';
+import { isUnlocked } from '@/game/unlocks';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 
 export type RecommendedActionId = 'answer-card' | 'hire-dev' | 'hire-sales' | 'hire-support' | 'raise' | 'next-week';
@@ -65,32 +64,4 @@ const SHORT_LABELS: Partial<Record<RecommendedActionId, string>> = {
 export function recommendedAction(state: GameState): RecommendedAction {
   const id = pick(state);
   return { id, label: LABELS[id], shortLabel: SHORT_LABELS[id] ?? LABELS[id] };
-}
-
-/**
- * The recommendation that takes the HUD's Next Week slot, or null to keep the
- * Next Week chip. Only the week-0 hires do — one tap resolves them and the chip
- * comes straight back — and only while they're the pinned quest, so a run
- * that later lets its last dev go never loses its Next Week button.
- */
-export function hudSlotAction(state: GameState): RecommendedAction | null {
-  if (!isGuided(state) || state.pendingEvent || state.gameOver) return null;
-  const quest = nextQuest(state)?.id;
-  if (quest !== 'hire-dev' && quest !== 'hire-sales') return null;
-  const action = recommendedAction(state);
-  return action.id === quest ? action : null;
-}
-
-/**
- * The pinned quest when the only move is to play weeks — winning customers or
- * income with nothing better to do. The quest strip shrinks to a bubble under
- * Next Week and the chip glows, so "keep pressing Next Week" is said by the
- * button itself. Null for the hires, a waiting card, or a raise / support
- * recommendation, which keep the full mission card.
- */
-export function questToPlay(state: GameState): QuestProgress | null {
-  if (!isGuided(state) || state.pendingEvent || state.gameOver) return null;
-  const quest = nextQuest(state);
-  if (!quest || quest.id === 'hire-dev' || quest.id === 'hire-sales') return null;
-  return recommendedAction(state).id === 'next-week' ? quest : null;
 }

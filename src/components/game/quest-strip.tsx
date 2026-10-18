@@ -1,25 +1,15 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { EVENTS, track } from '@/analytics/events';
-import { Glow } from '@/components/game/glow';
-import { NextWeekBubble } from '@/components/game/next-week-bubble';
-import { SurfaceSheen } from '@/components/game/surface-sheen';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { FEATURE_LABELS, FEATURE_TERMS, isGuided, nextQuest, unlockedFeatures, type Feature } from '@/game/unlocks';
 import type { GameState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/lib/format';
-import { hudSlotAction, questToPlay, recommendedAction } from '@/lib/recommended-action';
-import { purchasesAvailable } from '@/purchases';
-import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
-import { isWeekBudgetExhausted } from '@/state/week-budget';
 
-/** How long the "Mission complete" beat holds before the next quest slides in. */
+/** How long the "Mission complete" banner holds. */
 const COMPLETE_BEAT_MS = 1800;
 
 /**
@@ -54,29 +44,24 @@ export function useUnlockMoment(state: GameState | null): [Feature[], () => void
 }
 
 /**
- * The guided first weeks' one pinned goal (plans/2026-10-18-first-weeks-journey-plan.md):
- * mission number, progress and reward, with the unlock moment above it and,
- * when the best move lives on another tab, a pill that takes you there.
- * While only playing weeks moves the mission, the card gives way to a bubble
- * under Next Week (`NextWeekBubble`).
- * Renders nothing outside a guided run, so existing saves are untouched.
+ * The guided run's moments, hanging under the Hud over the screen: the unlock
+ * banner and the "Mission complete" beat. The mission itself and what to do
+ * next ride on the coach's tooltip (`GuidePointer`), which points at the
+ * actual control to tap. Renders nothing outside a guided run.
  */
 export function QuestStrip({
   freshUnlocks,
   onDismissUnlocks,
-  onBuyWeeks,
 }: {
   freshUnlocks: Feature[];
   onDismissUnlocks: () => void;
-  onBuyWeeks: (trigger: BuyWeeksTrigger) => void;
 }) {
-  const { state, dispatch, weekBudget, purchasedWeeks, devFreePlay } = useGame();
+  const { state } = useGame();
   const theme = useTheme();
-  const router = useRouter();
   const quest = state ? nextQuest(state) : null;
 
   // "Mission complete": when the pinned quest changes, hold the finished one
-  // for a beat before the next slides in.
+  // for a beat.
   const [completed, setCompleted] = useState<string | null>(null);
   const [pinned, setPinned] = useState<{ seed: number; id: string; title: string } | null>(null);
   const nowPinned = state && quest ? { seed: state.createdWithSeed, id: quest.id, title: quest.title } : null;
@@ -91,48 +76,23 @@ export function QuestStrip({
   }, [completed]);
 
   if (!state || !isGuided(state) || state.gameOver) return null;
+  if (!freshUnlocks.length && !completed) return null;
 
-  const action = recommendedAction(state);
-  const slotTaken = hudSlotAction(state) !== null;
-  // The best move when it lives on another tab: a pill that takes you there.
-  const goTo = action.id === 'raise' ? '/money' : action.id === 'hire-support' ? '/team' : null;
   const terms = freshUnlocks.flatMap((f) => FEATURE_TERMS[f] ?? []);
-  // Only playing weeks moves the mission: the card shrinks to a bubble under Next Week.
-  const playing = questToPlay(state);
-  const atWall = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
-
-  // The HUD slot is showing a hire instead of Next Week; this is the way past
-  // it for a player who'd rather not. Same behaviour as the Next Week chip.
-  const skipWeek = () => {
-    track(EVENTS.RECOMMENDED_ACTION_SKIPPED, { action: hudSlotAction(state)?.id ?? null });
-    dispatch({ type: 'TICK' });
-    if (isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay) && purchasesAvailable) onBuyWeeks('out_of_weeks');
-  };
-
-  if (!quest && !freshUnlocks.length && !goTo && !completed) return null;
-
-  // Sits on the mission card's bottom row, so a busy week costs no extra height.
-  const pill = goTo ? (
-    <Glow on radius={Radius.pill}>
-      <Pressable
-        onPress={() => {
-          track(EVENTS.RECOMMENDED_ACTION_TAPPED, { action: action.id });
-          router.navigate(goTo);
-        }}
-        hitSlop={6}
-        accessibilityRole="button"
-        style={[styles.pill, { backgroundColor: theme.accent }]}>
-        <ThemedText type="footnote" style={[styles.pillText, { color: theme.accentInk }]}>{action.label} ›</ThemedText>
-      </Pressable>
-    </Glow>
-  ) : null;
-
-  const format = (n: number) => (quest?.unit === 'money' ? formatMoney(n) : String(Math.floor(n)));
 
   return (
-    <View style={styles.wrap}>
-      {/* First, so its caret meets the chip whatever else the strip is showing. */}
-      {playing ? <NextWeekBubble quest={playing} atWall={atWall} /> : null}
+    <View style={styles.wrap} pointerEvents="box-none">
+      {completed ? (
+        <Animated.View
+          key={`done-${completed}`}
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(200)}
+          pointerEvents="none"
+          style={[styles.banner, { backgroundColor: theme.successBackground, borderColor: theme.success }]}>
+          <ThemedText type="sectionLabel" themeColor="success">Mission complete</ThemedText>
+          <ThemedText type="smallBold">✓ {completed}</ThemedText>
+        </Animated.View>
+      ) : null}
 
       {freshUnlocks.length ? (
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)}>
@@ -150,74 +110,11 @@ export function QuestStrip({
           </Pressable>
         </Animated.View>
       ) : null}
-
-      {completed ? (
-        <Animated.View
-          key={`done-${completed}`}
-          entering={FadeIn.duration(200)}
-          style={[styles.quest, { backgroundColor: theme.successBackground, borderColor: theme.success }]}>
-          <ThemedText type="sectionLabel" themeColor="success">Mission complete</ThemedText>
-          <ThemedText type="smallBold">✓ {completed}</ThemedText>
-        </Animated.View>
-      ) : quest && !playing ? (
-        <Animated.View
-          key={quest.id}
-          entering={FadeIn.duration(300)}
-          style={[styles.quest, { backgroundColor: theme.accentSurface, borderColor: theme.accent }]}
-          accessibilityLabel={`Mission ${quest.number} of ${quest.total}: ${quest.title}. ${format(quest.progress)} of ${format(quest.goal)}. ${quest.reward}.`}>
-          <SurfaceSheen />
-          <View style={styles.questTop}>
-            <ThemedText type="sectionLabel" themeColor="accent">
-              Mission {quest.number} of {quest.total}
-            </ThemedText>
-            <ThemedText type="smallBold">
-              {format(quest.progress)} / {format(quest.goal)}
-            </ThemedText>
-          </View>
-          <ThemedText type="smallBold" style={styles.title}>{quest.title}</ThemedText>
-          <View style={[styles.track, { backgroundColor: theme.surfaceRaised }]}>
-            <View
-              style={[styles.fill, { backgroundColor: theme.accent, width: `${Math.min(100, (quest.progress / quest.goal) * 100)}%` }]}
-            />
-          </View>
-          <View style={styles.questBottom}>
-            <ThemedText type="footnote" themeColor="textSecondary" style={styles.reward} numberOfLines={1}>
-              → {quest.reward}
-            </ThemedText>
-            {slotTaken ? (
-              <Pressable onPress={skipWeek} hitSlop={8} accessibilityRole="button" accessibilityLabel="Skip to next week">
-                <ThemedText type="footnote" themeColor="textMuted">Skip week ›</ThemedText>
-              </Pressable>
-            ) : (
-              pill
-            )}
-          </View>
-        </Animated.View>
-      ) : null}
-
-      {goTo && !quest ? <View style={styles.pillAlone}>{pill}</View> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two, gap: Spacing.two },
+  wrap: { gap: Spacing.two },
   banner: { borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, gap: 2 },
-  quest: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    gap: Spacing.one,
-    overflow: 'hidden',
-  },
-  questTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 16 },
-  track: { height: 5, borderRadius: 3, overflow: 'hidden' },
-  fill: { height: 5, borderRadius: 3 },
-  questBottom: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  reward: { flex: 1 },
-  pillAlone: { alignSelf: 'flex-start' },
-  pill: { borderRadius: Radius.pill, paddingHorizontal: Spacing.two + Spacing.one, paddingVertical: Spacing.one },
-  pillText: { fontWeight: '700' },
 });
