@@ -136,7 +136,7 @@ No engine changes. The sim snapshot stays green without being touched.
 
 Week numbers are placeholders until a playtest; the newbie bot gives a first read.
 
-## Prototype (next step)
+## Prototype (done 2026-10-18): A, Quest bar, wins
 
 One UI prototype on the real game routes. Two switches:
 - **`?variant=`** for the three directions:
@@ -146,6 +146,20 @@ One UI prototype on the real game routes. Two switches:
 - **`?stage=`** for the moment in the journey: week 0 (nothing hired), week 6 (Money just unlocked), week 12 (most things unlocked).
 
 Read-only against stub states. The question it answers: which direction makes "what do I do now?" obvious at every stage?
+
+**Verdict: A, Quest bar.** Stage A builds on it as written:
+- A pinned quest strip under the company header.
+- The recommended action takes the HUD's Next Week slot, and becomes "Next week" when nothing else is recommended.
+- The glow sits on the tab that holds the quest's control.
+- Locked tabs show their condition.
+
+B (office as the interface) and C (weekly choice cards) are not being pursued.
+
+**Source:** branch `prototype/first-weeks-journey` (commits `cbc9a01`, `d20fd00`), not merged. The code is in `src/components/game/prototype-first-weeks/`, plus a dev-only `?variant=` hook in `(tabs)/_layout.tsx`. To run it, switch to the branch and open `/hq?variant=A&stage=0|6|12` on web. It was checked on web at 393×852, not on the iOS sim. The prototype code is throwaway; rewrite it properly (with tests) in A1–A4.
+
+**What the prototype taught us:**
+- **An unlock needs more than a banner.** A banner that dismisses itself gets missed. The prototype keeps the banner up until it's tapped or the week advances, and glows whatever just unlocked, such as the Money tab. Stage A should do the same.
+- **A4's rule table ignores a fresh unlock.** "Raise" is only recommended when runway is under 10 weeks. So in the week Money unlocks, the recommended action is "Next week", and only the unlock glow points at Money. See open question 4.
 
 ## Done when
 
@@ -160,3 +174,4 @@ Read-only against stub states. The question it answers: which direction makes "w
 1. **Leaderboard:** guided runs start easier. Publish normally, publish with a flag, or not at all? (Original open question 5.)
 2. **Existing players:** offer them a "guided" restart, or leave guided to new installs only? (Default: new runs only.)
 3. **Celebration art and sound:** banners in Stage A are code only; haptics wait for the next native build (Phase 2.5).
+4. **Recommend a fresh unlock?** Should the week a feature unlocks make it the recommended action (e.g. "Raise your first round" the week Money opens), or should the glow alone carry it? Found in the prototype.
