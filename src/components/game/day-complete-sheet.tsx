@@ -30,6 +30,7 @@ export function DayCompleteSheet({
   onBuyWeeks,
   onRemindMe,
   onDismiss,
+  onDismissed,
 }: {
   visible: boolean;
   companyName: string;
@@ -49,9 +50,11 @@ export function DayCompleteSheet({
    */
   onRemindMe?: () => void;
   onDismiss: () => void;
+  /** The sheet has finished animating away — see `BottomSheet`'s `onDismissed`. */
+  onDismissed?: () => void;
 }) {
   return (
-    <BottomSheet visible={visible} onClose={onDismiss}>
+    <BottomSheet visible={visible} onClose={onDismiss} onDismissed={onDismissed}>
       <View style={styles.header}>
         <ThemedText type="title">That&apos;s the week planned out</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">

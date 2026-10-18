@@ -40,6 +40,12 @@ const DAY_COMPLETE_ARM_MS = 350;
  * and the ask waits for it to close.
  */
 const LEADERBOARD_ASK_ARM_MS = 700;
+/**
+ * Backstop for "Pull an all-nighter": the paywall normally opens on the
+ * sheet's `onDismissed`, and this only fires if that never arrives. Long
+ * enough to clear the sheet's slide-out.
+ */
+const BUY_AFTER_SHEET_FALLBACK_MS = 700;
 
 /**
  * Streak length at which coming back counts as a genuine "I like this" signal
@@ -92,6 +98,11 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   // unannounced; asking after the close keeps it out of the frame the sheet is
   // dismissing in.
   const [reminderOptedIn, setReminderOptedIn] = useState(false);
+  // Set by "Pull an all-nighter": the paywall waits for the closing panel to
+  // finish sliding away. Presenting it in the same frame the panel starts
+  // dismissing is the iOS present-while-dismiss case — UIKit drops the
+  // paywall, nothing appears, and the tap looks dead.
+  const [buyAfterSheet, setBuyAfterSheet] = useState(false);
 
   // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
   // no-op while either is still resolving (null), so play is never blocked
@@ -124,6 +135,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     budgetExhausted &&
     !state.pendingEvent && // DecisionModal owns the screen
     !buyWeeks.isOpen && // never stack on a buy-weeks surface
+    !buyAfterSheet && // …or on one that is about to open
     // The tick that spent the last week still owes the player its recap:
     // `WeekInReviewSheet` arms 350ms *after* this panel would otherwise open,
     // and would present straight into it. The recap is the earlier beat, so
@@ -173,9 +185,20 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     !state.pendingEvent &&
     leaderboard.joinSource === null &&
     !buyWeeks.isOpen &&
+    !buyAfterSheet &&
     !dayCompleteVisible &&
     (previousState === null || recapArmedWeek === state.week) &&
     !(previousState !== null && notable && state.week !== reviewedWeek);
+  const { open: openBuyWeeks } = buyWeeks;
+  useEffect(() => {
+    if (!buyAfterSheet) return;
+    const timer = setTimeout(() => {
+      setBuyAfterSheet(false);
+      openBuyWeeks('out_of_weeks');
+    }, BUY_AFTER_SHEET_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [buyAfterSheet, openBuyWeeks]);
+
   const { openJoin } = leaderboard;
   useEffect(() => {
     if (!leaderboardAskDue) return;
@@ -271,7 +294,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
             ? () => {
                 setDayCompleteVisible(false);
                 track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'buy_weeks' });
-                buyWeeks.open('out_of_weeks');
+                setBuyAfterSheet(true);
               }
             : undefined
         }
@@ -292,6 +315,11 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
           setDayCompleteVisible(false);
           track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'dismiss' });
           maybeAskForReviewAtWall(streak?.streakDays ?? 0, insolvent);
+        }}
+        onDismissed={() => {
+          if (!buyAfterSheet) return;
+          setBuyAfterSheet(false);
+          openBuyWeeks('out_of_weeks');
         }}
       />
 

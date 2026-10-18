@@ -28,6 +28,7 @@ export function BottomSheet({
   title,
   dismissible = true,
   avoidKeyboard = false,
+  onDismissed,
   children,
 }: {
   visible: boolean;
@@ -35,6 +36,11 @@ export function BottomSheet({
   title?: string;
   dismissible?: boolean;
   avoidKeyboard?: boolean;
+  /**
+   * iOS: fires once the sheet has fully animated off screen. The moment it is
+   * safe to present another surface (the RevenueCat paywall) after this one.
+   */
+  onDismissed?: () => void;
   children: ReactNode;
 }) {
   const theme = useTheme();
@@ -80,6 +86,7 @@ export function BottomSheet({
       visible={visible}
       transparent
       animationType="slide"
+      onDismiss={onDismissed}
       onRequestClose={canDismiss ? onClose : undefined}>
       {avoidKeyboard ? (
         <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

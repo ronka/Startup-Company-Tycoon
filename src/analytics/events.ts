@@ -191,6 +191,12 @@ export const EVENTS = {
    */
   PAYWALL_NOT_PRESENTED: 'paywall_not_presented',
   /**
+   * A buy tap found an earlier hosted-paywall presentation that never reached
+   * the screen (UIKit dropped it) and started over — `{ trigger, lost_trigger }`.
+   * See `buy-weeks-flow.ts`.
+   */
+  PAYWALL_PRESENTATION_LOST: 'paywall_presentation_lost',
+  /**
    * A buy tap was answered with "purchases aren't available right now" instead
    * of another doomed attempt — `{ trigger }`. See
    * `purchase-failure-gate.ts`.

@@ -47,6 +47,21 @@ const IDLE: BuyFlow = { kind: 'idle' };
  */
 const EXPLAIN_ARM_MS = 350;
 
+/**
+ * How long after `presentPaywall()` was called a buy tap may conclude that the
+ * paywall never made it on screen.
+ *
+ * The hosted paywall is full-screen, so a tap that reaches the Next Week chip
+ * while the flow still says `paywall` means nothing is covering it: UIKit
+ * dropped the presentation (another modal was still presenting or dismissing)
+ * and RevenueCat's promise will never settle. Before this, that one dropped
+ * present left the flow armed until a cold start and every later tap silently
+ * did nothing. The window keeps a quick double-tap — or a tap while offerings
+ * are still loading, when there is genuinely nothing on screen *yet* — from
+ * presenting twice, which is its own iOS hang.
+ */
+const LOST_PRESENTATION_MS = 2000;
+
 function explainPurchasesUnavailable(): void {
   setTimeout(() => {
     Alert.alert(
@@ -91,6 +106,12 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
   // effect below has already run by the time any promise continuation is
   // scheduled off the back of it.
   const runIsLiveRef = useRef(runIsLive);
+  // Which presentation is current, so a lost one that settles late can't
+  // close the flow out from under its replacement.
+  const attemptRef = useRef(0);
+  // When the current attempt actually called `presentPaywall()`; null while
+  // offerings are still loading. Read by the lost-presentation check.
+  const presentCalledAtRef = useRef<number | null>(null);
 
   const enter = useCallback((next: BuyFlow) => {
     flowRef.current = next;
@@ -108,15 +129,30 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
 
   const open = useCallback(
     (trigger: BuyWeeksTrigger) => {
-      if (flowRef.current.kind !== 'idle') return;
+      const current = flowRef.current;
+      if (current.kind === 'paywall') {
+        const calledAt = presentCalledAtRef.current;
+        if (calledAt === null || Date.now() - calledAt < LOST_PRESENTATION_MS) return;
+        track(EVENTS.PAYWALL_PRESENTATION_LOST, { trigger, lost_trigger: current.trigger });
+      } else if (current.kind !== 'idle') {
+        return;
+      }
       if (purchasesBlocked()) {
         track(EVENTS.PURCHASE_RETRY_SUPPRESSED, { trigger });
         explainPurchasesUnavailable();
         return;
       }
+      const attempt = ++attemptRef.current;
+      presentCalledAtRef.current = null;
+      // Superseded attempts still credit and report what they did — only the
+      // flow itself belongs to the latest one.
+      const settle = (next: BuyFlow) => {
+        if (attempt === attemptRef.current) enter(next);
+      };
       enter({ kind: 'paywall', trigger });
       track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger, surface: 'revenuecat' });
       presentWeeksPaywall(() => {
+        if (attempt === attemptRef.current) presentCalledAtRef.current = Date.now();
         track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'revenuecat' });
       })
         .then(async ({ outcome, notPresentedReason, error }) => {
@@ -126,7 +162,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
             // predates the paywall UI native module. The sheet renders from a
             // hardcoded pack catalog, so it still works where this doesn't —
             // but only hand it the flow if there is still a run to hand it to.
-            enter(runIsLiveRef.current ? { kind: 'sheet', trigger } : IDLE);
+            settle(runIsLiveRef.current ? { kind: 'sheet', trigger } : IDLE);
             return;
           }
           if (outcome !== 'error') notePurchaseSurfaceWorked();
@@ -175,7 +211,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
             notePurchaseFailed();
             if (notePurchaseAttemptFailed()) explainPurchasesUnavailable();
           }
-          enter(IDLE);
+          settle(IDLE);
         })
         .catch((err: unknown) => {
           track(EVENTS.PURCHASE_FAILED, {
@@ -186,7 +222,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
           });
           notePurchaseFailed();
           if (notePurchaseAttemptFailed()) explainPurchasesUnavailable();
-          enter(IDLE);
+          settle(IDLE);
         });
     },
     [enter, reconcileAfterPaywall],
