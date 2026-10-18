@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { useTabView } from '@/analytics/use-tab-view';
@@ -11,11 +11,10 @@ import { FirstRunHint } from '@/components/game/first-run-hint';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { ProgressBar } from '@/components/game/progress-bar';
-import { SectionHeader } from '@/components/game/section-header';
 import { Sparkline } from '@/components/game/sparkline';
-import { StatTile } from '@/components/game/stat-tile';
+import { HeadlineStat } from '@/components/game/headline-stat';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import {
   ARPC,
   BRIDGE_RUNWAY_THRESHOLD_WEEKS,
@@ -44,6 +43,9 @@ import { recommendedAction } from '@/lib/recommended-action';
 import { Glow } from '@/components/game/glow';
 import { LockedFeature } from '@/components/game/locked-feature';
 
+/** Below this the valuation chart is a squiggle, so it isn't drawn. */
+const MIN_CHART_HEIGHT = 32;
+
 const ROUND_LABEL: Record<RoundType, string> = {
   seed: 'Seed',
   seriesA: 'Series A',
@@ -56,7 +58,8 @@ export default function MoneyScreen() {
   const [confirming, setConfirming] = useState(false);
   const [ipoConfirming, setIpoConfirming] = useState(false);
   const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
-  const [chartWidth, setChartWidth] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [chartBox, setChartBox] = useState<{ w: number; h: number } | null>(null);
   useTabView('money');
 
   if (!state) return <Redirect href="/" />;
@@ -110,7 +113,8 @@ export default function MoneyScreen() {
   const ipoEligible = isIpoEligible(state.stage, state.ipoWindowOpen, state.weeksRevenueAboveIpoBar);
 
   // The guided run's recommended action, or the week Money just opened.
-  const raiseRecommended = isGuided(state) && recommendedAction(state).id === 'raise';
+  const guided = isGuided(state);
+  const raiseRecommended = guided && recommendedAction(state).id === 'raise';
 
   const raise = () => {
     dispatch({ type: 'RAISE_ROUND' });
@@ -122,87 +126,137 @@ export default function MoneyScreen() {
     setIpoConfirming(false);
   };
 
+  const equityPercent = Math.round(state.founderEquity * 100);
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View>
-          <ThemedText type="sheetTitle">Money</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {STAGE_LABEL[state.stage]} stage
-          </ThemedText>
+      {/* Fits one iPhone 15 screen without scrolling; the ScrollView is only
+          the fallback for shorter phones and large text. */}
+      <ScrollView contentContainerStyle={styles.content} bounces={false}>
+        <View style={styles.titleRow}>
+          <View>
+            <ThemedText type="sheetTitle">Money</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {STAGE_LABEL[state.stage]} stage
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={() => setDetailsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Show revenue, runway, equity and IPO details"
+            style={[styles.detailsPill, { backgroundColor: theme.accentSurface }]}>
+            <ThemedText type="smallBold" themeColor="accent">
+              Details ›
+            </ThemedText>
+          </Pressable>
         </View>
 
-        <FirstRunHint id="money" text="Raise before runway drops under 8 weeks or terms get worse." />
+        {/* A guided run's quest strip does the explaining. */}
+        {guided ? null : <FirstRunHint id="money" text="Raise before runway drops under 8 weeks or terms get worse." />}
 
-        <Card tone="plain" style={[styles.hero, !hasChart && styles.heroCompact]}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Company valuation
-          </ThemedText>
-          <View style={styles.heroValueRow}>
-            <AnimatedNumber value={valuation} format={formatMoney} goodDirection="up" type="hero" />
-            {valuationChange !== null && Math.abs(valuationChange) >= 0.1 ? (
-              <ThemedText type="smallBold" themeColor={valuationUp ? 'success' : 'danger'}>
-                {valuationUp ? '↗' : '↘'} {Math.abs(valuationChange).toFixed(1)}%
-              </ThemedText>
-            ) : null}
+        {/* The hero takes whatever height is left, and the chart grows into it —
+            so the tab fills a tall phone and still fits a short one. */}
+        <Card tone="plain" style={hasChart ? styles.heroWithChart : undefined}>
+          <View style={[styles.heroText, !hasChart && styles.heroTextCompact]}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Company valuation
+            </ThemedText>
+            <View style={styles.heroValueRow}>
+              <AnimatedNumber value={valuation} format={formatMoney} goodDirection="up" type="hero" />
+              {valuationChange !== null && Math.abs(valuationChange) >= 0.1 ? (
+                <ThemedText type="smallBold" themeColor={valuationUp ? 'success' : 'danger'}>
+                  {valuationUp ? '↗' : '↘'} {Math.abs(valuationChange).toFixed(1)}%
+                </ThemedText>
+              ) : null}
+            </View>
+            <ThemedText type="small" themeColor="textMuted">
+              Week {state.week} · post-money est.
+            </ThemedText>
           </View>
-          <ThemedText type="small" themeColor="textMuted">
-            Week {state.week} · post-money est.
-          </ThemedText>
           {/* Bleeds to the card's bottom edge, like a chart footer. Kept out of
-              the tree until there's a series to draw. */}
+              the tree until there's a series to draw, so the card closes up. */}
           {hasChart ? (
-            <View style={styles.chart} onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}>
-              {chartWidth > 0 ? <Sparkline data={history} width={chartWidth} height={92} color={theme.success} /> : null}
+            <View
+              style={styles.chart}
+              onLayout={(event) => setChartBox({ w: event.nativeEvent.layout.width, h: event.nativeEvent.layout.height })}>
+              {chartBox && chartBox.h >= MIN_CHART_HEIGHT ? (
+                <Sparkline data={history} width={chartBox.w} height={chartBox.h} color={theme.success} />
+              ) : null}
             </View>
           ) : null}
         </Card>
 
-        <View style={styles.grid}>
-          <StatTile
+        <View style={styles.statsRow}>
+          <HeadlineStat
             label="Burn / wk"
-            value={burn}
-            previousValue={previous?.burn}
-            format={formatMoney}
-            goodDirection="down"
-            icon={{ ios: 'flame.fill', android: 'local_fire_department', web: 'local_fire_department' }}
-            hint="Tap for breakdown"
+            value={formatMoney(burn)}
+            note={previous && formatMoney(previous.burn) !== formatMoney(burn) ? `was ${formatMoney(previous.burn)}` : 'Where it goes'}
             onPress={() => {
               track(EVENTS.BURN_BREAKDOWN_OPENED, { screen: 'money' });
               setBurnBreakdownOpen(true);
             }}
+            accessibilityLabel={`Burn per week: ${formatMoney(burn)}. Show breakdown.`}
           />
-          <StatTile
-            label="Runway"
-            value={runway}
-            previousValue={previous?.runway}
-            format={formatWeeks}
-            goodDirection="up"
-            icon={{ ios: 'gauge.medium', android: 'speed', web: 'speed' }}
-            explainer={STAT_EXPLAINERS.runway}
-          />
-          <StatTile
-            label="Revenue / wk"
-            value={revenue}
-            previousValue={previous?.revenue}
-            format={formatMoney}
-            goodDirection="up"
-            icon={{ ios: 'chart.line.uptrend.xyaxis', android: 'trending_up', web: 'trending_up' }}
-            explainer={STAT_EXPLAINERS.revenue}
-          />
-          <StatTile
+          <HeadlineStat
             label="Your stake"
-            value={stake}
-            previousValue={previous?.stake}
-            format={formatMoney}
-            goodDirection="up"
-            icon={{ ios: 'chart.pie.fill', android: 'pie_chart', web: 'pie_chart' }}
-            hint={`${Math.round(state.founderEquity * 100)}% of the company`}
+            value={formatMoney(stake)}
+            note={`${equityPercent}% of the company`}
           />
         </View>
 
+        {round && terms && !raiseLocked ? (
+          <Card style={styles.actionCard}>
+            <View style={styles.actionText}>
+              <ThemedText type="smallBold">Raise {ROUND_LABEL[round]}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}%
+              </ThemedText>
+              {terms.isBridge ? (
+                <ThemedText type="footnote" themeColor="warning" numberOfLines={1}>
+                  Bridge round: worse terms
+                </ThemedText>
+              ) : null}
+            </View>
+            <Glow on={raiseRecommended}>
+              <PrimaryButton label="Raise" onPress={() => setConfirming(true)} />
+            </Glow>
+          </Card>
+        ) : (
+          <Card style={styles.actionCard}>
+            <View style={styles.actionText}>
+              <ThemedText type="smallBold">
+                {round ? `${ROUND_LABEL[round]} cooling down` : 'Fully funded'}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {round
+                  ? `Investors want a few weeks of progress. Next round in ${formatWeeks(cooldownWeeksLeft)}.`
+                  : 'Seed, Series A and Series B are all raised.'}
+              </ThemedText>
+            </View>
+          </Card>
+        )}
+
+        {/* The IPO's progress lives in Details; the button comes out only when it can be pressed. */}
+        {ipoEligible ? (
+          <Card style={styles.actionCard}>
+            <View style={styles.actionText}>
+              <ThemedText type="smallBold">IPO window is open</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                Cash out at {formatMoney(valuation)}
+              </ThemedText>
+            </View>
+            <PrimaryButton variant="secondary" label="IPO" onPress={() => setIpoConfirming(true)} />
+          </Card>
+        ) : null}
+
+      </ScrollView>
+
+      <BottomSheet visible={detailsOpen} onClose={() => setDetailsOpen(false)} title="Revenue, equity & IPO">
         <Card>
-          <SectionHeader label="Revenue breakdown" />
+          <View style={styles.sheetHeader}>
+            <ThemedText type="sectionLabel">Revenue</ThemedText>
+            <ThemedText type="smallBold">{formatMoney(revenue)} / wk</ThemedText>
+          </View>
           <ThemedText type="small" themeColor="textSecondary">
             {formatCount(state.customers)} customers × {formatMoney(ARPC)} × {focusArpcMultiplier.toFixed(1)} focus ={' '}
             {formatMoney(report.stats.revenue)}
@@ -223,128 +277,102 @@ export default function MoneyScreen() {
               </ThemedText>
             ) : null}
           </View>
+          <ThemedText type="small" themeColor="textMuted">
+            {STAT_EXPLAINERS.revenue}
+          </ThemedText>
         </Card>
 
         <Card>
-          <View style={styles.equityHeader}>
-            <ThemedText type="sectionLabel">Founder equity</ThemedText>
-            <ThemedText type="smallBold">{Math.round(state.founderEquity * 100)}%</ThemedText>
+          <View style={styles.sheetHeader}>
+            <ThemedText type="sectionLabel">Runway</ThemedText>
+            <ThemedText type="smallBold">{formatWeeks(runway)}</ThemedText>
           </View>
-          <ProgressBar percent={state.founderEquity * 100} color={theme.accent} />
-          <ThemedText type="small" themeColor="textSecondary">
-            Your stake: {Math.round(state.founderEquity * 100)}% × {formatMoney(valuation)} = {formatMoney(stake)}
+          <ThemedText type="small" themeColor="textMuted">
+            {STAT_EXPLAINERS.runway}
           </ThemedText>
         </Card>
 
-        {round && terms && !raiseLocked ? (
-          <Card style={styles.raiseCard}>
-            <ThemedText type="smallBold">Raise {ROUND_LABEL[round]}</ThemedText>
-            {terms.isBridge ? (
-              <ThemedText type="small" themeColor="warning">
-                Runway is under {formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)} — this is a bridge
-                round: less cash, more dilution.
-                {nextRoundLikelyBridgeToo
-                  ? ` This raise still leaves you under ${formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)} — your next round will likely also be a bridge.`
-                  : ''}
-              </ThemedText>
-            ) : null}
-            <ThemedText type="small" themeColor="textSecondary">
-              {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}% of the company
-            </ThemedText>
-            <Glow on={raiseRecommended}>
-              <PrimaryButton
-                label={`Raise ${ROUND_LABEL[round]}`}
-                onPress={() => setConfirming(true)}
-              />
-            </Glow>
-          </Card>
-        ) : round && raiseLocked ? (
-          <Card style={styles.raiseCard}>
-            <ThemedText type="smallBold">{ROUND_LABEL[round]} cooling down</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              The last round just closed — the market wants to see a few weeks of progress first.
-              Next round available in {formatWeeks(cooldownWeeksLeft)}.
-            </ThemedText>
-          </Card>
-        ) : (
-          <Card style={styles.raiseCard}>
-            <ThemedText type="smallBold">Fully funded</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Seed, Series A, and Series B are all raised. No more rounds available.
-            </ThemedText>
-          </Card>
-        )}
-
-        <Card style={[styles.ipoCard, ipoEligible && styles.ipoCardReady]}>
-          <ThemedText type="smallBold" themeColor={ipoEligible ? 'text' : 'textSecondary'}>
-            IPO
+        <Card>
+          <View style={styles.sheetHeader}>
+            <ThemedText type="sectionLabel">Founder equity</ThemedText>
+            <ThemedText type="smallBold">{equityPercent}%</ThemedText>
+          </View>
+          <ProgressBar percent={state.founderEquity * 100} color={theme.accent} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Your stake: {equityPercent}% × {formatMoney(valuation)} = {formatMoney(stake)}
           </ThemedText>
+        </Card>
+
+        <Card>
+          <ThemedText type="sectionLabel">IPO</ThemedText>
           {state.stage !== 'growth' ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
               Unlocks at Growth stage once revenue clears the bar and the IPO window is open.
             </ThemedText>
           ) : (
             <>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
                 Revenue {formatMoney(revenue)} / {formatMoney(IPO_REVENUE_BAR)} needed
               </ThemedText>
               <ProgressBar percent={(revenue / IPO_REVENUE_BAR) * 100} color={theme.success} />
-              <ThemedText type="small" themeColor="textSecondary" style={styles.ipoBody}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
                 Sustained {Math.min(state.weeksRevenueAboveIpoBar, IPO_SUSTAIN_WEEKS)} /{' '}
                 {IPO_SUSTAIN_WEEKS} weeks
                 {!state.ipoWindowOpen ? ' — IPO window is shut' : ''}
               </ThemedText>
             </>
           )}
-          <PrimaryButton
-            variant="secondary"
-            label="IPO"
-            disabled={!ipoEligible}
-            onPress={() => setIpoConfirming(true)}
-          />
         </Card>
-      </ScrollView>
+      </BottomSheet>
 
       <BottomSheet
         visible={confirming}
         onClose={() => setConfirming(false)}
         title={`Raise ${round ? ROUND_LABEL[round] : ''}?`}>
-        {terms ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
-            {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}% of the company. Founder equity goes
-            from {Math.round(state.founderEquity * 100)}% to{' '}
-            {Math.round(state.founderEquity * (1 - terms.dilution) * 100)}%.
+        {terms?.isBridge ? (
+          <ThemedText type="small" themeColor="warning" style={styles.sheetBody}>
+            Runway is under {formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)}, so this is a bridge round: less cash, more
+            dilution.
+            {nextRoundLikelyBridgeToo
+              ? ` This raise still leaves you under ${formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)}, so your next round will likely also be a bridge.`
+              : ''}
           </ThemedText>
         ) : null}
         {terms ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
+            {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}% of the company. Founder equity goes
+            from {equityPercent}% to {Math.round(state.founderEquity * (1 - terms.dilution) * 100)}%.
+          </ThemedText>
+        ) : null}
+        {terms ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
             Your stake goes from {formatMoney(stake)} to ~{formatMoney(stakeAfterRaise)}.
           </ThemedText>
         ) : null}
-        <View style={styles.modalActions}>
+        <View style={styles.sheetActions}>
           <PrimaryButton
             variant="secondary"
             label="Cancel"
             onPress={() => setConfirming(false)}
-            style={styles.modalButton}
+            style={styles.sheetButton}
           />
-          <PrimaryButton label="Raise" onPress={raise} style={styles.modalButton} />
+          <PrimaryButton label="Raise" onPress={raise} style={styles.sheetButton} />
         </View>
       </BottomSheet>
 
       <BottomSheet visible={ipoConfirming} onClose={() => setIpoConfirming(false)} title="Go public?">
-        <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
-          Ends the run at today&apos;s valuation of {formatMoney(valuation)}. Your{' '}
-          {Math.round(state.founderEquity * 100)}% stake cashes out at {formatMoney(stake)}.
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
+          Ends the run at today&apos;s valuation of {formatMoney(valuation)}. Your {equityPercent}% stake cashes out
+          at {formatMoney(stake)}.
         </ThemedText>
-        <View style={styles.modalActions}>
+        <View style={styles.sheetActions}>
           <PrimaryButton
             variant="secondary"
             label="Cancel"
             onPress={() => setIpoConfirming(false)}
-            style={styles.modalButton}
+            style={styles.sheetButton}
           />
-          <PrimaryButton label="Go Public" onPress={goPublic} style={styles.modalButton} />
+          <PrimaryButton label="Go Public" onPress={goPublic} style={styles.sheetButton} />
         </View>
       </BottomSheet>
 
@@ -361,19 +389,35 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  // flexGrow, not flex: a block that stretches (Money's chart) fills a tall
+  // screen, and the content can still outgrow a short one.
   content: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
-  },
-  hero: {
-    gap: Spacing.half,
-    paddingTop: Spacing.three,
+    flexGrow: 1,
     paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.three,
+    gap: Spacing.two,
   },
-  // No chart yet: the card closes up instead of leaving the slot empty.
-  heroCompact: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailsPill: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
+  },
+  heroWithChart: {
+    flex: 1,
+    minHeight: 0,
+  },
+  heroText: {
+    gap: Spacing.half,
+    padding: Spacing.three,
+    paddingBottom: 0,
+  },
+  heroTextCompact: {
     paddingBottom: Spacing.three,
   },
   heroValueRow: {
@@ -383,47 +427,42 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   chart: {
-    marginTop: Spacing.three,
-    marginHorizontal: -Spacing.three,
-    height: 92,
+    flex: 1,
+    minHeight: 0,
+    marginTop: Spacing.two,
     justifyContent: 'flex-end',
   },
-  grid: {
+  statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.three,
+  },
+  actionText: {
+    flex: 1,
+    gap: Spacing.half,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   flowRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.three,
   },
-  equityHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  raiseCard: {
-    alignItems: 'flex-start',
-  },
-  ipoCard: {
-    alignItems: 'flex-start',
-    opacity: 0.6,
-  },
-  ipoCardReady: {
-    opacity: 1,
-  },
-  ipoBody: {
+  sheetBody: {
     lineHeight: 20,
   },
-  modalBody: {
-    lineHeight: 20,
-  },
-  modalActions: {
+  sheetActions: {
     flexDirection: 'row',
     gap: Spacing.three,
   },
-  modalButton: {
+  sheetButton: {
     flex: 1,
   },
 });

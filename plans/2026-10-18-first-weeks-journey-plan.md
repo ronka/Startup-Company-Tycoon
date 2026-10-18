@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-18
 **Replaces:** Phase 1 (less data, focus, tutorial voice) and Phase 3 (training wheels) of `plans/2026-10-10-game-designer-feedback-plan.md`. The rest of that plan stays as written.
-**Status:** Stage A built on 2026-10-18 except A5, uncommitted and checked on web only. A6 is partial: the labels switch over, but the glossary "New term" cards aren't built. Guided runs are for players with no finished run, which is the default answer to open question 2. Stage B is unblocked by the sim snapshot test (Phase 0.4, done 2026-10-18).
+**Status:** Stage A built on 2026-10-18, including A5 (Team, Money and Market fit one 393×852 screen), checked on web only. A6 is partial: the labels switch over, but the glossary "New term" cards aren't built. Guided runs are for players with no finished run, which is the default answer to open question 2. Stage B is unblocked by the sim snapshot test (Phase 0.4, done 2026-10-18).
 
 ---
 

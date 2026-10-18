@@ -22,7 +22,7 @@ export function LockedFeature({ feature, title }: { feature: Feature; title: str
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  card: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two + Spacing.one },
   lock: { fontSize: 20 },
   text: { flex: 1, gap: Spacing.half },
 });

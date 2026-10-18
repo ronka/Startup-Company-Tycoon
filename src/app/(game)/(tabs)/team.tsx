@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
 import { useTabView } from '@/analytics/use-tab-view';
@@ -8,10 +8,10 @@ import { BottomSheet } from '@/components/game/bottom-sheet';
 import { CandidatePicker, type CandidatePickerHandle } from '@/components/game/candidate-picker';
 import { Card } from '@/components/game/card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
+import { HeadlineStat } from '@/components/game/headline-stat';
 import { LeadershipRoster } from '@/components/game/leadership-roster';
 import { MoraleBar } from '@/components/game/morale-bar';
 import { RingGauge } from '@/components/game/ring-gauge';
-import { SectionHeader } from '@/components/game/section-header';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { Stepper } from '@/components/game/stepper';
 import { ThemedText } from '@/components/themed-text';
@@ -31,7 +31,7 @@ import { formatMoney } from '@/lib/format';
 import { moraleTone } from '@/lib/stat-colors';
 import { teamContributionsFor } from '@/lib/team-contributions';
 import { useGame } from '@/state/game-store';
-import { isGuided, isUnlocked } from '@/game/unlocks';
+import { isGuided, isUnlocked, unlockConditionFor } from '@/game/unlocks';
 import { recommendedAction } from '@/lib/recommended-action';
 import { Glow } from '@/components/game/glow';
 import { LockedFeature } from '@/components/game/locked-feature';
@@ -59,10 +59,15 @@ const MIN_RUNWAY_WEEKS_AFTER_CLEVEL_HIRE = 4;
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
 
+/** How long a closing sheet gets before the next one presents. */
+const SHEET_HANDOFF_MS = 350;
+
 export default function TeamScreen() {
   const { state, dispatch, rollBudget, devFreePlay } = useGame();
   const theme = useTheme();
   const [confirmRole, setConfirmRole] = useState<Role | null>(null);
+  const [moraleOpen, setMoraleOpen] = useState(false);
+  const [leadershipOpen, setLeadershipOpen] = useState(false);
   const ctoPickerRef = useRef<CandidatePickerHandle>(null);
   const cmoPickerRef = useRef<CandidatePickerHandle>(null);
   const cfoPickerRef = useRef<CandidatePickerHandle>(null);
@@ -90,14 +95,16 @@ export default function TeamScreen() {
   const { revenue } = deriveWeeklyStats(state);
   const contributions = teamContributionsFor(state);
   const supportShortfall = contributions.supportCovered < contributions.supportTotal;
+  // The role's name and count sit beside this line, so it only says what they do.
   const ROLE_CONTRIBUTION: Record<Role, string> = {
-    devs: `${state.pendingHeadcount.devs} devs → +${Math.round(contributions.devsQualityPerWeek)} quality/wk`,
-    sales: `${state.pendingHeadcount.sales} sales → ~${Math.round(contributions.salesLeadsPerWeek)} leads/wk at ${Math.round(contributions.salesConversionRate * 100)}% conversion`,
-    support: `${state.pendingHeadcount.support} support → covering ${Math.round(contributions.supportCovered)}/${Math.round(contributions.supportTotal)} customers`,
+    devs: `→ +${Math.round(contributions.devsQualityPerWeek)} quality/wk`,
+    sales: `→ ~${Math.round(contributions.salesLeadsPerWeek)} leads · ${Math.round(contributions.salesConversionRate * 100)}% win`,
+    support: `→ covers ${Math.round(contributions.supportCovered)}/${Math.round(contributions.supportTotal)} customers`,
   };
 
   // The guided run's recommended action, pointed at the stepper that makes it.
-  const supportRecommended = isGuided(state) && recommendedAction(state).id === 'hire-support';
+  const guided = isGuided(state);
+  const supportRecommended = guided && recommendedAction(state).id === 'hire-support';
 
   const increment = (role: Role) => dispatch({ type: 'SET_PENDING_HIRES', role, delta: 1 });
 
@@ -149,6 +156,17 @@ export default function TeamScreen() {
     );
   };
 
+  /**
+   * The roster lives in a sheet, and a seat opens its own picker sheet. Close
+   * the roster first and present the picker only once its dismiss has played:
+   * presenting into another sheet's dismiss frame is the stuck-modal race in
+   * `docs/bug-stuck-decision-modal.md` (same 350ms as the chrome's recap gate).
+   */
+  const openSeatFromRoster = (role: CLevelRole) => {
+    setLeadershipOpen(false);
+    setTimeout(() => openSearch(role), SHEET_HANDOFF_MS);
+  };
+
   const toggleMoraleLever = () => dispatch({ type: 'SET_MORALE_LEVER', active: !state.moraleLeverActive });
 
   const requestDecrement = (role: Role) => {
@@ -170,39 +188,63 @@ export default function TeamScreen() {
     setConfirmRole(null);
   };
 
+  const seats = (Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => ({
+    role,
+    title: C_LEVEL_TITLE[role],
+    hired: state.cLevels[role].hired,
+    hasOffer: state.cLevels[role].offer !== null,
+    rollState,
+  }));
+  const seatsFilled = seats.filter((seat) => seat.hired).length;
+  const payrollChange = pendingBurn - currentBurn;
+  const perksUnlocked = isUnlocked(state, 'morale');
+  const leadershipUnlocked = isUnlocked(state, 'leadership');
+  // Both open on the same quest: one lock card says it once, and keeps the
+  // steppers on screen under a tall quest strip.
+  const sharedLock =
+    !perksUnlocked && !leadershipUnlocked && unlockConditionFor('morale') === unlockConditionFor('leadership');
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* Fits one iPhone 15 screen without scrolling; the ScrollView is only
+          the fallback for shorter phones and large text. */}
+      <ScrollView contentContainerStyle={styles.content} bounces={false}>
         <ThemedText type="sheetTitle">Team</ThemedText>
 
-        <FirstRunHint id="team" text="Devs raise product quality — quality wins market share." />
+        {/* A guided run's quest strip does the explaining. */}
+        {guided ? null : <FirstRunHint id="team" text="Devs raise product quality — quality wins market share." />}
 
-        <Card style={styles.moraleCard}>
-          <RingGauge percent={state.morale} label="team" tone={moraleTone(state.morale)} size={80} />
-          <View style={styles.moraleText}>
-            <SectionHeader label="Morale" />
-            <MoraleBar morale={state.morale} />
-            <ThemedText type="small" themeColor="textSecondary">
-              Below 60 the team slows down; below 40 people start leaving.
-            </ThemedText>
-          </View>
-        </Card>
+        <View style={styles.statsRow}>
+          <HeadlineStat
+            label="Morale"
+            value={String(Math.round(state.morale))}
+            valueColor={moraleTone(state.morale)}
+            note="Slows below 60"
+            onPress={() => setMoraleOpen(true)}
+          />
+          <HeadlineStat
+            label="Next week's payroll"
+            value={formatMoney(pendingBurn)}
+            note={payrollChange !== 0 ? `${payrollChange > 0 ? '+' : ''}${formatMoney(payrollChange)} vs. this week` : 'Same as this week'}
+          />
+        </View>
 
-        {isUnlocked(state, 'morale') ? (
-          <Card style={styles.leverCard}>
-            <View style={styles.leverHeader}>
+        {perksUnlocked ? (
+          <Card style={styles.rowCard}>
+            <View style={styles.rowText}>
               <ThemedText type="smallBold">Team offsite &amp; perks</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
                 {formatMoney(MORALE_LEVER_WEEKLY_COST)}/wk · +{MORALE_LEVER_BOOST} morale/wk
               </ThemedText>
             </View>
-            <PrimaryButton
-              variant={state.moraleLeverActive ? 'secondary' : 'primary'}
-              label={state.moraleLeverActive ? 'Turn off' : 'Turn on'}
-              onPress={toggleMoraleLever}
+            <Switch
+              value={state.moraleLeverActive}
+              onValueChange={toggleMoraleLever}
+              trackColor={{ true: theme.accent }}
+              accessibilityLabel="Team offsite and perks"
             />
           </Card>
-        ) : (
+        ) : sharedLock ? null : (
           <LockedFeature feature="morale" title="Team offsite & perks" />
         )}
 
@@ -214,7 +256,7 @@ export default function TeamScreen() {
                 value={state.pendingHeadcount[role]}
                 hint={
                   state.pendingHeadcount[role] !== state.headcount[role]
-                    ? `current: ${state.headcount[role]}`
+                    ? `now ${state.headcount[role]}`
                     : undefined
                 }
                 contribution={ROLE_CONTRIBUTION[role]}
@@ -226,35 +268,46 @@ export default function TeamScreen() {
           ))}
         </View>
 
-        <Card style={styles.payrollPreview}>
-          <ThemedText type="sectionLabel">Next week&apos;s payroll</ThemedText>
-          <ThemedText type="cardValue">{formatMoney(pendingBurn)}</ThemedText>
-          {pendingBurn !== currentBurn ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              {pendingBurn > currentBurn ? '+' : ''}
-              {formatMoney(pendingBurn - currentBurn)} vs. this week
-            </ThemedText>
-          ) : null}
-        </Card>
+        {leadershipUnlocked ? (
+          <Pressable
+            onPress={() => setLeadershipOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Leadership: ${seatsFilled} of ${seats.length} seats filled. Open the roster.`}>
+            <Card style={styles.rowCard}>
+              <View style={styles.rowText}>
+                <ThemedText type="smallBold">Leadership</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {seats.map((seat) => `${seat.title} ${seat.hired ? '✓' : '–'}`).join('  ·  ')}
+                </ThemedText>
+              </View>
+              <ThemedText type="smallBold" themeColor={seatsFilled < seats.length ? 'accent' : 'textSecondary'}>
+                {seatsFilled}/{seats.length} ›
+              </ThemedText>
+            </Card>
+          </Pressable>
+        ) : sharedLock ? (
+          <LockedFeature feature="leadership" title="Team perks and C-level seats" />
+        ) : (
+          <LockedFeature feature="leadership" title="CTO, CMO and CFO seats" />
+        )}
 
-        <View style={styles.cLevelSection}>
-          <SectionHeader label="Leadership" />
-          {isUnlocked(state, 'leadership') ? (
-            <LeadershipRoster
-              seats={(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => ({
-                role,
-                title: C_LEVEL_TITLE[role],
-                hired: state.cLevels[role].hired,
-                hasOffer: state.cLevels[role].offer !== null,
-                rollState,
-              }))}
-              onOpenSeat={openSearch}
-            />
-          ) : (
-            <LockedFeature feature="leadership" title="CTO, CMO and CFO seats" />
-          )}
-        </View>
       </ScrollView>
+
+      <BottomSheet visible={moraleOpen} onClose={() => setMoraleOpen(false)} title="Morale">
+        <Card style={styles.moraleCard}>
+          <RingGauge percent={state.morale} label="team" tone={moraleTone(state.morale)} size={80} />
+          <View style={styles.moraleText}>
+            <MoraleBar morale={state.morale} />
+            <ThemedText type="small" themeColor="textSecondary">
+              Below 60 the team slows down; below 40 people start leaving.
+            </ThemedText>
+          </View>
+        </Card>
+      </BottomSheet>
+
+      <BottomSheet visible={leadershipOpen} onClose={() => setLeadershipOpen(false)} title="Leadership">
+        <LeadershipRoster seats={seats} onOpenSeat={openSeatFromRoster} />
+      </BottomSheet>
 
       <BottomSheet visible={confirmRole !== null} onClose={() => setConfirmRole(null)} title="Cut deep?">
         <ThemedText type="small" themeColor="textSecondary" style={styles.modalBody}>
@@ -296,11 +349,29 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  // flexGrow, not flex: a block that stretches (Money's chart) fills a tall
+  // screen, and the content can still outgrow a short one.
   content: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
+    flexGrow: 1,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.three,
+    gap: Spacing.two,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  rowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    paddingVertical: Spacing.two + Spacing.one,
+  },
+  rowText: {
+    gap: Spacing.half,
+    flexShrink: 1,
   },
   moraleCard: {
     flexDirection: 'row',
@@ -311,22 +382,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.two,
   },
-  leverCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  leverHeader: {
-    gap: Spacing.half,
-    flexShrink: 1,
-  },
   steppers: {
-    gap: Spacing.three,
-  },
-  payrollPreview: {
-    gap: Spacing.half,
-  },
-  cLevelSection: {
     gap: Spacing.two,
   },
   modalBody: {

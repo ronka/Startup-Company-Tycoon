@@ -27,16 +27,21 @@ export function Stepper({
   const theme = useTheme();
   return (
     <Card style={styles.row}>
+      {/* Two lines at most — name (with the current count while a change is
+          queued) and one line of effect — so three roles fit one screen. */}
       <View style={styles.info}>
-        <ThemedText type="smallBold">{label}</ThemedText>
+        <ThemedText type="smallBold" numberOfLines={1}>
+          {label}
+          {hint ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {'  '}
+              {hint}
+            </ThemedText>
+          ) : null}
+        </ThemedText>
         {contribution ? (
-          <ThemedText type="small" themeColor={contributionAlert ? 'danger' : 'textSecondary'}>
+          <ThemedText type="small" themeColor={contributionAlert ? 'danger' : 'textSecondary'} numberOfLines={1}>
             {contribution}
-          </ThemedText>
-        ) : null}
-        {hint ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {hint}
           </ThemedText>
         ) : null}
       </View>
@@ -75,6 +80,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   info: {
     flex: 1,
@@ -84,7 +90,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
+    gap: Spacing.two,
   },
   stepButton: {
     width: 36,

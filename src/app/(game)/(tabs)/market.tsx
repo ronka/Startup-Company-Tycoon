@@ -7,6 +7,7 @@ import { useTabView } from '@/analytics/use-tab-view';
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { Card } from '@/components/game/card';
 import { FirstRunHint } from '@/components/game/first-run-hint';
+import { HeadlineStat } from '@/components/game/headline-stat';
 import { FocusPicker, type FocusPickerHandle } from '@/components/game/focus-picker';
 import { LeaderboardRankCard } from '@/components/game/leaderboard-rank-card';
 import { PrimaryButton } from '@/components/game/primary-button';
@@ -28,7 +29,7 @@ import {
   trendAlignmentFor,
 } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
-import { isUnlocked, unlockConditionFor } from '@/game/unlocks';
+import { isGuided, isUnlocked, unlockConditionFor } from '@/game/unlocks';
 
 const HYPE_MIN = 0.5;
 const HYPE_MAX = 2.5;
@@ -38,6 +39,7 @@ export default function MarketScreen() {
   const { state, dispatch } = useGame();
   const theme = useTheme();
   const [pendingFocus, setPendingFocus] = useState<FocusId | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const focusPickerRef = useRef<FocusPickerHandle>(null);
   useTabView('market');
 
@@ -69,12 +71,34 @@ export default function MarketScreen() {
     setPendingFocus(null);
   };
 
+  const rivalRows = state.rivals.map((rival, index) => ({
+    rival,
+    color: rivalColors[index % rivalColors.length],
+    edge: rival.productQuality - state.productQuality,
+  }));
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <ThemedText type="sheetTitle">Market</ThemedText>
+      {/* Fits one iPhone 15 screen without scrolling; the ScrollView is only
+          the fallback for shorter phones and large text. */}
+      <ScrollView contentContainerStyle={styles.content} bounces={false}>
+        <View style={styles.titleRow}>
+          <ThemedText type="sheetTitle">Market</ThemedText>
+          <Pressable
+            onPress={() => setDetailsOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Show market details: customers, trend and era"
+            style={[styles.detailsPill, { backgroundColor: theme.accentSurface }]}>
+            <ThemedText type="smallBold" themeColor="accent">
+              Details ›
+            </ThemedText>
+          </Pressable>
+        </View>
 
-        <FirstRunHint id="market" text="Two rivals want your customers. Quality and hype decide who wins the market." />
+        {/* A guided run's quest strip does the explaining. */}
+        {isGuided(state) ? null : (
+          <FirstRunHint id="market" text="Two rivals want your customers. Quality and hype decide who wins the market." />
+        )}
 
         {/* The whole card is the tap target, so "Change" is a label, not a
             nested button — nesting one would be invalid and unreachable. */}
@@ -85,22 +109,76 @@ export default function MarketScreen() {
           disabled={focusLocked}
           accessibilityRole="button"
           accessibilityLabel={focusLocked ? `Company focus, locked. ${unlockConditionFor('focus')}.` : 'Change company focus'}>
-          <Card>
-            <View style={styles.trendHeader}>
-              <ThemedText type="sectionLabel">Strategy</ThemedText>
+          <Card style={styles.compactCard}>
+            <View style={styles.rowBetween}>
+              <ThemedText type="default" numberOfLines={1} style={styles.strategyLine}>
+                {FOCUS_LABEL[state.focus]} · {ERA_LABEL[state.era]} era
+              </ThemedText>
               <ThemedText type="small" themeColor={focusLocked ? 'textMuted' : 'accent'}>
                 {focusLocked ? '🔒' : 'Change'}
               </ThemedText>
             </View>
-            <ThemedText type="default">{FOCUS_LABEL[state.focus]} · {ERA_LABEL[state.era]} era</ThemedText>
             <ThemedText type="small" themeColor="textMuted">
               {focusLocked ? unlockConditionFor('focus') : `Bottleneck: ${BOTTLENECK_LABEL[report.bottleneck]}`}
             </ThemedText>
           </Card>
         </Pressable>
 
+        {/* The race: you against the two rivals. Customer counts and the rest of
+            the market are in Details. */}
+        <Card style={[styles.compactCard, styles.race]}>
+          <ThemedText type="sectionLabel">Market share</ThemedText>
+          <ShareRow label="You" percent={state.marketShare * 100} color={theme.accent} />
+          {rivalRows.map(({ rival, color, edge }) => (
+            <ShareRow
+              key={rival.name}
+              label={rival.name}
+              percent={rival.marketShare * 100}
+              color={color}
+              edge={edge}
+              focus={rival.focus}
+            />
+          ))}
+        </Card>
+
+        <View style={styles.statsRow}>
+          <HeadlineStat
+            label="Hype"
+            value={`${state.hype.toFixed(2)}x`}
+            note="Drifts back to 1x"
+          />
+          <HeadlineStat
+            label="Trend"
+            value={`${TREND_LABEL[state.trend.id]} · ${TREND_PHASE_LABEL[state.trend.phase]}`}
+            note={`${state.trend.weeksInPhase} wk in phase`}
+            onPress={() => setDetailsOpen(true)}
+          />
+        </View>
+
+        <LeaderboardRankCard />
+
+      </ScrollView>
+
+      <BottomSheet visible={detailsOpen} onClose={() => setDetailsOpen(false)} title="Market details">
+        <Card style={styles.shareSection}>
+          <SectionHeader label="Market share" />
+          <ShareRow label="You" percent={state.marketShare * 100} color={theme.accent} customers={state.customers} />
+          {rivalRows.map(({ rival, color, edge }) => (
+            <ShareRow
+              key={rival.name}
+              label={rival.name}
+              percent={rival.marketShare * 100}
+              color={color}
+              edge={edge}
+              focus={rival.focus}
+              customers={Math.round(rival.marketShare * state.marketCustomers)}
+            />
+          ))}
+          <ShareRow label="Rest of market" percent={restOfMarket * 100} color={theme.border} />
+        </Card>
+
         <Card>
-          <View style={styles.trendHeader}>
+          <View style={styles.rowBetween}>
             <ThemedText type="sectionLabel">Trend</ThemedText>
             <ThemedText type="smallBold">
               {TREND_LABEL[state.trend.id]} · {TREND_PHASE_LABEL[state.trend.phase]}
@@ -111,25 +189,8 @@ export default function MarketScreen() {
           </ThemedText>
         </Card>
 
-        <Card style={styles.shareSection}>
-          <SectionHeader label="Market share" />
-          <ShareRow label="You" percent={state.marketShare * 100} color={theme.accent} customers={state.customers} />
-          {state.rivals.map((rival, index) => (
-            <ShareRow
-              key={rival.name}
-              label={rival.name}
-              percent={rival.marketShare * 100}
-              color={rivalColors[index % rivalColors.length]}
-              edge={rival.productQuality - state.productQuality}
-              focus={rival.focus}
-              customers={Math.round(rival.marketShare * state.marketCustomers)}
-            />
-          ))}
-          <ShareRow label="Rest of market" percent={restOfMarket * 100} color={theme.border} />
-        </Card>
-
         <Card>
-          <View style={styles.hypeHeader}>
+          <View style={styles.rowBetween}>
             <ThemedText type="sectionLabel">Hype</ThemedText>
             <ThemedText type="smallBold">{state.hype.toFixed(2)}x</ThemedText>
           </View>
@@ -153,9 +214,7 @@ export default function MarketScreen() {
             ))}
           </View>
         </Card>
-
-        <LeaderboardRankCard />
-      </ScrollView>
+      </BottomSheet>
 
       <BottomSheet visible={pendingFocus !== null} onClose={() => setPendingFocus(null)} title="Switch focus?">
         <FirstRunHint
@@ -249,15 +308,43 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
+  // flexGrow, not flex: a block that stretches (Money's chart) fills a tall
+  // screen, and the content can still outgrow a short one.
   content: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
+    flexGrow: 1,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.three,
+    gap: Spacing.two,
   },
-  trendHeader: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailsPill: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
+  },
+  compactCard: {
+    gap: Spacing.one,
+    paddingVertical: Spacing.two + Spacing.one,
+  },
+  race: {
+    gap: Spacing.two,
+  },
+  rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  strategyLine: {
+    flexShrink: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   shareSection: {
     gap: Spacing.three,
@@ -283,11 +370,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     paddingHorizontal: Spacing.two,
     paddingVertical: 1,
-  },
-  hypeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   eraStrip: {
     flexDirection: 'row',

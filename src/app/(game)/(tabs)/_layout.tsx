@@ -4,7 +4,6 @@ import { View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GameChrome } from '@/components/game/game-chrome';
-import { FooterFade } from '@/components/game/footer-fade';
 import { GameTabBar } from '@/components/game/game-tab-bar';
 import { Hud } from '@/components/game/hud';
 import { QuestStrip, useUnlockMoment } from '@/components/game/quest-strip';
@@ -54,8 +53,6 @@ export default function GameTabsLayout() {
           <Tabs
             tabBar={(props) => (
               <View style={{ backgroundColor: theme.background, zIndex: 1 }}>
-                {/* HQ fits on one screen, so there's nothing to recede behind the footer. */}
-                {props.state.routes[props.state.index]?.name !== 'hq' ? <FooterFade /> : null}
                 <GameChrome buyWeeks={buyWeeks} />
                 <GameTabBar
                   {...props}
