@@ -11,6 +11,7 @@ import { HintSlot } from '@/components/game/first-run-hint';
 import { FooterFade } from '@/components/game/footer-fade';
 import { InsolvencyBanner } from '@/components/game/insolvency-banner';
 import { LogoPickerSheet } from '@/components/game/logo-picker-sheet';
+import { MissionsCard } from '@/components/game/missions-card';
 import { NewsFeed } from '@/components/game/news-feed';
 import { officeHeadcount } from '@/components/game/office-card';
 import { SectionHeader } from '@/components/game/section-header';
@@ -58,7 +59,8 @@ const OVERFLOW_SLOP = 4;
 /**
  * HQ: the company at a glance, sized to fit one screen. The living
  * office is the centrepiece; under it, three numbers (valuation, MRR, morale)
- * and as much of this week's news as fits. Everything else has a home on
+ * and as much of this week's news as fits. A guided run also pins its
+ * current mission above the office, one tap from the full list. Everything else has a home on
  * another tab: cash flow and the valuation chart on Money, strategy, hype,
  * and the leaderboard on Market, the team on Team. When banners, hints and the
  * quest strip push it past the screen, it scrolls, with a fade at the bottom
@@ -167,6 +169,8 @@ export default function HqScreen() {
             },
           ]}
         />
+
+        {guided ? <MissionsCard state={state} /> : null}
 
         {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 

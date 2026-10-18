@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame } from '@/game/engine';
 import type { EventCard } from '@/game/events/types';
 import type { GameState } from '@/game/types';
-import { guideKey, guideStep, guideTabFor } from '@/lib/guide';
+import { guideKey, guideStep, guideTabFor, NEXT_WEEK_COACH_WEEKS } from '@/lib/guide';
 
 const team = (devs: number, sales: number, support = 0) => ({ devs, sales, support });
 
@@ -30,10 +30,16 @@ describe('guideStep', () => {
   });
 
   it('after the first customer, points at the support + and then back at Next Week', () => {
-    const won = run({ pendingHeadcount: team(1, 1), headcount: team(1, 1), customers: 1, week: 2 });
+    const won = run({ pendingHeadcount: team(1, 1), headcount: team(1, 1), customers: 1, week: 1 });
     expect(guideStep(won, 'hq')).toMatchObject({ target: { kind: 'tab', tab: 'team' } });
     expect(guideStep(won, 'team')?.target).toEqual({ kind: 'hire', role: 'support' });
     expect(guideStep({ ...won, pendingHeadcount: team(1, 1, 1) }, 'team')?.target).toEqual({ kind: 'next-week' });
+  });
+
+  it('stops coaching Next Week after a couple of weeks, though the mission is still open', () => {
+    const later = run({ pendingHeadcount: team(1, 1, 1), headcount: team(1, 1, 1), customers: 3, week: NEXT_WEEK_COACH_WEEKS });
+    expect(guideStep(later, 'hq')).toBeNull();
+    expect(guideStep({ ...later, week: NEXT_WEEK_COACH_WEEKS - 1 }, 'hq')?.target).toEqual({ kind: 'next-week' });
   });
 
   it('dims the Next Week tooltip out of free weeks', () => {

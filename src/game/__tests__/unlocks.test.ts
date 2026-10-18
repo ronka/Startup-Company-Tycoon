@@ -9,6 +9,7 @@ import {
   newlyCompletedQuests,
   nextQuest,
   QUESTS,
+  questLadder,
   unlockConditionFor,
   unlockedFeatures,
 } from '../unlocks';
@@ -91,5 +92,12 @@ describe('unlock ladder', () => {
 
   it('describes when each locked feature opens', () => {
     for (const feature of FEATURES) expect(unlockConditionFor(feature)).toMatch(/^Unlocks at /);
+  });
+
+  it('lists the whole ladder: done, current, and what is left', () => {
+    const state = guided({ pendingHeadcount: { devs: 1, sales: 1, support: 0 }, customers: 2 });
+    expect(questLadder(state).map((q) => q.status)).toEqual(['done', 'done', 'done', 'current', 'upcoming', 'upcoming']);
+    expect(questLadder(state)[3]).toMatchObject({ id: 'five-customers', progress: 2, goal: 5 });
+    expect(questLadder(newGame('Test Co', 1))).toEqual([]);
   });
 });

@@ -195,6 +195,28 @@ export function nextQuest(state: GameState): QuestProgress | null {
   };
 }
 
+export interface LadderQuest extends QuestProgress {
+  status: 'done' | 'current' | 'upcoming';
+}
+
+/** Every quest on the ladder with where the run stands on it, for the full missions list. Empty outside a guided run. */
+export function questLadder(state: GameState): LadderQuest[] {
+  if (!isGuided(state)) return [];
+  const done = completedQuestIds(state);
+  const current = QUESTS.findIndex((q) => !done.has(q.id));
+  return QUESTS.map((q, index) => ({
+    id: q.id,
+    number: index + 1,
+    total: QUESTS.length,
+    title: q.title,
+    progress: done.has(q.id) ? q.goal : Math.min(q.progress(state), q.goal),
+    goal: q.goal,
+    unit: q.unit,
+    reward: q.reward,
+    status: done.has(q.id) ? 'done' : index === current ? 'current' : 'upcoming',
+  }));
+}
+
 /** "Unlocks at 5 customers, or week 5" — what a locked feature tells the player. */
 export function unlockConditionFor(feature: Feature): string {
   return QUESTS.find((q) => q.unlocks.includes(feature))?.condition ?? 'Unlocks soon';

@@ -39,6 +39,13 @@ const FEATURE_TAB: Record<Feature, Exclude<GuideTab, 'hq'>> = {
   leadership: 'team',
 };
 
+/**
+ * Next Week is coached for this many weeks only: tapping it a couple of times
+ * teaches it, and after that the tooltip just sits over the Hud. The missions
+ * themselves stay on HQ.
+ */
+export const NEXT_WEEK_COACH_WEEKS = 2;
+
 const TAB_LABEL: Record<Exclude<GuideTab, 'hq'>, string> = { team: 'Team', money: 'Money', market: 'Market' };
 
 /** "2/5 customers", "$600/$1.5K a mo" — short enough for the one-line Next Week tooltip. */
@@ -78,8 +85,8 @@ function guidedAction(state: GameState) {
 
 /**
  * The one control to point at, or null for none (outside a guided run, while a
- * decision card is up, or once the ladder is climbed and there's nothing to do
- * but play).
+ * decision card is up, once Next Week has been learned and playing weeks is
+ * all there is to do, or once the ladder is climbed).
  */
 export function guideStep(
   state: GameState | null,
@@ -107,7 +114,7 @@ export function guideStep(
     case 'raise':
       return onTab('money', route, label, '— cash is running low', { kind: 'raise' }, 'Tap Raise to fund the company');
     case 'next-week':
-      if (!quest) return null;
+      if (!quest || state.week >= NEXT_WEEK_COACH_WEEKS) return null;
       // One line: it sits under the Hud for most of the ladder, over the week counter.
       return atWall
         ? { target: { kind: 'next-week' }, label: null, text: `🎯 ${progressText(quest)} · more weeks soon`, dimmed: true }
