@@ -157,3 +157,28 @@ describe('storeReducer — NEW_GAME dispatch path', () => {
     expect(next?.companyLogo).toBe('🚀');
   });
 });
+
+describe('storeReducer — guided first weeks', () => {
+  it('stamps the guided schedule only when asked', () => {
+    const guided = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1, guided: true });
+    const veteran = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1 });
+    expect(guided?.unlockSchedule).toBe('guided-ui');
+    expect(guided?.questsDone).toEqual([]);
+    expect(veteran?.unlockSchedule).toBeUndefined();
+  });
+
+  it('records quests once, in order', () => {
+    const start = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1, guided: true });
+    const once = storeReducer(start, { type: 'RECORD_QUESTS', questIds: ['hire-dev'] });
+    const twice = storeReducer(once, { type: 'RECORD_QUESTS', questIds: ['hire-dev', 'hire-sales'] });
+    expect(twice?.questsDone).toEqual(['hire-dev', 'hire-sales']);
+    expect(storeReducer(twice, { type: 'RECORD_QUESTS', questIds: ['hire-dev'] })).toBe(twice);
+  });
+
+  it('keeps the schedule through a week and a revive', () => {
+    const start = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1, guided: true });
+    const ticked = storeReducer(start, { type: 'TICK' });
+    const revived = storeReducer({ ...ticked!, gameOver: 'bankruptcy' }, { type: 'REVIVE', reason: 'x' });
+    expect(revived?.unlockSchedule).toBe('guided-ui');
+  });
+});

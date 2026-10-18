@@ -242,6 +242,16 @@ export const EVENTS = {
   REVIEW_PROMPT_SUPPRESSED: 'review_prompt_suppressed',
   /** The Settings "Rate this game" row was tapped — opens the store listing, not the native sheet. */
   REVIEW_LINK_OPENED: 'review_link_opened',
+
+  // Guided first weeks (unlock ladder)
+  /** A guided run finished a quest — `{ quest, week }`. Once per quest per run. */
+  QUEST_COMPLETED: 'quest_completed',
+  /** A guided run unlocked a feature — `{ feature, week }`. Once per feature per run. */
+  FEATURE_UNLOCKED: 'feature_unlocked',
+  /** The recommended action was tapped — `{ action }`. */
+  RECOMMENDED_ACTION_TAPPED: 'recommended_action_tapped',
+  /** "Skip week" on the quest strip, past a hire the HUD was recommending — `{ action }`. */
+  RECOMMENDED_ACTION_SKIPPED: 'recommended_action_skipped',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

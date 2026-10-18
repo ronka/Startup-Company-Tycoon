@@ -16,6 +16,7 @@ import { SectionHeader } from '@/components/game/section-header';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import type { GameState } from '@/game/types';
+import { isGuided, isUnlocked } from '@/game/unlocks';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatCount, formatMoney } from '@/lib/format';
@@ -64,6 +65,7 @@ export default function HqScreen() {
 
   const { valuation, revenue, insolvent, runway } = deriveWeeklyStats(state);
   const runwayIsShort = Number.isFinite(runway) && runway < SHORT_RUNWAY_WEEKS;
+  const guided = isGuided(state);
   const previousValuation = previousState ? deriveWeeklyStats(previousState).valuation : null;
   const valuationChange =
     previousValuation && previousValuation > 0 ? ((valuation - previousValuation) / previousValuation) * 100 : null;
@@ -107,11 +109,13 @@ export default function HqScreen() {
           {
             id: 'hq',
             text: 'Top bar: your cash, how many weeks it lasts (runway), and Next Week — its dots are your free weeks. Cash at $0 for 3 weeks = game over.',
+            // A guided run's quest strip already says what to do first.
+            when: !guided,
           },
           {
             id: 'runway-short',
             text: 'Runway is getting short. The Money tab is where founders raise cash — before terms get ugly.',
-            when: runwayIsShort,
+            when: runwayIsShort && isUnlocked(state, 'money'),
           },
           {
             id: 'drawer-glossary',
@@ -143,7 +147,9 @@ export default function HqScreen() {
           ) : null}
         </Card>
         <Card style={styles.vital}>
-          <ThemedText type="small" themeColor="textSecondary">MRR</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {isUnlocked(state, 'money') ? 'MRR' : 'Income / mo'}
+          </ThemedText>
           <ThemedText type="smallBold" numberOfLines={1}>{formatMoney(revenue * 4)}</ThemedText>
         </Card>
         <Card style={styles.vital}>

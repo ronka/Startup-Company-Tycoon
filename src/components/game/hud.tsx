@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EVENTS, track } from '@/analytics/events';
 import { GameArt } from '@/components/game/game-art';
+import { Glow } from '@/components/game/glow';
 import { SurfaceSheen } from '@/components/game/surface-sheen';
 import { AnimatedNumber } from '@/components/game/animated-number';
 import { HintSlot, markHintSeen, useFirstRunHint } from '@/components/game/first-run-hint';
@@ -16,6 +17,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
+import { isUnlocked } from '@/game/unlocks';
+import { hudSlotAction } from '@/lib/recommended-action';
 import { useGame } from '@/state/game-store';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/week-budget';
 
@@ -30,7 +33,7 @@ import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/we
  * point at the chip without pushing the screen down.
  */
 export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => void }) {
-  const { state, weekBudget, purchasedWeeks, devFreePlay } = useGame();
+  const { state, dispatch, weekBudget, purchasedWeeks, devFreePlay } = useGame();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const theme = useTheme();
@@ -46,8 +49,11 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
   if (!state) return null;
 
   const budgetExhausted = isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay);
-  // Only pitch "advance a week" while advancing is actually possible.
-  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted;
+  // Guided week 0: the first two hires take Next Week's slot until they're made.
+  const slotAction = hudSlotAction(state);
+  // Only pitch "advance a week" while advancing is actually possible — and
+  // while the chip it points at is actually there.
+  const showSpotlight = spotlight.visible && !state.pendingEvent && !budgetExhausted && !slotAction;
   // Down to the final free dot, with nothing purchased to fall back on — the
   // moment the daily budget is worth explaining, before it bites.
   const onLastFreeWeek =
@@ -107,7 +113,8 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
       <View style={chipStyle}>
         <SurfaceSheen />
         <ThemedText type="small" themeColor={insolvent ? 'danger' : 'textSecondary'}>
-          Runway
+          {/* Plain language until the guided run learns the word with Money. */}
+          {isUnlocked(state, 'money') ? 'Runway' : 'Cash lasts'}
         </ThemedText>
         <AnimatedNumber
           value={runway}
@@ -117,14 +124,25 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
           themeColor={insolvent ? 'danger' : undefined}
         />
       </View>
-      <NextWeekChip
-        onBuyWeeks={onBuyWeeks}
-        onLayout={(event) => {
-          // The chip is the strip's last child and the callouts share the strip's
-          // horizontal inset, so the chip's centre is half its width in from their right edge.
-          setCaretFromRight(event.nativeEvent.layout.width / 2);
-        }}
-      />
+      {slotAction ? (
+        <RecommendedActionChip
+          label={slotAction.shortLabel}
+          accessibilityLabel={slotAction.label}
+          onPress={() => {
+            track(EVENTS.RECOMMENDED_ACTION_TAPPED, { action: slotAction.id });
+            dispatch({ type: 'SET_PENDING_HIRES', role: slotAction.id === 'hire-dev' ? 'devs' : 'sales', delta: 1 });
+          }}
+        />
+      ) : (
+        <NextWeekChip
+          onBuyWeeks={onBuyWeeks}
+          onLayout={(event) => {
+            // The chip is the strip's last child and the callouts share the strip's
+            // horizontal inset, so the chip's centre is half its width in from their right edge.
+            setCaretFromRight(event.nativeEvent.layout.width / 2);
+          }}
+        />
+      )}
 
       {caretFromRight !== null && hudHeight !== null ? (
         <View pointerEvents="box-none" style={[styles.callouts, { top: hudHeight }]}>
@@ -156,7 +174,45 @@ export function Hud({ onBuyWeeks }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => 
   );
 }
 
+/**
+ * The guided run's recommended action, sitting where Next Week will be. One
+ * tap makes the hire (it lands on the Team tab's stepper like any other), the
+ * quest completes, and the slot goes back to the Next Week chip.
+ */
+function RecommendedActionChip({
+  label,
+  accessibilityLabel,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Glow on style={styles.actionSlot}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={({ pressed }) => [
+          styles.chip,
+          { backgroundColor: theme.accent, borderColor: theme.accent },
+          pressed && { opacity: 0.8 },
+        ]}>
+        <SurfaceSheen />
+        <ThemedText type="small" style={{ color: theme.accentInk, opacity: 0.85 }}>Do this</ThemedText>
+        <ThemedText type="smallBold" style={[styles.actionLabel, { color: theme.accentInk }]} numberOfLines={2}>
+          {label}
+        </ThemedText>
+      </Pressable>
+    </Glow>
+  );
+}
+
 const styles = StyleSheet.create({
+  actionSlot: { flex: 1 },
+  actionLabel: { textAlign: 'center' },
   hud: {
     // Above the tab screens, so the callouts hanging off the bottom edge draw over them.
     zIndex: 10,

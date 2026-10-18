@@ -29,6 +29,7 @@ import { EVENTS, gameProps, track } from '@/analytics/events';
 import { posthog, registerAnalyticsRelease } from '@/analytics/posthog';
 import { totalHeadcount } from '@/game/balance';
 import { newGame, normalizeSave, reduce } from '@/game/engine';
+import { featuresUnlockedBy, newlyCompletedQuests, type QuestId } from '@/game/unlocks';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
@@ -179,7 +180,9 @@ export interface AccountState {
 type StoreAction =
   | GameAction
   | { type: 'HYDRATE'; state: GameState | null }
-  | { type: 'SET_STATE'; state: GameState };
+  | { type: 'SET_STATE'; state: GameState }
+  /** Store-only: marks guided-run quests done so their unlocks stick. The engine never sees it. */
+  | { type: 'RECORD_QUESTS'; questIds: QuestId[] };
 
 /** Exported for testing the store-layer dispatch path without rendering a `GameProvider`. */
 export function storeReducer(state: GameState | null, action: StoreAction): GameState | null {
@@ -191,8 +194,18 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
       return action.state && !isRunId(action.state.runId) ? { ...action.state, runId: newRunId() } : action.state;
     case 'SET_STATE':
       return action.state;
-    case 'NEW_GAME':
-      return { ...newGame(action.companyName, action.seed, action.focus, action.logo), runId: newRunId() };
+    case 'NEW_GAME': {
+      const run = { ...newGame(action.companyName, action.seed, action.focus, action.logo), runId: newRunId() };
+      // The schedule is stamped here, not in `newGame()`, so the engine and its
+      // sim snapshot never see it.
+      return action.guided ? { ...run, unlockSchedule: 'guided-ui', questsDone: [] } : run;
+    }
+    case 'RECORD_QUESTS': {
+      if (!state) return state;
+      const done = state.questsDone ?? [];
+      const added = action.questIds.filter((id) => !done.includes(id));
+      return added.length ? { ...state, questsDone: [...done, ...added] } : state;
+    }
     default:
       return state === null ? state : reduce(state, action);
   }
@@ -1020,6 +1033,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }
   }, [state, loading, runHistory]);
 
+  // Guided first weeks: record every quest the run has just met, so its unlocks
+  // stick, and capture the quest/unlock analytics exactly once per run.
+  useEffect(() => {
+    if (loading || !state || state.gameOver) return;
+    const questIds = newlyCompletedQuests(state);
+    if (!questIds.length) return;
+    for (const quest of questIds) track(EVENTS.QUEST_COMPLETED, { quest, week: state.week });
+    for (const feature of featuresUnlockedBy(questIds)) track(EVENTS.FEATURE_UNLOCKED, { feature, week: state.week });
+    dispatch({ type: 'RECORD_QUESTS', questIds });
+  }, [state, loading]);
+
   const dispatchWithSnapshot = (action: GameAction) => {
     if (action.type === 'TICK') {
       // Mirrors tick()'s own frozen conditions so the delta baseline only
@@ -1158,16 +1182,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     startNewGame: (companyName: string, focus?: FocusId, seed?: number, logo?: string) => {
       setPreviousState(null);
       setLastRunWasBest(false);
+      // Only players who have never finished a run get the guided first weeks;
+      // a veteran's next run starts with everything open, as it always has.
+      const guided = (runHistory?.runs.length ?? 0) === 0;
       track(EVENTS.GAME_STARTED, {
         company_name: companyName,
         is_returning_ceo: profile?.ceoName != null,
         seed: seed ?? null,
         focus: focus ?? 'core',
         logo: logo ?? null,
+        guided,
         $set: { company_name: companyName },
         $set_once: { first_game_at: new Date().toISOString() },
       });
-      dispatch({ type: 'NEW_GAME', companyName, seed, focus, logo });
+      dispatch({ type: 'NEW_GAME', companyName, seed, focus, logo, guided });
     },
     clearSave: () => {
       setPreviousState(null);

@@ -31,6 +31,10 @@ import { formatMoney } from '@/lib/format';
 import { moraleTone } from '@/lib/stat-colors';
 import { teamContributionsFor } from '@/lib/team-contributions';
 import { useGame } from '@/state/game-store';
+import { isGuided, isUnlocked } from '@/game/unlocks';
+import { recommendedAction } from '@/lib/recommended-action';
+import { Glow } from '@/components/game/glow';
+import { LockedFeature } from '@/components/game/locked-feature';
 import { isRollBudgetExhausted } from '@/state/roll-budget';
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -91,6 +95,9 @@ export default function TeamScreen() {
     sales: `${state.pendingHeadcount.sales} sales → ~${Math.round(contributions.salesLeadsPerWeek)} leads/wk at ${Math.round(contributions.salesConversionRate * 100)}% conversion`,
     support: `${state.pendingHeadcount.support} support → covering ${Math.round(contributions.supportCovered)}/${Math.round(contributions.supportTotal)} customers`,
   };
+
+  // The guided run's recommended action, pointed at the stepper that makes it.
+  const supportRecommended = isGuided(state) && recommendedAction(state).id === 'hire-support';
 
   const increment = (role: Role) => dispatch({ type: 'SET_PENDING_HIRES', role, delta: 1 });
 
@@ -181,36 +188,41 @@ export default function TeamScreen() {
           </View>
         </Card>
 
-        <Card style={styles.leverCard}>
-          <View style={styles.leverHeader}>
-            <ThemedText type="smallBold">Team offsite &amp; perks</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {formatMoney(MORALE_LEVER_WEEKLY_COST)}/wk · +{MORALE_LEVER_BOOST} morale/wk
-            </ThemedText>
-          </View>
-          <PrimaryButton
-            variant={state.moraleLeverActive ? 'secondary' : 'primary'}
-            label={state.moraleLeverActive ? 'Turn off' : 'Turn on'}
-            onPress={toggleMoraleLever}
-          />
-        </Card>
+        {isUnlocked(state, 'morale') ? (
+          <Card style={styles.leverCard}>
+            <View style={styles.leverHeader}>
+              <ThemedText type="smallBold">Team offsite &amp; perks</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {formatMoney(MORALE_LEVER_WEEKLY_COST)}/wk · +{MORALE_LEVER_BOOST} morale/wk
+              </ThemedText>
+            </View>
+            <PrimaryButton
+              variant={state.moraleLeverActive ? 'secondary' : 'primary'}
+              label={state.moraleLeverActive ? 'Turn off' : 'Turn on'}
+              onPress={toggleMoraleLever}
+            />
+          </Card>
+        ) : (
+          <LockedFeature feature="morale" title="Team offsite & perks" />
+        )}
 
         <View style={styles.steppers}>
           {ROLES.map((role) => (
-            <Stepper
-              key={role}
-              label={ROLE_LABEL[role]}
-              value={state.pendingHeadcount[role]}
-              hint={
-                state.pendingHeadcount[role] !== state.headcount[role]
-                  ? `current: ${state.headcount[role]}`
-                  : undefined
-              }
-              contribution={ROLE_CONTRIBUTION[role]}
-              contributionAlert={role === 'support' && supportShortfall}
-              onIncrement={() => increment(role)}
-              onDecrement={() => requestDecrement(role)}
-            />
+            <Glow key={role} on={role === 'support' && supportRecommended}>
+              <Stepper
+                label={ROLE_LABEL[role]}
+                value={state.pendingHeadcount[role]}
+                hint={
+                  state.pendingHeadcount[role] !== state.headcount[role]
+                    ? `current: ${state.headcount[role]}`
+                    : undefined
+                }
+                contribution={ROLE_CONTRIBUTION[role]}
+                contributionAlert={role === 'support' && supportShortfall}
+                onIncrement={() => increment(role)}
+                onDecrement={() => requestDecrement(role)}
+              />
+            </Glow>
           ))}
         </View>
 
@@ -227,16 +239,20 @@ export default function TeamScreen() {
 
         <View style={styles.cLevelSection}>
           <SectionHeader label="Leadership" />
-          <LeadershipRoster
-            seats={(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => ({
-              role,
-              title: C_LEVEL_TITLE[role],
-              hired: state.cLevels[role].hired,
-              hasOffer: state.cLevels[role].offer !== null,
-              rollState,
-            }))}
-            onOpenSeat={openSearch}
-          />
+          {isUnlocked(state, 'leadership') ? (
+            <LeadershipRoster
+              seats={(Object.keys(C_LEVEL_TITLE) as CLevelRole[]).map((role) => ({
+                role,
+                title: C_LEVEL_TITLE[role],
+                hired: state.cLevels[role].hired,
+                hasOffer: state.cLevels[role].offer !== null,
+                rollState,
+              }))}
+              onOpenSeat={openSearch}
+            />
+          ) : (
+            <LockedFeature feature="leadership" title="CTO, CMO and CFO seats" />
+          )}
         </View>
       </ScrollView>
 

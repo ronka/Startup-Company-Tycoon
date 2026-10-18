@@ -9,6 +9,7 @@
 
 import { canRaiseRound } from '@/game/balance';
 import { ROUND_ORDER, type GameState } from '@/game/types';
+import { isUnlocked } from '@/game/unlocks';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 
 /** Runway at or below this many weeks is the thing worth naming for tomorrow. */
@@ -77,9 +78,13 @@ export interface ActionNow {
   href: '/money';
 }
 
-/** Whether the next funding round can be taken right now — the same gate the Money tab uses. */
+/**
+ * Whether the next funding round can be taken right now — the same gate the
+ * Money tab uses. A guided run's locked Money tab counts as "not available",
+ * so nothing (tab dot, 💡 tip, push) advertises a door that's still shut.
+ */
 export function raiseAvailable(state: GameState | null): boolean {
-  if (!state || state.gameOver) return false;
+  if (!state || state.gameOver || !isUnlocked(state, 'money')) return false;
   return state.roundsRaised < ROUND_ORDER.length && canRaiseRound(state.week, state.lastRoundRaisedWeek);
 }
 

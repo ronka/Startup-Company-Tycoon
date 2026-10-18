@@ -39,6 +39,10 @@ import { formatCount, formatMoney, formatWeeks } from '@/lib/format';
 import { STAT_EXPLAINERS } from '@/lib/stat-explainers';
 import { STAGE_LABEL } from '@/lib/strategy-copy';
 import { useGame } from '@/state/game-store';
+import { isGuided, isUnlocked } from '@/game/unlocks';
+import { recommendedAction } from '@/lib/recommended-action';
+import { Glow } from '@/components/game/glow';
+import { LockedFeature } from '@/components/game/locked-feature';
 
 const ROUND_LABEL: Record<RoundType, string> = {
   seed: 'Seed',
@@ -57,6 +61,19 @@ export default function MoneyScreen() {
 
   if (!state) return <Redirect href="/" />;
   if (state.gameOver) return <Redirect href="/game-over" />;
+
+  // Guided first weeks: Money opens with the "Reach 10 customers" quest. Cash
+  // and runway stay on the HUD meanwhile, so nothing the player needs is hidden.
+  if (!isUnlocked(state, 'money')) {
+    return (
+      <View style={[styles.screen, { backgroundColor: theme.background }]}>
+        <View style={styles.content}>
+          <ThemedText type="sheetTitle">Money</ThemedText>
+          <LockedFeature feature="money" title="Raise your first round" />
+        </View>
+      </View>
+    );
+  }
 
   const { burn, revenue, valuation, runway, stake } = deriveWeeklyStats(state);
   const previous = previousState ? deriveWeeklyStats(previousState) : null;
@@ -91,6 +108,9 @@ export default function MoneyScreen() {
   const hasChart = history.length > 1;
 
   const ipoEligible = isIpoEligible(state.stage, state.ipoWindowOpen, state.weeksRevenueAboveIpoBar);
+
+  // The guided run's recommended action, or the week Money just opened.
+  const raiseRecommended = isGuided(state) && recommendedAction(state).id === 'raise';
 
   const raise = () => {
     dispatch({ type: 'RAISE_ROUND' });
@@ -231,10 +251,12 @@ export default function MoneyScreen() {
             <ThemedText type="small" themeColor="textSecondary">
               {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}% of the company
             </ThemedText>
-            <PrimaryButton
-              label={`Raise ${ROUND_LABEL[round]}`}
-              onPress={() => setConfirming(true)}
-            />
+            <Glow on={raiseRecommended}>
+              <PrimaryButton
+                label={`Raise ${ROUND_LABEL[round]}`}
+                onPress={() => setConfirming(true)}
+              />
+            </Glow>
           </Card>
         ) : round && raiseLocked ? (
           <Card style={styles.raiseCard}>

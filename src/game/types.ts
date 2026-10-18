@@ -289,6 +289,19 @@ export interface GameState {
   /** Consecutive weeks revenue has cleared `IPO_REVENUE_BAR`; resets to 0 the moment it dips below. */
   weeksRevenueAboveIpoBar: number;
 
+  /**
+   * Which unlock schedule this run started under (see `unlocks.ts`). Set by
+   * the store at `NEW_GAME` only, never by `newGame()`, so the engine and the
+   * sim never see it. Unset means everything is unlocked — every save from
+   * before the guided first weeks, and every veteran run.
+   */
+  unlockSchedule?: 'guided-ui';
+  /**
+   * Quests this guided run has completed, in completion order. Recorded by the
+   * store so unlocks are sticky: Money stays open if customers dip back below 10.
+   */
+  questsDone?: string[];
+
   /** null while the run is live; set once the game ends. */
   gameOver: GameOverReason | null;
   /** Founder take-home at exit — founderEquity × exit valuation; 0 for bankruptcy. Null while the run is live. */
@@ -297,8 +310,11 @@ export interface GameState {
 
 export type GameAction =
   | { type: 'TICK' }
-  /** `focus` is the founder type chosen during onboarding; omitted, the run starts on `core`. `logo` is the emoji picked alongside the name. */
-  | { type: 'NEW_GAME'; seed?: number; companyName: string; focus?: FocusId; logo?: string }
+  /**
+   * `focus` is the founder type chosen during onboarding; omitted, the run starts on `core`. `logo` is the emoji picked alongside the name.
+   * `guided` starts the run on the guided first-weeks schedule — read by the store only; the engine ignores it.
+   */
+  | { type: 'NEW_GAME'; seed?: number; companyName: string; focus?: FocusId; logo?: string; guided?: boolean }
   /** Cosmetic only. `null` clears the logo, putting the header tile back on initials. */
   | { type: 'SET_COMPANY_LOGO'; logo: string | null }
   | { type: 'SET_PENDING_HIRES'; role: Role; delta: number }
