@@ -78,7 +78,9 @@ export const EVENTS = {
    * free_weeks_available, purchased_weeks_available, returned_via }`.
    * `returned_via` is 'regen' when free weeks carried them past it, or
    * 'purchase' when only bought weeks did. The core metric for the regen
-   * interval: how long players take to come back.
+   * interval: how long players take to come back. `cliffhanger_card_id` is
+   * the card the wall was teasing, or null, to compare returns with and
+   * without one.
    */
   RETURNED_AFTER_WALL: 'returned_after_wall',
   STAGE_ADVANCED: 'stage_advanced',
@@ -151,6 +153,14 @@ export const EVENTS = {
   NOTIFICATION_OPENED: 'notification_opened',
   /** The end-of-day panel was shown — `{ agenda_kind, action_kind }`: the tomorrow hook, and the 💡 tip if any. */
   DAY_COMPLETE_SHOWN: 'day_complete_shown',
+  /**
+   * The week wall pinned next week's decision card — `{ card_id, week }`.
+   * Not sent when the cooldown or an empty deck skipped the pin, so walls
+   * without one are `week_advance_blocked` minus these.
+   */
+  CLIFFHANGER_PINNED: 'cliffhanger_pinned',
+  /** The pinned card landed as a decision — `{ card_id, week }`. Join to `event_decision_made` by `card_id`. */
+  CLIFFHANGER_LANDED: 'cliffhanger_landed',
   /** "Find out now" on the wall's cliffhanger banner — opens the week-pack paywall with trigger `cliffhanger`. */
   CLIFFHANGER_FIND_OUT_TAPPED: 'cliffhanger_find_out_tapped',
   /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me' | 'action_tip'. */
@@ -256,10 +266,30 @@ export const EVENTS = {
   QUEST_COMPLETED: 'quest_completed',
   /** A guided run unlocked a feature — `{ feature, week }`. Once per feature per run. */
   FEATURE_UNLOCKED: 'feature_unlocked',
-  /** The recommended action was tapped — `{ action }`. */
+  /** The recommended action was tapped — `{ action }`. Not sent since the guide tooltips replaced the button (5aef37b); kept for old data. */
   RECOMMENDED_ACTION_TAPPED: 'recommended_action_tapped',
-  /** "Skip week" on the quest strip, past a hire the HUD was recommending — `{ action }`. */
+  /** "Skip week" past a recommended hire — `{ action }`. Not sent since 5aef37b, like the above. */
   RECOMMENDED_ACTION_SKIPPED: 'recommended_action_skipped',
+  /**
+   * The guide's tooltip came on screen — `{ target, quest, mission_number,
+   * dimmed, week }`. `target` is the control it points at ("tab:team",
+   * "hire:devs", "next-week", "raise"). Once per target and mission per run
+   * and launch, so a tooltip that comes back after a decision card isn't
+   * counted twice.
+   */
+  GUIDE_STEP_SHOWN: 'guide_step_shown',
+  /** The guide's tooltip was tapped away — `{ target, quest, week }`. It stays hidden until the guide moves on. */
+  GUIDE_STEP_DISMISSED: 'guide_step_dismissed',
+  /**
+   * The guide moved on from a tooltip the player didn't tap away — `{
+   * from_target, from_quest, to_target, to_quest, week }`, `to_*` null when
+   * the guide went quiet. Usually means the player did what it said;
+   * `guide_step_shown` minus this and `guide_step_dismissed` is ignored.
+   * Not sent when a decision card or game over hides the tooltip.
+   */
+  GUIDE_STEP_ADVANCED: 'guide_step_advanced',
+  /** HQ's missions card was tapped, opening the full ladder — `{ quest, mission_number, done_count, week }`. */
+  MISSIONS_VIEWED: 'missions_viewed',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

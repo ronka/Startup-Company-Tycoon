@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { EVENTS, track } from '@/analytics/events';
 import { BottomSheet } from '@/components/game/bottom-sheet';
 import { Card } from '@/components/game/card';
 import { ProgressBar } from '@/components/game/progress-bar';
@@ -33,7 +34,10 @@ export function MissionsCard({ state }: { state: GameState }) {
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          track(EVENTS.MISSIONS_VIEWED, { quest: current.id, mission_number: current.number, done_count: doneCount, week: state.week });
+          setOpen(true);
+        }}
         accessibilityRole="button"
         accessibilityLabel={`Mission ${current.number} of ${current.total}: ${current.title}. Show all missions.`}>
         <Card style={styles.card}>

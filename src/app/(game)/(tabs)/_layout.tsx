@@ -1,16 +1,18 @@
 import { Tabs, usePathname } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { EVENTS, track } from '@/analytics/events';
 import { GameChrome } from '@/components/game/game-chrome';
 import { GameTabBar, GameTabBarStack } from '@/components/game/game-tab-bar';
 import { GuideContext } from '@/components/game/guide-pointer';
 import { Hud } from '@/components/game/hud';
 import { QuestStrip, useUnlockMoment } from '@/components/game/quest-strip';
-import { isUnlocked, type Feature } from '@/game/unlocks';
+import type { GameState } from '@/game/types';
+import { isUnlocked, nextQuest, type Feature } from '@/game/unlocks';
 import { useTheme } from '@/hooks/use-theme';
-import { guideKey, guideStep, guideTabFor } from '@/lib/guide';
+import { guideKey, guideStep, guideTabFor, guideTargetId, type GuideStep } from '@/lib/guide';
 import { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
 import { raiseAvailable } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
@@ -52,7 +54,14 @@ export default function GameTabsLayout() {
   const [hiddenKey, setHiddenKey] = useState<string | null>(null);
   const nextKey = state && next ? guideKey(state, next) : null;
   const step = next && nextKey !== hiddenKey ? next : null;
-  const guide = { step, dismiss: () => setHiddenKey(nextKey) };
+  const guide = {
+    step,
+    dismiss: () => {
+      if (state && next) track(EVENTS.GUIDE_STEP_DISMISSED, { target: guideTargetId(next.target), quest: nextQuest(state)?.id ?? null, week: state.week });
+      setHiddenKey(nextKey);
+    },
+  };
+  useGuideTracking(state, step, step ? nextKey : null, hiddenKey);
   const glowRoute = step?.target.kind === 'tab' ? step.target.tab : null;
 
   return (
@@ -125,4 +134,49 @@ export default function GameTabsLayout() {
       </View>
     </GuideContext.Provider>
   );
+}
+
+/**
+ * `guide_step_shown` when a tooltip comes on screen, and `guide_step_advanced`
+ * when the guide moves on from one the player didn't tap away. Keys are
+ * `guideKey`s: "<target>|<quest>".
+ */
+function useGuideTracking(state: GameState | null, step: GuideStep | null, shownKey: string | null, hiddenKey: string | null) {
+  const lastKeyRef = useRef<string | null>(null);
+  const seenRef = useRef<{ seed: number | null; keys: Set<string> }>({ seed: null, keys: new Set() });
+
+  useEffect(() => {
+    const prevKey = lastKeyRef.current;
+    if (shownKey === prevKey) return;
+    lastKeyRef.current = shownKey;
+    if (!state) return;
+
+    // A decision card or game over hides the tooltip; that isn't the guide moving on.
+    if (prevKey && prevKey !== hiddenKey && !state.pendingEvent && !state.gameOver) {
+      const [fromTarget, fromQuest] = prevKey.split('|');
+      const [toTarget, toQuest] = shownKey ? shownKey.split('|') : [null, null];
+      track(EVENTS.GUIDE_STEP_ADVANCED, {
+        from_target: fromTarget,
+        from_quest: fromQuest,
+        to_target: toTarget,
+        to_quest: toQuest,
+        week: state.week,
+      });
+    }
+
+    if (shownKey && step) {
+      const seen = seenRef.current;
+      if (seen.seed !== state.createdWithSeed) seenRef.current = { seed: state.createdWithSeed, keys: new Set() };
+      if (seenRef.current.keys.has(shownKey)) return;
+      seenRef.current.keys.add(shownKey);
+      const quest = nextQuest(state);
+      track(EVENTS.GUIDE_STEP_SHOWN, {
+        target: guideTargetId(step.target),
+        quest: quest?.id ?? null,
+        mission_number: quest?.number ?? null,
+        dimmed: step.dimmed ?? false,
+        week: state.week,
+      });
+    }
+  }, [state, step, shownKey, hiddenKey]);
 }

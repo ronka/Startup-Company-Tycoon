@@ -972,6 +972,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (state.week > prev.week) {
       track(EVENTS.WEEK_ADVANCED, gameProps(state));
     }
+    if (state.cliffhangerCardId && state.cliffhangerCardId !== prev.cliffhangerCardId) {
+      track(EVENTS.CLIFFHANGER_PINNED, { card_id: state.cliffhangerCardId, week: state.week });
+    }
+    if (prev.cliffhangerCardId && state.pendingEvent?.id === prev.cliffhangerCardId) {
+      track(EVENTS.CLIFFHANGER_LANDED, { card_id: prev.cliffhangerCardId, week: state.week });
+    }
     if (state.stage !== prev.stage) {
       track(EVENTS.STAGE_ADVANCED, { from: prev.stage, to: state.stage, week: state.week });
     }
@@ -1092,6 +1098,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
             free_weeks_available: freshBudget.weeksRemaining,
             purchased_weeks_available: purchasedWeeks.weeksRemaining,
             returned_via: freshBudget.weeksRemaining > 0 ? 'regen' : 'purchase',
+            cliffhanger_card_id: state.cliffhangerCardId ?? null,
           });
         }
         const spent = spendWeekFromPools(freshBudget, purchasedWeeks, now);

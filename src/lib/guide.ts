@@ -136,7 +136,10 @@ export function guideTabFor(pathname: string): GuideTab {
  * over doesn't bring it back, a new mission or a different control does.
  */
 export function guideKey(state: GameState, step: GuideStep): string {
-  const { target } = step;
-  const where = target.kind === 'tab' ? `tab:${target.tab}` : target.kind === 'hire' ? `hire:${target.role}` : target.kind;
-  return `${where}|${nextQuest(state)?.id ?? 'done'}`;
+  return `${guideTargetId(step.target)}|${nextQuest(state)?.id ?? 'done'}`;
+}
+
+/** The control a step points at, as one id: "tab:team", "hire:devs", "next-week", "raise". Also the analytics name. */
+export function guideTargetId(target: GuideTarget): string {
+  return target.kind === 'tab' ? `tab:${target.tab}` : target.kind === 'hire' ? `hire:${target.role}` : target.kind;
 }
