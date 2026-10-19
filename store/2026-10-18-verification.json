@@ -1,0 +1,102 @@
+{
+  "version": "1.1.0",
+  "buildNumber": "11",
+  "locales": {
+    "pt-BR": {
+      "metadataVerified": true,
+      "screenshots": {
+        "APP_IPHONE_65": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        },
+        "APP_IPHONE_67": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        }
+      }
+    },
+    "es-ES": {
+      "metadataVerified": true,
+      "screenshots": {
+        "APP_IPHONE_65": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        },
+        "APP_IPHONE_67": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        }
+      }
+    },
+    "fr-FR": {
+      "metadataVerified": true,
+      "screenshots": {
+        "APP_IPHONE_67": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        },
+        "APP_IPHONE_65": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        }
+      }
+    },
+    "de-DE": {
+      "metadataVerified": true,
+      "screenshots": {
+        "APP_IPHONE_65": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        },
+        "APP_IPHONE_67": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        }
+      }
+    },
+    "en-US": {
+      "metadataVerified": true,
+      "screenshots": {
+        "APP_IPHONE_65": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        },
+        "APP_IPHONE_67": {
+          "count": 6,
+          "completeCount": 6,
+          "checksumMatches": 6,
+          "orderCorrect": true,
+          "verified": true
+        }
+      }
+    }
+  },
+  "complete": true
+}

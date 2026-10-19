@@ -18,11 +18,14 @@ directory's landing page and so executors can find it by convention. Don't "fix"
 |------|------|-------|----------|--------|------------|--------|
 | 001 | [2026-07-25-arm-reengagement-at-the-wall.md](2026-07-25-arm-reengagement-at-the-wall.md) | Arm the re-engagement loop at the daily wall, and make the wall observable | P1 | M | — | DONE (branch `advisor/wall-reengagement-and-closing-panel`; device pass still needed) |
 | 002 | [2026-07-25-day-one-closing-panel.md](2026-07-25-day-one-closing-panel.md) | Close the day with a "tomorrow's agenda" panel instead of a stop sign | P1 | M | 001 | DONE (branch `advisor/wall-reengagement-and-closing-panel`). The recap/panel modal race found during execution is fixed: the panel now waits for the week's recap to be dismissed, then arms 350ms like `recapArmedWeek`. Simulator pass still needed. |
+| 003 | [2026-10-10-game-journey-and-progression-plan.md](2026-10-10-game-journey-and-progression-plan.md) | Build a ten-week guided opening with visible office growth | P1 | L | Reuses 001/002; internal order A–F | TODO — feedback-driven product and implementation plan, based on `ed6e11a` |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED
 (with one-line rationale).
 
 ## Why these two, and why now
+
+**Index update, 2026-10-10:** Plan 003 addresses the supplied game-design feedback and revisits the early-game design spike deferred below as D4. Start with its baseline and prototype packages, then validate the first ten weeks and the handoff to sandbox freedom. Ron confirmed visible company growth, gradual control reveals with skip/recovery access, and unchanged allowances, waits, and products; campaign and career systems are outside this plan. The historical findings below are retained for context: current source uses 10 initial free weeks and one regenerated week every 36 minutes, so the old five-week daily-wall assumptions are not current.
 
 Telemetry from the first 88 installs (PostHog project 505800, 2026-07-10 → 07-25):
 

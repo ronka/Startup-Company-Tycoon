@@ -1,0 +1,257 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.1.0",
+    "copyright": "2026 ronka",
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "en-US": {
+        "title": "Startup Empire Tycoon",
+        "marketingUrl": "https://www.ronka.dev/startup-tycoon",
+        "supportUrl": "https://www.ronka.dev/startup-tycoon/support",
+        "privacyPolicyUrl": "https://www.ronka.dev/startup-tycoon/privacy",
+        "subtitle": "Business & CEO Simulator",
+        "description": "Build your startup empire, one decision at a time.\n\nStartup Empire Tycoon is a business simulation game where you become the founder and CEO of a tech company. Hire your team, win customers, raise venture capital, and fight to keep the company alive. Every week brings a new call to make.\n\nBUILD A COMPANY WORTH BETTING ON\nStart small and watch your office grow with your business. Track cash, revenue, valuation, and runway as your company finds its footing.\n\nHIRE YOUR DREAM TEAM\nRecruit developers, sales staff, and support specialists. Fill your CTO, CMO, and CFO seats with leaders whose perks shape your strategy. Balance payroll, morale, and growth.\n\nOUTSMART YOUR RIVALS\nCompete against two rival companies for customers. Choose your focus: core product, AI, hardware, or hype. Ride market trends and adapt when the tide turns.\n\nRAISE CAPITAL. PLAN YOUR EXIT.\nNegotiate Seed, Series A, and Series B funding. More cash means more room to grow, but each round costs equity. Aim for an acquisition or take your company public.\n\nMAKE THE WEEKLY CALLS\nHandle startup events, tradeoffs, and surprises. Guided missions help new founders get started. Free play weeks replenish over time, with optional in-app purchases for extra weeks.\n\nYOUR COMPANY AT A GLANCE\nFollow your valuation, check your team's morale, and keep company stats close with home screen widgets. Compare your results on the optional leaderboard.\n\nHow far can you take your company?\n\nGame interface and in-game text are currently in English.",
+        "keywords": [
+          "company",
+          "management",
+          "entrepreneur",
+          "venture",
+          "capital",
+          "office",
+          "strategy",
+          "finance",
+          "founder",
+          "ipo",
+          "investing"
+        ],
+        "promoText": "Build a startup from the ground up. Hire your team, outsmart rivals, raise capital, and make every week count on the road to an IPO.",
+        "releaseNotes": "Your startup has a new home.\n\n- Watch your team at work in a living office that grows with your company.\n- Learn the ropes with guided first-week missions.\n- Find your key numbers faster in refreshed HQ, Team, Money, and Market screens.\n- See when your next free week is ready with a clearer countdown.\n- Keep an eye on your company with home screen widgets.",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "store/apple/screenshot/en-US/APP_IPHONE_67/01-hero.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/02-device-bottom.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/03-device-top.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/04-device-bottom.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/05-two-devices.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_67/06-no-device.png"
+          ],
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/en-US/APP_IPHONE_65/01-hero.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/02-device-bottom.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/03-device-top.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/04-device-bottom.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/05-two-devices.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/06-no-device.png"
+          ]
+        }
+      },
+      "es-ES": {
+        "title": "Startup Empire Tycoon",
+        "marketingUrl": "https://www.ronka.dev/startup-tycoon",
+        "supportUrl": "https://www.ronka.dev/startup-tycoon/support",
+        "privacyPolicyUrl": "https://www.ronka.dev/startup-tycoon/privacy",
+        "subtitle": "Simulador de negocios y CEO",
+        "description": "Construye tu imperio startup, decisión a decisión.\n\nStartup Empire Tycoon es un juego de simulación empresarial en el que te conviertes en fundador y CEO de una empresa tecnológica. Contrata a tu equipo, gana clientes, consigue capital riesgo y lucha por mantener la empresa a flote. Cada semana trae una nueva decisión.\n\nCREA UNA EMPRESA CON FUTURO\nEmpieza a pequeña escala y observa cómo crece tu oficina junto con tu negocio. Controla el efectivo, los ingresos, la valoración y las semanas de margen que te quedan.\n\nFORMA TU EQUIPO IDEAL\nContrata desarrolladores y personal de ventas y soporte. Incorpora un CTO, un CMO y un CFO cuyas ventajas influyan en tu estrategia. Equilibra salarios, motivación y crecimiento.\n\nSUPERA A TUS RIVALES\nCompite con dos empresas rivales por los clientes. Apuesta por el producto principal, la IA, el hardware o el hype. Aprovecha las tendencias del mercado y adáptate cuando cambien.\n\nCONSIGUE INVERSIÓN. PLANEA TU SALIDA.\nNegocia rondas semilla, Serie A y Serie B. Más capital te permite crecer, pero cada ronda reduce tu participación. Busca una adquisición o lleva tu empresa a bolsa.\n\nDECIDE SEMANA A SEMANA\nAfronta eventos, dilemas y sorpresas del mundo startup. Las misiones guiadas ayudan a empezar. Las semanas de juego gratuitas se recuperan con el tiempo; puedes comprar semanas extra de forma opcional dentro del juego.\n\nTU EMPRESA DE UN VISTAZO\nSigue tu valoración, comprueba la motivación del equipo y consulta tus cifras con widgets en la pantalla de inicio. Compara tus resultados en la clasificación opcional.\n\n¿Hasta dónde puedes llevar tu empresa?\n\nLa interfaz y los textos del juego están actualmente en inglés.",
+        "keywords": [
+          "empresa",
+          "gestión",
+          "emprendedor",
+          "inversión",
+          "capital",
+          "oficina",
+          "estrategia",
+          "finanzas",
+          "fundador",
+          "bolsa"
+        ],
+        "promoText": "Crea una startup desde cero. Forma tu equipo, supera a tus rivales y consigue inversión. Cada semana cuenta en tu camino hacia la bolsa.",
+        "releaseNotes": "Tu startup estrena sede.\n\n- Observa a tu equipo en una oficina que crece con tu empresa.\n- Aprende con misiones guiadas durante las primeras semanas.\n- Consulta tus cifras clave en las pantallas renovadas de sede, equipo, dinero y mercado.\n- Descubre cuándo estará disponible tu próxima semana gratis con una cuenta atrás más clara.\n- Sigue tu empresa con widgets en la pantalla de inicio.",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "store/apple/screenshot/es-ES/APP_IPHONE_67/01-hero.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_67/02-device-bottom.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_67/03-device-top.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_67/04-device-bottom.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_67/05-two-devices.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_67/06-no-device.png"
+          ],
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/01-hero.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/02-device-bottom.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/03-device-top.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/04-device-bottom.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/05-two-devices.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/06-no-device.png"
+          ]
+        }
+      },
+      "de-DE": {
+        "title": "Startup Empire Tycoon",
+        "marketingUrl": "https://www.ronka.dev/startup-tycoon",
+        "supportUrl": "https://www.ronka.dev/startup-tycoon/support",
+        "privacyPolicyUrl": "https://www.ronka.dev/startup-tycoon/privacy",
+        "subtitle": "Wirtschafts- & Firmensimulator",
+        "description": "Baue dein Startup-Imperium auf. Eine Entscheidung nach der anderen.\n\nStartup Empire Tycoon ist eine Wirtschaftssimulation, in der du Gründer und CEO einer Tech-Firma wirst. Stelle dein Team ein, gewinne Kunden, sichere Risikokapital und halte dein Unternehmen am Leben. Jede Woche steht eine neue Entscheidung an.\n\nBAUE EIN UNTERNEHMEN MIT ZUKUNFT\nFange klein an und erlebe, wie dein Büro mit deiner Firma wächst. Behalte Kassenbestand, Umsatz, Firmenwert und finanzielle Reichweite im Blick.\n\nFINDE DEIN DREAM-TEAM\nStelle Entwickler sowie Vertriebs- und Supportmitarbeiter ein. Besetze CTO-, CMO- und CFO-Positionen mit Führungskräften, deren Vorteile deine Strategie prägen. Bringe Gehälter, Stimmung und Wachstum ins Gleichgewicht.\n\nÜBERHOLE DEINE RIVALEN\nKämpfe mit zwei Konkurrenzfirmen um Kunden. Setze auf dein Kernprodukt, KI, Hardware oder Hype. Nutze Markttrends und passe dich an, wenn sich der Wind dreht.\n\nSICHERE KAPITAL. PLANE DEN EXIT.\nVerhandle Seed-, Series-A- und Series-B-Finanzierungen. Frisches Kapital schafft Spielraum, kostet aber Firmenanteile. Arbeite auf eine Übernahme hin oder bringe deine Firma an die Börse.\n\nTRIFF DIE WÖCHENTLICHEN ENTSCHEIDUNGEN\nMeistere Startup-Ereignisse, Zielkonflikte und Überraschungen. Geführte Missionen erleichtern den Einstieg. Kostenlose Spielwochen laden sich mit der Zeit wieder auf. Zusätzliche Wochen sind optional per In-App-Kauf erhältlich.\n\nDEINE FIRMA AUF EINEN BLICK\nVerfolge den Firmenwert, prüfe die Stimmung im Team und sieh wichtige Zahlen in Widgets auf dem Home-Bildschirm. Vergleiche deine Ergebnisse in der optionalen Rangliste.\n\nWie weit kannst du deine Firma bringen?\n\nDie Benutzeroberfläche und die Spieltexte sind derzeit auf Englisch.",
+        "keywords": [
+          "unternehmen",
+          "management",
+          "gründer",
+          "investition",
+          "kapital",
+          "büro",
+          "strategie",
+          "finanzen",
+          "chef",
+          "börse",
+          "aufbau"
+        ],
+        "promoText": "Gründe dein Startup. Stelle dein Team zusammen, überhole Rivalen und sichere Kapital. Jede Woche zählt auf deinem Weg an die Börse.",
+        "releaseNotes": "Dein Startup bekommt ein neues Zuhause.\n\n- Beobachte dein Team in einem lebendigen Büro, das mit deiner Firma wächst.\n- Lerne den Einstieg mit geführten Missionen in den ersten Wochen.\n- Finde wichtige Zahlen schneller in den überarbeiteten Ansichten für Zentrale, Team, Finanzen und Markt.\n- Ein klarerer Countdown zeigt, wann deine nächste kostenlose Spielwoche bereitsteht.\n- Behalte deine Firma mit Widgets auf dem Home-Bildschirm im Blick.",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "store/apple/screenshot/de-DE/APP_IPHONE_67/01-hero.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_67/02-device-bottom.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_67/03-device-top.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_67/04-device-bottom.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_67/05-two-devices.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_67/06-no-device.png"
+          ],
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/01-hero.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/02-device-bottom.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/03-device-top.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/04-device-bottom.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/05-two-devices.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/06-no-device.png"
+          ]
+        }
+      },
+      "fr-FR": {
+        "title": "Startup Empire Tycoon",
+        "marketingUrl": "https://www.ronka.dev/startup-tycoon",
+        "supportUrl": "https://www.ronka.dev/startup-tycoon/support",
+        "privacyPolicyUrl": "https://www.ronka.dev/startup-tycoon/privacy",
+        "subtitle": "Simulation de gestion et PDG",
+        "description": "Bâtis ton empire startup, une décision à la fois.\n\nStartup Empire Tycoon est un jeu de simulation de gestion où tu deviens le fondateur et le PDG d’une entreprise technologique. Recrute ton équipe, gagne des clients, lève du capital-risque et maintiens ton entreprise à flot. Chaque semaine apporte une nouvelle décision.\n\nCRÉE UNE ENTREPRISE PROMETTEUSE\nCommence petit et regarde ton bureau grandir avec ton activité. Suis ta trésorerie, tes revenus, ta valorisation et le temps qu’il te reste avant de manquer d’argent.\n\nCRÉE TON ÉQUIPE DE RÊVE\nRecrute des développeurs et des spécialistes de la vente et du support. Choisis un CTO, un CMO et un CFO dont les atouts influenceront ta stratégie. Trouve l’équilibre entre salaires, moral et croissance.\n\nDÉPASSE TES RIVAUX\nAffronte deux entreprises concurrentes pour attirer les clients. Mise sur le produit, l’IA, le matériel ou le buzz. Profite des tendances du marché et adapte-toi quand elles changent.\n\nLÈVE DES FONDS. PRÉPARE TA SORTIE.\nNégocie des levées de fonds en amorçage, en série A et en série B. Plus de capital permet de grandir, mais chaque tour réduit ta participation. Vise un rachat ou une entrée en Bourse.\n\nPRENDS LES DÉCISIONS CHAQUE SEMAINE\nFais face aux événements, aux compromis et aux surprises de la vie d’une startup. Les missions guidées facilitent les débuts. Les semaines de jeu gratuites se rechargent avec le temps. Des semaines supplémentaires sont disponibles en achat intégré facultatif.\n\nTON ENTREPRISE EN UN COUP D’ŒIL\nSuis ta valorisation, vérifie le moral de ton équipe et consulte tes chiffres grâce aux widgets de l’écran d’accueil. Compare tes résultats dans le classement facultatif.\n\nJusqu’où mèneras-tu ton entreprise ?\n\nL’interface et les textes du jeu sont actuellement en anglais.",
+        "keywords": [
+          "entreprise",
+          "entrepreneur",
+          "investissement",
+          "capital",
+          "bureau",
+          "stratégie",
+          "finance",
+          "fondateur",
+          "bourse",
+          "patron"
+        ],
+        "promoText": "Crée ta startup. Recrute ton équipe, dépasse tes rivaux et lève des fonds. Chaque semaine compte sur la route de la Bourse.",
+        "releaseNotes": "Ta startup a un nouveau QG.\n\n- Observe ton équipe dans un bureau vivant qui grandit avec ton entreprise.\n- Apprends les bases avec des missions guidées pendant les premières semaines.\n- Retrouve tes chiffres clés dans les écrans repensés du QG, de l’équipe, des finances et du marché.\n- Un compte à rebours plus clair indique quand ta prochaine semaine gratuite sera disponible.\n- Garde un œil sur ton entreprise avec les widgets de l’écran d’accueil.",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "store/apple/screenshot/fr-FR/APP_IPHONE_67/01-hero.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_67/02-device-bottom.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_67/03-device-top.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_67/04-device-bottom.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_67/05-two-devices.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_67/06-no-device.png"
+          ],
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/01-hero.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/02-device-bottom.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/03-device-top.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/04-device-bottom.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/05-two-devices.png",
+            "store/apple/screenshot/fr-FR/APP_IPHONE_65/06-no-device.png"
+          ]
+        }
+      },
+      "pt-BR": {
+        "title": "Startup Empire Tycoon",
+        "marketingUrl": "https://www.ronka.dev/startup-tycoon",
+        "supportUrl": "https://www.ronka.dev/startup-tycoon/support",
+        "privacyPolicyUrl": "https://www.ronka.dev/startup-tycoon/privacy",
+        "subtitle": "Simulador de negócios e CEO",
+        "description": "Crie seu império startup, uma decisão de cada vez.\n\nStartup Empire Tycoon é um jogo de simulação de negócios em que você vira fundador e CEO de uma empresa de tecnologia. Contrate sua equipe, conquiste clientes, capte capital de risco e mantenha a empresa de pé. Toda semana traz uma nova decisão.\n\nCONSTRUA UMA EMPRESA PROMISSORA\nComece pequeno e veja seu escritório crescer junto com o negócio. Acompanhe o caixa, a receita, o valor da empresa e o tempo que você tem até o dinheiro acabar.\n\nMONTE SUA EQUIPE DOS SONHOS\nContrate desenvolvedores e profissionais de vendas e suporte. Preencha os cargos de CTO, CMO e CFO com líderes cujas vantagens moldam sua estratégia. Equilibre salários, moral e crescimento.\n\nSUPERE SEUS RIVAIS\nDispute clientes com duas empresas concorrentes. Aposte no produto principal, em IA, hardware ou hype. Aproveite as tendências do mercado e se adapte quando elas mudarem.\n\nCAPTE INVESTIMENTO. PLANEJE SUA SAÍDA.\nNegocie rodadas Seed, Série A e Série B. Mais capital dá espaço para crescer, mas cada rodada custa uma parte da empresa. Busque uma aquisição ou abra o capital na bolsa.\n\nDECIDA SEMANA A SEMANA\nEncare eventos, dilemas e surpresas da vida de uma startup. Missões guiadas ajudam quem está começando. As semanas grátis de jogo se recarregam com o tempo. Você também pode comprar semanas extras, de forma opcional, dentro do jogo.\n\nSUA EMPRESA EM UM OLHAR\nAcompanhe o valor da empresa, confira o moral da equipe e consulte seus números com widgets na tela de início. Compare seus resultados no ranking opcional.\n\nAté onde você consegue levar sua empresa?\n\nA interface e os textos do jogo estão atualmente em inglês.",
+        "keywords": [
+          "empresa",
+          "gestão",
+          "empreendedor",
+          "investimento",
+          "capital",
+          "escritório",
+          "estratégia",
+          "finanças",
+          "fundador",
+          "bolsa"
+        ],
+        "promoText": "Crie sua startup do zero. Monte sua equipe, supere os rivais e capte investimento. Cada semana conta na jornada até a abertura de capital.",
+        "releaseNotes": "Sua startup está de casa nova.\n\n- Veja sua equipe em um escritório vivo que cresce com a empresa.\n- Aprenda o básico com missões guiadas nas primeiras semanas.\n- Encontre seus números mais rápido nas telas renovadas de sede, equipe, finanças e mercado.\n- Uma contagem regressiva mais clara mostra quando sua próxima semana grátis estará disponível.\n- Acompanhe sua empresa com widgets na tela de início.",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "store/apple/screenshot/pt-BR/APP_IPHONE_67/01-hero.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_67/02-device-bottom.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_67/03-device-top.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_67/04-device-bottom.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_67/05-two-devices.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_67/06-no-device.png"
+          ],
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/pt-BR/APP_IPHONE_65/01-hero.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_65/02-device-bottom.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_65/03-device-top.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_65/04-device-bottom.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_65/05-two-devices.png",
+            "store/apple/screenshot/pt-BR/APP_IPHONE_65/06-no-device.png"
+          ]
+        }
+      }
+    },
+    "categories": [
+      [
+        "GAMES",
+        "GAMES_SIMULATION",
+        "GAMES_STRATEGY"
+      ]
+    ],
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "review": {
+      "firstName": "Ron",
+      "lastName": "Kantor",
+      "email": "ronkamail@gmail.com",
+      "phone": "+972545870405",
+      "demoRequired": false
+    }
+  }
+}

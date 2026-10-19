@@ -43,3 +43,5 @@ example
 /android
 
 app-store-screenshots/
+# App Store screenshots: large binaries, kept out of git (uploaded via store.config.json)
+store/apple/
