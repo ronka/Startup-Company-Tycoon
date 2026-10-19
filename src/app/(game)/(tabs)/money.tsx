@@ -28,7 +28,8 @@ import {
   roundOpenAt,
   weeklyReportFor,
 } from '@/game/balance';
-import { ROUND_LABEL, investorById, weeksToExpiry } from '@/game/investors';
+import { ROUND_LABEL, acceptedDilutionFor, investorById, weeksToExpiry } from '@/game/investors';
+import { ROUND_ORDER } from '@/game/types';
 import { isIpoEligible } from '@/game/score';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
@@ -41,6 +42,7 @@ import { Glow } from '@/components/game/glow';
 import { LockedFeature } from '@/components/game/locked-feature';
 import { GuideAnchor, useGuideFor } from '@/components/game/guide-pointer';
 import { TermSheetsSheet } from '@/components/game/term-sheets-sheet';
+import { celebrateRound } from '@/components/game/round-celebration';
 
 /** Below this the valuation chart is a squiggle, so it isn't drawn. */
 const MIN_CHART_HEIGHT = 32;
@@ -107,8 +109,19 @@ export default function MoneyScreen() {
   const guided = isGuided(state);
 
   const acceptOffer = (offerId: string) => {
+    const offer = offers.find((o) => o.id === offerId);
     dispatch({ type: 'ACCEPT_FUNDING_OFFER', offerId });
     setOffersOpen(false);
+    // Signing is the biggest beat in a run: throw a party.
+    if (offer) {
+      celebrateRound({
+        roundLabel: ROUND_LABEL[offer.round],
+        investorName: investorById(offer.investorId)?.name ?? 'your new investor',
+        amount: offer.amount,
+        equityAfter: state.founderEquity * (1 - acceptedDilutionFor(state, offer)),
+        finalRound: offer.round === ROUND_ORDER[ROUND_ORDER.length - 1],
+      });
+    }
   };
 
   const declineOffer = (offerId: string) => {

@@ -33,6 +33,7 @@ import { featuresUnlockedBy, newlyCompletedQuests, type QuestId } from '@/game/u
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
+import { ROUND_CELEBRATION_TOTAL_MS } from '@/lib/round-celebration-timing';
 import { isRunId, newRunId } from '@/lib/run-id';
 import {
   configurePurchases,
@@ -218,12 +219,13 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
  * other player decision from one place.
  */
 /**
- * Delay before the funding-round review ask, matching the chrome's own arming
- * delays: a raise can land in the same frame a decision card or recap is
- * presenting, and iOS hangs when one modal presents into another's transition
+ * Delay before the funding-round review ask. A raise now throws the
+ * round-closed confetti, so the ask waits for the party to finish rather than
+ * landing on top of it. That also keeps it clear of the term sheet sheet's
+ * dismissal: iOS hangs when one modal presents into another's transition
  * (docs/bug-stuck-decision-modal.md).
  */
-const FUNDING_REVIEW_ARM_MS = 350;
+const FUNDING_REVIEW_ARM_MS = ROUND_CELEBRATION_TOTAL_MS + 500;
 
 /**
  * A Series A or B raise is the app's best-populated success beat — most runs that

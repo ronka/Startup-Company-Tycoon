@@ -1,6 +1,7 @@
 import { Drawer } from 'expo-router/drawer';
 
 import { LeaderboardJoinSheet } from '@/components/game/leaderboard-join-sheet';
+import { RoundCelebrationHost } from '@/components/game/round-celebration';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -14,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
  *
  * The leaderboard join sheet lives here, beside the drawer, so every door into
  * it (week 5, the HQ rank card, Settings, the board) opens the same instance.
+ * The round-closed confetti lives here too, so it covers the HUD and tab bar.
  */
 export default function GameDrawerLayout() {
   const theme = useTheme();
@@ -36,6 +38,7 @@ export default function GameDrawerLayout() {
         <Drawer.Screen name="settings" options={{ drawerLabel: 'Settings' }} />
       </Drawer>
       <LeaderboardJoinSheet />
+      <RoundCelebrationHost />
     </>
   );
 }

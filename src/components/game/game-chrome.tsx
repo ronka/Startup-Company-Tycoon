@@ -122,6 +122,14 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   // them and hooks can't run conditionally.
   const weekEntries = state ? state.newsLog.filter((entry) => entry.week === state.week) : [];
   const notable = isNotableWeek(weekEntries);
+  // A round signed after this week's tick adds a news entry that would make the
+  // week "notable" and pop the full recap over the round-closed confetti. The
+  // celebration already covers it, so no recap is owed.
+  const roundJustClosed =
+    state !== null && previousState !== null && state.roundsRaised !== previousState.roundsRaised;
+  // The full Week in Review is still owed for this week: every later surface waits on it.
+  const recapOwed =
+    state !== null && previousState !== null && notable && state.week !== reviewedWeek && !roundJustClosed;
   const agenda = useMemo(() => tomorrowAgendaFor(state), [state]);
   const actionNow = useMemo(() => actionNowFor(state), [state]);
   // The card the wall pinned for next week — the cliffhanger (see `PIN_CLIFFHANGER`).
@@ -143,7 +151,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     // `WeekInReviewSheet` arms 350ms *after* this panel would otherwise open,
     // and would present straight into it. The recap is the earlier beat, so
     // the panel waits for it to be dismissed rather than racing it.
-    !(previousState !== null && notable && state.week !== reviewedWeek);
+    !recapOwed;
   const dayCompleteWeek = state?.week ?? null;
 
   useEffect(() => {
@@ -192,7 +200,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     !buyAfterSheet &&
     !dayCompleteVisible &&
     (previousState === null || recapArmedWeek === state.week) &&
-    !(previousState !== null && notable && state.week !== reviewedWeek);
+    !recapOwed;
   const { open: openBuyWeeks } = buyWeeks;
   useEffect(() => {
     if (!buyAfterSheet) return;
@@ -218,7 +226,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   // answered (pendingEvent clears). previousState only exists once at least
   // one tick has happened this session, so neither ever fires on app open.
   const hasUnseenTick = previousState !== null && !state.pendingEvent && recapArmedWeek === state.week;
-  const showReview = hasUnseenTick && notable && state.week !== reviewedWeek;
+  const showReview = hasUnseenTick && recapOwed;
   const showTicker = hasUnseenTick && !notable && state.week !== tickerDismissedWeek;
 
   const cashDelta = previousState ? state.cash - previousState.cash : 0;
