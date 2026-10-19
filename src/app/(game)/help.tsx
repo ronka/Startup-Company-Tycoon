@@ -97,7 +97,7 @@ export default function HelpScreen() {
         <HelpStat
           label="Founder equity"
           value={`${Math.round(state.founderEquity * 100)}%`}
-          description={`Your ownership share, diluted a little with each funding round. Your final score is equity × exit valuation, so protecting it matters as much as growing valuation. At today’s valuation your stake is ${formatMoney(
+          description={`Your ownership share, diluted by each term sheet you sign. Investors trade cash for equity differently: family money can cost you nothing, a big-name fund takes a big slice. Your final score is equity × exit valuation, so protecting it matters as much as growing valuation. At today’s valuation your stake is ${formatMoney(
             derived.stake,
           )}.`}
         />
@@ -159,7 +159,7 @@ export default function HelpScreen() {
         <HelpStat
           label="Stage"
           value={capitalize(state.stage)}
-          description="Garage → Seed → Series A → Growth. Advances when you raise. You must reach Growth (plus an open IPO window and four weeks of strong revenue) to IPO."
+          description="Garage → Seed → Series A → Growth. Advances when you take a round; Series B and everything after it (up to Series G) count as Growth. Rounds are offered by named investors whose term sheets arrive over the weeks and expire, and Series C onward only open once your valuation earns them. You must reach Growth (plus an open IPO window and four weeks of strong revenue) to IPO."
         />
       </ScrollView>
     </View>

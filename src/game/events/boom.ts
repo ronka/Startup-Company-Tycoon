@@ -1,7 +1,51 @@
+import { INVESTOR_FLAGS } from '../investor-flags';
 import { EventCard } from './types';
 
 /** The Boom-era timeline deck: money is everywhere, competitors are flush, and the stakes climb. */
 export const BOOM_DECK: EventCard[] = [
+  {
+    id: 'boom-uncle-marty-has-notes',
+    era: 'boom',
+    kind: 'decision',
+    title: 'Uncle Marty Has Notes',
+    flavor: 'Your seed investor (also your uncle) has printed the roadmap, circled half of it in red, and wants to present to the whole team.',
+    teaser: 'Your very first investor wants a word. With everyone.',
+    requiresFlag: INVESTOR_FLAGS.uncleMarty,
+    choices: [
+      {
+        label: 'Let him present. It is his money too',
+        effects: {
+          deltas: [
+            { stat: 'morale', amount: -6 },
+            { stat: 'hype', amount: 0.02 },
+          ],
+        },
+      },
+      {
+        label: 'Take him to lunch instead',
+        effects: { deltas: [{ stat: 'cash', amount: -5_000 }] },
+      },
+    ],
+  },
+  {
+    id: 'boom-foogle-makes-its-move',
+    era: 'boom',
+    kind: 'decision',
+    title: 'Foogle Makes Its Move',
+    flavor: "Foogle Ventures' board observer has been taking very detailed notes. Now Foogle Corporate wants to buy the whole thing.",
+    teaser: 'Your strategic investor wants more than a seat at the table.',
+    requiresFlag: INVESTOR_FLAGS.foogle,
+    choices: [
+      {
+        label: 'Sell to Foogle',
+        effects: { acquisitionOffer: { valuationMultiplier: 1.8 } },
+      },
+      {
+        label: 'Politely decline and hope they stay friendly',
+        effects: { deltas: [{ stat: 'hype', amount: -0.04 }] },
+      },
+    ],
+  },
   {
     id: 'boom-hiring-spree',
     era: 'boom',

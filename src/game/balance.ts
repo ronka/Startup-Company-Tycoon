@@ -612,11 +612,16 @@ export function cLevelPerkTradeoffFor(cLevels: CLevels, role: CLevelRole, axis: 
 }
 
 // ── Funding ──────────────────────────────────────────────────────────────
-/** Fraction of the company sold in each round, before any bridge penalty. */
+/** Fraction of the company sold in each round, before any bridge penalty or investor multiplier. */
 export const ROUND_BASE_DILUTION: Record<RoundType, number> = {
   seed: 0.15,
   seriesA: 0.2,
   seriesB: 0.2,
+  seriesC: 0.18,
+  seriesD: 0.15,
+  seriesE: 0.12,
+  seriesF: 0.1,
+  seriesG: 0.08,
 };
 
 /**
@@ -628,13 +633,45 @@ export const ROUND_MIN_AMOUNT: Record<RoundType, number> = {
   seed: 150_000,
   seriesA: 400_000,
   seriesB: 800_000,
+  seriesC: 1_200_000,
+  seriesD: 1_800_000,
+  seriesE: 2_500_000,
+  seriesF: 3_500_000,
+  seriesG: 5_000_000,
 };
 
-/** Stage the company reaches after closing each round (seriesB jumps straight to growth). */
+/**
+ * Valuation a company needs before investors will talk about a round at all.
+ * Seed through Series B open on story alone, as they always have; Series C
+ * onward is late-stage money and only shows up for real traction. Below the
+ * bar the round simply has no term sheets.
+ */
+export const ROUND_MIN_VALUATION: Record<RoundType, number> = {
+  seed: 0,
+  seriesA: 0,
+  seriesB: 0,
+  seriesC: 400_000,
+  seriesD: 800_000,
+  seriesE: 1_500_000,
+  seriesF: 2_500_000,
+  seriesG: 4_000_000,
+};
+
+/** Whether investors will offer on `round` at this valuation. */
+export function roundOpenAt(round: RoundType, valuation: number): boolean {
+  return valuation >= ROUND_MIN_VALUATION[round];
+}
+
+/** Stage the company reaches after closing each round (Series B onward is growth). */
 export const STAGE_AFTER_ROUND: Record<RoundType, Stage> = {
   seed: 'seed',
   seriesA: 'seriesA',
   seriesB: 'growth',
+  seriesC: 'growth',
+  seriesD: 'growth',
+  seriesE: 'growth',
+  seriesF: 'growth',
+  seriesG: 'growth',
 };
 
 /** Runway below this many weeks forces bridge terms on the next round. */
@@ -720,7 +757,7 @@ export const IPO_REVENUE_BAR = 150_000;
 /** Consecutive weeks revenue must clear `IPO_REVENUE_BAR` before the IPO becomes available. */
 export const IPO_SUSTAIN_WEEKS = 4;
 
-/** The next raisable round, or null once seed/A/B are all done. */
+/** The next raisable round, or null once Seed and Series A–G are all done. */
 export function nextRound(roundsRaised: number): RoundType | null {
   return ROUND_ORDER[roundsRaised] ?? null;
 }

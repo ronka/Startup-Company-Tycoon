@@ -17,21 +17,19 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import {
   ARPC,
-  BRIDGE_RUNWAY_THRESHOLD_WEEKS,
   FOCUS_PROFILES,
   IPO_REVENUE_BAR,
   IPO_SUSTAIN_WEEKS,
   ROUND_COOLDOWN_WEEKS,
+  ROUND_MIN_VALUATION,
   canRaiseRound,
   cLevelPerkMultiplierFor,
-  founderStakeFor,
   nextRound,
-  roundTermsFor,
-  runwayWeeks,
+  roundOpenAt,
   weeklyReportFor,
 } from '@/game/balance';
+import { ROUND_LABEL, investorById, weeksToExpiry } from '@/game/investors';
 import { isIpoEligible } from '@/game/score';
-import { RoundType } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatCount, formatMoney, formatWeeks } from '@/lib/format';
@@ -42,20 +40,17 @@ import { isGuided, isUnlocked } from '@/game/unlocks';
 import { Glow } from '@/components/game/glow';
 import { LockedFeature } from '@/components/game/locked-feature';
 import { GuideAnchor, useGuideFor } from '@/components/game/guide-pointer';
+import { TermSheetsSheet } from '@/components/game/term-sheets-sheet';
 
 /** Below this the valuation chart is a squiggle, so it isn't drawn. */
 const MIN_CHART_HEIGHT = 32;
 
-const ROUND_LABEL: Record<RoundType, string> = {
-  seed: 'Seed',
-  seriesA: 'Series A',
-  seriesB: 'Series B',
-};
-
 export default function MoneyScreen() {
   const { state, previousState, dispatch } = useGame();
   const theme = useTheme();
-  const [confirming, setConfirming] = useState(false);
+  const [offersOpen, setOffersOpen] = useState(false);
+  // Bumped on every open so the term sheets sheet remounts on the list, not a stale confirm step.
+  const [offersOpenCount, setOffersOpenCount] = useState(0);
   const [ipoConfirming, setIpoConfirming] = useState(false);
   const [burnBreakdownOpen, setBurnBreakdownOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -85,25 +80,20 @@ export default function MoneyScreen() {
   const report = weeklyReportFor(state);
   const focusArpcMultiplier = FOCUS_PROFILES[state.focus].arpcMultiplier;
   const effectiveHype = state.hype * cLevelPerkMultiplierFor(state.cLevels, 'cmo', 'cmo-hypeGain');
-  const cfoDilutionMultiplier = cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-roundTerms');
 
   const round = nextRound(state.roundsRaised);
-  const terms = round
-    ? roundTermsFor(round, valuation, state.hype, runway, state.era, cfoDilutionMultiplier)
-    : null;
-  const stakeAfterRaise = terms
-    ? founderStakeFor(state.founderEquity * (1 - terms.dilution), valuation)
-    : stake;
-
+  const offers = state.fundingOffers ?? [];
   const raiseLocked = round !== null && !canRaiseRound(state.week, state.lastRoundRaisedWeek);
   const cooldownWeeksLeft =
     state.lastRoundRaisedWeek !== null
       ? Math.max(0, ROUND_COOLDOWN_WEEKS - (state.week - state.lastRoundRaisedWeek))
       : 0;
-  // Whether this raise still leaves runway under the bridge threshold — the
-  // next round would likely also be a bridge, so the dialog says so up front.
-  const runwayAfterRaise = terms ? runwayWeeks(state.cash + terms.amount, burn - revenue) : 0;
-  const nextRoundLikelyBridgeToo = Boolean(terms?.isBridge) && runwayAfterRaise < BRIDGE_RUNWAY_THRESHOLD_WEEKS;
+  // Late rounds wait on traction: no term sheets until valuation clears the bar.
+  const roundShut = round !== null && !raiseLocked && !roundOpenAt(round, valuation) && offers.length === 0;
+  // Open round, empty table: every offer was passed on (the table refills on the next week).
+  const tableEmpty = round !== null && !raiseLocked && !roundShut && offers.length === 0;
+  const expiringNow = offers.some((o) => weeksToExpiry(state, o) === 0);
+  const offerNames = offers.map((o) => investorById(o.investorId)?.name ?? 'An investor');
 
   // Week-over-week valuation move, shown as the hero's delta chip.
   const valuationChange =
@@ -116,9 +106,15 @@ export default function MoneyScreen() {
 
   const guided = isGuided(state);
 
-  const raise = () => {
-    dispatch({ type: 'RAISE_ROUND' });
-    setConfirming(false);
+  const acceptOffer = (offerId: string) => {
+    dispatch({ type: 'ACCEPT_FUNDING_OFFER', offerId });
+    setOffersOpen(false);
+  };
+
+  const declineOffer = (offerId: string) => {
+    dispatch({ type: 'DECLINE_FUNDING_OFFER', offerId });
+    // Passing on the last one closes the sheet rather than leaving it empty.
+    if (offers.length <= 1) setOffersOpen(false);
   };
 
   const goPublic = () => {
@@ -152,7 +148,7 @@ export default function MoneyScreen() {
         </View>
 
         {/* A guided run's quest strip does the explaining. */}
-        {guided ? null : <FirstRunHint id="money" text="Raise before runway drops under 8 weeks or terms get worse." />}
+        {guided ? null : <FirstRunHint id="money" text="Investors send term sheets over time. Take one before runway drops under 8 weeks or terms get worse." />}
 
         {/* The hero takes whatever height is left, and the chart grows into it —
             so the tab fills a tall phone and still fits a short one. */}
@@ -204,22 +200,30 @@ export default function MoneyScreen() {
           />
         </View>
 
-        {round && terms && !raiseLocked ? (
+        {round && offers.length > 0 && !raiseLocked ? (
           <GuideAnchor step={guideRaise} align="right" inset={RAISE_FROM_RIGHT}>
             <Card style={styles.actionCard}>
               <View style={styles.actionText}>
-                <ThemedText type="smallBold">Raise {ROUND_LABEL[round]}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                  {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}%
+                <ThemedText type="smallBold">
+                  {ROUND_LABEL[round]}: {offers.length} term sheet{offers.length === 1 ? '' : 's'}
                 </ThemedText>
-                {terms.isBridge ? (
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {offerNames.length > 2 ? `${offerNames.slice(0, 2).join(', ')} +${offerNames.length - 2}` : offerNames.join(' & ')}
+                </ThemedText>
+                {expiringNow ? (
                   <ThemedText type="footnote" themeColor="warning" numberOfLines={1}>
-                    Bridge round: worse terms
+                    One expires this week
                   </ThemedText>
                 ) : null}
               </View>
               <Glow on={guideRaise !== null}>
-                <PrimaryButton label="Raise" onPress={() => setConfirming(true)} />
+                <PrimaryButton
+                  label="Review"
+                  onPress={() => {
+                    setOffersOpenCount((n) => n + 1);
+                    setOffersOpen(true);
+                  }}
+                />
               </Glow>
             </Card>
           </GuideAnchor>
@@ -227,12 +231,22 @@ export default function MoneyScreen() {
           <Card style={styles.actionCard}>
             <View style={styles.actionText}>
               <ThemedText type="smallBold">
-                {round ? `${ROUND_LABEL[round]} cooling down` : 'Fully funded'}
+                {!round
+                  ? 'Fully funded'
+                  : roundShut
+                    ? `${ROUND_LABEL[round]}: no term sheets yet`
+                    : tableEmpty
+                      ? `${ROUND_LABEL[round]}: no term sheets this week`
+                      : `${ROUND_LABEL[round]} cooling down`}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {round
-                  ? `Investors want a few weeks of progress. Next round in ${formatWeeks(cooldownWeeksLeft)}.`
-                  : 'Seed, Series A and Series B are all raised.'}
+                {!round
+                  ? 'Seed through Series G are all raised.'
+                  : roundShut
+                    ? `Late-stage investors want a ${formatMoney(ROUND_MIN_VALUATION[round])} valuation before they call.`
+                    : tableEmpty
+                      ? 'New investors will reach out next week.'
+                      : `Investors want a few weeks of progress. Next round in ${formatWeeks(cooldownWeeksLeft)}.`}
               </ThemedText>
             </View>
           </Card>
@@ -327,40 +341,14 @@ export default function MoneyScreen() {
         </Card>
       </BottomSheet>
 
-      <BottomSheet
-        visible={confirming}
-        onClose={() => setConfirming(false)}
-        title={`Raise ${round ? ROUND_LABEL[round] : ''}?`}>
-        {terms?.isBridge ? (
-          <ThemedText type="small" themeColor="warning" style={styles.sheetBody}>
-            Runway is under {formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)}, so this is a bridge round: less cash, more
-            dilution.
-            {nextRoundLikelyBridgeToo
-              ? ` This raise still leaves you under ${formatWeeks(BRIDGE_RUNWAY_THRESHOLD_WEEKS)}, so your next round will likely also be a bridge.`
-              : ''}
-          </ThemedText>
-        ) : null}
-        {terms ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
-            {formatMoney(terms.amount)} for {Math.round(terms.dilution * 100)}% of the company. Founder equity goes
-            from {equityPercent}% to {Math.round(state.founderEquity * (1 - terms.dilution) * 100)}%.
-          </ThemedText>
-        ) : null}
-        {terms ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
-            Your stake goes from {formatMoney(stake)} to ~{formatMoney(stakeAfterRaise)}.
-          </ThemedText>
-        ) : null}
-        <View style={styles.sheetActions}>
-          <PrimaryButton
-            variant="secondary"
-            label="Cancel"
-            onPress={() => setConfirming(false)}
-            style={styles.sheetButton}
-          />
-          <PrimaryButton label="Raise" onPress={raise} style={styles.sheetButton} />
-        </View>
-      </BottomSheet>
+      <TermSheetsSheet
+        key={offersOpenCount}
+        state={state}
+        visible={offersOpen}
+        onClose={() => setOffersOpen(false)}
+        onAccept={acceptOffer}
+        onDecline={declineOffer}
+      />
 
       <BottomSheet visible={ipoConfirming} onClose={() => setIpoConfirming(false)} title="Go public?">
         <ThemedText type="small" themeColor="textSecondary" style={styles.sheetBody}>
@@ -387,7 +375,7 @@ export default function MoneyScreen() {
   );
 }
 
-/** Roughly the Raise button's centre, in from the action card's right edge. */
+/** Roughly the Review button's centre, in from the action card's right edge. */
 const RAISE_FROM_RIGHT = Spacing.three + 40;
 
 const styles = StyleSheet.create({

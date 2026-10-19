@@ -112,7 +112,7 @@ export function guideStep(
     case 'hire-support':
       return onTab('team', route, label, '— customers need support', { kind: 'hire', role: 'support' }, 'Tap + to hire support');
     case 'raise':
-      return onTab('money', route, label, '— cash is running low', { kind: 'raise' }, 'Tap Raise to fund the company');
+      return onTab('money', route, label, '— cash is running low', { kind: 'raise' }, 'Pick a term sheet to fund the company');
     case 'next-week':
       if (!quest || state.week >= NEXT_WEEK_COACH_WEEKS) return null;
       // One line: it sits under the Hud for most of the ladder, over the week counter.

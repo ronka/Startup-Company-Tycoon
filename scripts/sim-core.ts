@@ -8,7 +8,7 @@ import { CUSTOMERS_PER_SUPPORT, hasRoundsAvailable, runwayWeeks, weeklyStatsFor 
 import { DEFAULT_COMPANY_NAME, newGame, reduce, tick } from '../src/game/engine';
 import { formatMoney } from '../src/lib/format';
 import { isIpoEligible } from '../src/game/score';
-import type { GameState } from '../src/game/types';
+import type { FundingOffer, GameState } from '../src/game/types';
 
 export const STRATEGIES = [
   'passive',
@@ -46,6 +46,21 @@ function currentRevenue(state: GameState): number {
  * once runway gets tight. `aggressive` hires and raises much more eagerly,
  * trading safety margin for a shot at a bigger, faster outcome.
  */
+/**
+ * How a bot picks among the term sheets on the table: `cash` takes the biggest
+ * check; `value` takes the best cash-after-dilution (amount × kept share), so
+ * a $40k zero-equity check doesn't beat a real round on a technicality.
+ */
+type OfferPolicy = 'cash' | 'value';
+
+function takeOffer(state: GameState, policy: OfferPolicy): GameState {
+  const offers = state.fundingOffers ?? [];
+  if (offers.length === 0) return state;
+  const scoreOf = (o: FundingOffer) => (policy === 'cash' ? o.amount : o.amount * (1 - o.dilution));
+  const best = offers.reduce((a, b) => (scoreOf(b) > scoreOf(a) ? b : a));
+  return reduce(state, { type: 'ACCEPT_FUNDING_OFFER', offerId: best.id });
+}
+
 export function applyStrategy(strategy: Strategy, state: GameState): GameState {
   if (strategy === 'passive') return state;
 
@@ -73,7 +88,7 @@ export function applyStrategy(strategy: Strategy, state: GameState): GameState {
   // stretch (slow rival jitter luck, a costly event) can outrun the raise.
   const raiseRunwayThreshold = strategy === 'aggressive' ? 3 : 10;
   if (runway < raiseRunwayThreshold && hasRoundsAvailable(s.roundsRaised)) {
-    s = reduce(s, { type: 'RAISE_ROUND' });
+    s = takeOffer(s, strategy === 'aggressive' ? 'cash' : 'value');
   }
 
   if (strategy === 'salesheavy') {
@@ -214,7 +229,7 @@ export function applyStrategy(strategy: Strategy, state: GameState): GameState {
   if (strategy === 'grower') {
     // IPO-rush bot (Task 9's acceptance demo that "IPO remains reachable in
     // Boom for a well-played run"): attempts every round the moment its
-    // cooldown clears (RAISE_ROUND self-gates on `canRaiseRound`, so this is
+    // cooldown clears (the offer table is empty during the cooldown, so this is
     // safe to call every week) rather than waiting for distress, reaching
     // Growth stage by ~week 20 instead of whenever runway happens to get
     // tight. IPO needs ~6,000 customers (the $150k/wk revenue bar at base
@@ -224,7 +239,7 @@ export function applyStrategy(strategy: Strategy, state: GameState): GameState {
     // quality near parity (avoiding the conversion/churn penalty) and support
     // kept topped up. Reaches IPO around week 35-45 across seeds.
     if (hasRoundsAvailable(s.roundsRaised)) {
-      s = reduce(s, { type: 'RAISE_ROUND' });
+      s = takeOffer(s, 'cash');
     }
     const neededGrowerSupport = Math.ceil(s.customers / CUSTOMERS_PER_SUPPORT);
     if (s.pendingHeadcount.support < neededGrowerSupport) {

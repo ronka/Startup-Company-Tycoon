@@ -115,7 +115,14 @@ export const EVENTS = {
   CANDIDATES_ROLLED: 'candidates_rolled',
   /** A spin was refused because the daily roll budget was spent — the second daily wall, tracked like the first. */
   ROLL_BLOCKED: 'roll_blocked',
+  /** A term sheet was taken. Carries `investor_id`, `amount`, `dilution`, `is_bridge` and `offers_on_table`. */
   FUNDING_ROUND_RAISED: 'funding_round_raised',
+  /** A new investor offer landed on the table this week. */
+  FUNDING_OFFER_RECEIVED: 'funding_offer_received',
+  /** The player passed on an offer. */
+  FUNDING_OFFER_DECLINED: 'funding_offer_declined',
+  /** An offer ran out of time while the round was still open. */
+  FUNDING_OFFER_EXPIRED: 'funding_offer_expired',
   RUN_ENDED_IPO: 'run_ended_ipo',
   FOCUS_CHANGED: 'focus_changed',
   FOCUS_PICKER_OPENED: 'focus_picker_opened',

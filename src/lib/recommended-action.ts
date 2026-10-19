@@ -7,10 +7,10 @@
  * into the tab and control to point at.
  */
 
-import { canRaiseRound, CUSTOMERS_PER_SUPPORT } from '@/game/balance';
-import { ROUND_ORDER, type GameState } from '@/game/types';
-import { isUnlocked } from '@/game/unlocks';
+import { CUSTOMERS_PER_SUPPORT } from '@/game/balance';
+import { type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
+import { raiseAvailable } from '@/state/day-close';
 
 export type RecommendedActionId = 'answer-card' | 'hire-dev' | 'hire-sales' | 'hire-support' | 'raise' | 'next-week';
 
@@ -32,7 +32,7 @@ const LABELS: Record<RecommendedActionId, string> = {
   'hire-dev': 'Hire a developer',
   'hire-sales': 'Hire a salesperson',
   'hire-support': 'Hire support',
-  raise: 'Raise a round',
+  raise: 'Review a term sheet',
   'next-week': 'Next week',
 };
 
@@ -46,9 +46,7 @@ function pick(state: GameState): RecommendedActionId {
   }
   const { runway } = deriveWeeklyStats(state);
   if (
-    isUnlocked(state, 'money') &&
-    state.roundsRaised < ROUND_ORDER.length &&
-    canRaiseRound(state.week, state.lastRoundRaisedWeek) &&
+    raiseAvailable(state) &&
     runway < RAISE_RECOMMEND_RUNWAY_WEEKS
   ) {
     return 'raise';

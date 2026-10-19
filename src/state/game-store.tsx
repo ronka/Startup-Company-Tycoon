@@ -247,7 +247,7 @@ function armFundingRoundReviewAsk(state: GameState): void {
     return;
   }
   // Reading `pendingEvent` off the pre-action snapshot is sound here specifically
-  // because `RAISE_ROUND` never draws a card: what's pending before the raise is
+  // because `ACCEPT_FUNDING_OFFER` never draws a card: what's pending before the raise is
   // what's pending after it. Any future action that both raises and draws would
   // need a live read instead.
   if (state.pendingEvent) {
@@ -286,9 +286,31 @@ function captureAction(action: GameAction, state: GameState): void {
     case 'FIRE_CLEVEL':
       track(EVENTS.CLEVEL_FIRED, { ...base, role: action.role });
       break;
-    case 'RAISE_ROUND':
-      track(EVENTS.FUNDING_ROUND_RAISED, { ...base, round: ROUND_ORDER[state.roundsRaised] ?? null });
+    case 'ACCEPT_FUNDING_OFFER': {
+      // Keeps the `funding_round_raised` name so existing funnels still count raises.
+      const offer = state.fundingOffers?.find((o) => o.id === action.offerId);
+      track(EVENTS.FUNDING_ROUND_RAISED, {
+        ...base,
+        round: ROUND_ORDER[state.roundsRaised] ?? null,
+        investor_id: offer?.investorId ?? null,
+        amount: offer ? Math.round(offer.amount) : null,
+        dilution: offer?.dilution ?? null,
+        is_bridge: offer?.isBridge ?? null,
+        offers_on_table: state.fundingOffers?.length ?? 0,
+      });
       break;
+    }
+    case 'DECLINE_FUNDING_OFFER': {
+      const offer = state.fundingOffers?.find((o) => o.id === action.offerId);
+      track(EVENTS.FUNDING_OFFER_DECLINED, {
+        ...base,
+        round: offer?.round ?? null,
+        investor_id: offer?.investorId ?? null,
+        amount: offer ? Math.round(offer.amount) : null,
+        dilution: offer?.dilution ?? null,
+      });
+      break;
+    }
     case 'GO_PUBLIC':
       track(EVENTS.RUN_ENDED_IPO, base);
       break;
@@ -978,6 +1000,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (prev.cliffhangerCardId && state.pendingEvent?.id === prev.cliffhangerCardId) {
       track(EVENTS.CLIFFHANGER_LANDED, { card_id: prev.cliffhangerCardId, week: state.week });
     }
+    // Term sheets that arrived or lapsed this week. A raise or the run ending
+    // clears the table, so only diff when neither happened — those offers
+    // were withdrawn, not expired.
+    if (state.week > prev.week && state.roundsRaised === prev.roundsRaised && !state.gameOver) {
+      const prevOffers = prev.fundingOffers ?? [];
+      const nextOffers = state.fundingOffers ?? [];
+      const nextIds = new Set(nextOffers.map((o) => o.id));
+      const prevIds = new Set(prevOffers.map((o) => o.id));
+      for (const offer of nextOffers) {
+        if (prevIds.has(offer.id)) continue;
+        track(EVENTS.FUNDING_OFFER_RECEIVED, {
+          round: offer.round,
+          investor_id: offer.investorId,
+          amount: Math.round(offer.amount),
+          dilution: offer.dilution,
+          is_bridge: offer.isBridge,
+          week: state.week,
+        });
+      }
+      for (const offer of prevOffers) {
+        if (nextIds.has(offer.id)) continue;
+        track(EVENTS.FUNDING_OFFER_EXPIRED, { round: offer.round, investor_id: offer.investorId, week: state.week });
+      }
+    }
     if (state.stage !== prev.stage) {
       track(EVENTS.STAGE_ADVANCED, { from: prev.stage, to: state.stage, week: state.week });
     }
@@ -1144,7 +1190,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // Every other game action carries its params + the pre-action run context.
     // (Outcomes like stage/era changes are emitted separately by the diff effect.)
     if (state) captureAction(action, state);
-    if (action.type === 'RAISE_ROUND' && state) armFundingRoundReviewAsk(state);
+    if (action.type === 'ACCEPT_FUNDING_OFFER' && state) armFundingRoundReviewAsk(state);
     dispatch(action);
   };
 

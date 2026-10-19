@@ -16,7 +16,6 @@ import {
   BOOM_START_WEEK_MAX,
   BOOM_START_WEEK_MIN,
   C_LEVEL_DEPARTURE_MORALE_HIT,
-  CLEAN_RAISE_TERMS_DILUTION_MULTIPLIER,
   ERA_IPO_WINDOW_OPEN,
   FOCUS_PROFILES,
   IPO_REVENUE_BAR,
@@ -66,7 +65,6 @@ import {
   nextRound,
   qualityAfterTick,
   revenueFor,
-  roundTermsFor,
   runwayWeeks,
   shareShiftFor,
   timedMultiplierFor,
@@ -79,6 +77,7 @@ import {
 } from './balance';
 import { buildDigestEntries, customerFlowDigestEntry, eraTransitionEntry, isNotableWeek } from './digest';
 import { CLEAN_RAISE_TERMS_FLAG } from './events/standup';
+import { ROUND_LABEL, acceptedDilutionFor, dealFundingOffers, investorById } from './investors';
 import { createRng, nextFloat, nextInt } from './rng';
 import {
   applyChurnDefectionToRivals,
@@ -103,20 +102,12 @@ import {
   RngState,
   ROLES,
   Role,
-  RoundType,
   Trend,
 } from './types';
 import { NewsEntry } from './events/types';
 
 /** No more cards to draw from the current deck; stop retrying every tick. */
 const NO_MORE_EVENTS = Number.MAX_SAFE_INTEGER;
-
-/** Flavor label for the raise news entry. */
-const ROUND_LABEL: Record<RoundType, string> = {
-  seed: 'Seed',
-  seriesA: 'Series A',
-  seriesB: 'Series B',
-};
 
 /** News copy for a `SET_FOCUS` switch. */
 const FOCUS_SWITCH_NEWS: Record<FocusId, { title: string; flavor: string }> = {
@@ -174,7 +165,7 @@ export function newGame(
   );
   rng = rngAfterReckoning;
 
-  return {
+  const fresh: GameState = {
     createdWithSeed: seed,
     companyName,
     companyLogo: logo,
@@ -216,6 +207,7 @@ export function newGame(
     gameOver: null,
     finalScore: null,
   };
+  return { ...fresh, fundingOffers: dealFundingOffers(fresh) };
 }
 
 /**
@@ -239,7 +231,12 @@ export function normalizeSave(saved: GameState): GameState {
     };
     cLevels[role] = { hired: slot.hired ?? null, offer: slot.offer ?? null };
   }
-  return { ...saved, cLevels, rollGrantsEarned: saved.rollGrantsEarned ?? 0 };
+  const normalized: GameState = { ...saved, cLevels, rollGrantsEarned: saved.rollGrantsEarned ?? 0 };
+  // Saves from before investor offers: deal the table now, so a run that's
+  // already off cooldown sees term sheets the moment it loads.
+  return saved.fundingOffers === undefined
+    ? { ...normalized, fundingOffers: dealFundingOffers(normalized) }
+    : normalized;
 }
 
 /**
@@ -386,11 +383,12 @@ export function tick(state: GameState): GameState {
   advanced = drawEventIfDue(advanced);
 
   const gameOver = checkGameOver(advanced);
-  return {
+  const ended: GameState = {
     ...advanced,
     gameOver,
     finalScore: gameOver ? scoreFor(gameOver, advanced.founderEquity, valuation) : null,
   };
+  return { ...ended, fundingOffers: dealFundingOffers(ended) };
 }
 
 /** The current bottleneck verdict (§1.5) for a live `GameState`, from its current stock values. */
@@ -735,37 +733,58 @@ export function reduce(state: GameState, action: GameAction): GameState {
         cLevels: { ...state.cLevels, [action.role]: { hired: null, offer: null } },
       };
     }
-    case 'RAISE_ROUND': {
+    case 'ACCEPT_FUNDING_OFFER': {
+      // Never draws a card: the store's review-ask arming reads `pendingEvent`
+      // off the pre-action state and relies on that (see game-store.tsx).
+      if (state.gameOver) return state;
+      const offer = (state.fundingOffers ?? []).find((o) => o.id === action.offerId);
+      if (!offer) return state;
       const round = nextRound(state.roundsRaised);
-      if (!round) return state; // seed/A/B already raised
+      if (offer.round !== round) return state; // stale: that round already closed
       if (!canRaiseRound(state.week, state.lastRoundRaisedWeek)) return state; // still on cooldown
+      if (offer.expiresWeek < state.week) return state;
 
-      const { valuation, runway: runwayLeft } = weeklyStatsFor(state);
-      const hasCleanTerms = state.storyFlags.includes(CLEAN_RAISE_TERMS_FLAG);
-      const cfoDilutionMultiplier =
-        cLevelPerkMultiplierFor(state.cLevels, 'cfo', 'cfo-roundTerms') *
-        (hasCleanTerms ? CLEAN_RAISE_TERMS_DILUTION_MULTIPLIER : 1);
-      const terms = roundTermsFor(round, valuation, state.hype, runwayLeft, state.era, cfoDilutionMultiplier);
+      const investor = investorById(offer.investorId);
+      const dilution = acceptedDilutionFor(state, offer);
+      const spendsCleanTerms = offer.dilution > 0 && state.storyFlags.includes(CLEAN_RAISE_TERMS_FLAG);
+      const strings = investor?.strings;
+      const withStrings = applyEventEffects(state, {
+        deltas: [
+          ...(strings?.hype ? [{ stat: 'hype' as const, amount: strings.hype }] : []),
+          ...(strings?.morale ? [{ stat: 'morale' as const, amount: strings.morale }] : []),
+        ],
+        setsFlag: strings?.flag,
+      });
+      const name = investor?.name ?? 'an investor';
 
       return {
-        ...state,
-        cash: state.cash + terms.amount,
-        founderEquity: applyDilution(state.founderEquity, terms.dilution),
+        ...withStrings,
+        cash: withStrings.cash + offer.amount,
+        founderEquity: applyDilution(state.founderEquity, dilution),
         roundsRaised: state.roundsRaised + 1,
-        stage: STAGE_AFTER_ROUND[round],
+        stage: STAGE_AFTER_ROUND[offer.round],
         lastRoundRaisedWeek: state.week,
-        storyFlags: hasCleanTerms
-          ? state.storyFlags.filter((flag) => flag !== CLEAN_RAISE_TERMS_FLAG)
-          : state.storyFlags,
+        fundingOffers: [],
+        storyFlags: spendsCleanTerms
+          ? withStrings.storyFlags.filter((flag) => flag !== CLEAN_RAISE_TERMS_FLAG)
+          : withStrings.storyFlags,
         newsLog: [
           {
             week: state.week,
-            title: `Raised ${ROUND_LABEL[round]}${terms.isBridge ? ' (bridge)' : ''}`,
-            flavor: `$${Math.round(terms.amount).toLocaleString()} for ${Math.round(terms.dilution * 100)}% of the company.`,
+            title: `Raised ${ROUND_LABEL[offer.round]}${offer.isBridge ? ' (bridge)' : ''} from ${name}`,
+            flavor:
+              dilution > 0
+                ? `$${Math.round(offer.amount).toLocaleString()} for ${(dilution * 100).toFixed(1).replace(/\.0$/, '')}% of the company.`
+                : `$${Math.round(offer.amount).toLocaleString()}, and you keep every share.`,
           },
           ...state.newsLog,
         ],
       };
+    }
+    case 'DECLINE_FUNDING_OFFER': {
+      const offers = state.fundingOffers ?? [];
+      if (!offers.some((o) => o.id === action.offerId)) return state;
+      return { ...state, fundingOffers: offers.filter((o) => o.id !== action.offerId) };
     }
     case 'GO_PUBLIC': {
       if (state.gameOver || state.pendingEvent) return state;
@@ -817,7 +836,7 @@ export function reduce(state: GameState, action: GameAction): GameState {
       // (otherwise the next tick immediately re-triggers `checkGameOver`), and
       // clear `gameOver`/`finalScore`. Cash is a fixed grant (`REVIVE_CASH`),
       // never the random `reason` flavor, which only annotates the news log.
-      return {
+      const revived: GameState = {
         ...state,
         cash: Math.max(state.cash, REVIVE_CASH),
         weeksInTheRed: 0,
@@ -828,6 +847,8 @@ export function reduce(state: GameState, action: GameAction): GameState {
           ...state.newsLog,
         ],
       };
+      // The bankrupt tick cleared the table; a revived run gets term sheets back at once.
+      return { ...revived, fundingOffers: dealFundingOffers(revived) };
     }
     case 'SET_FOCUS': {
       if (action.focus === state.focus) return state; // no-op: don't reset the transition drag on a repeat set

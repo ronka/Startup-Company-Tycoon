@@ -140,11 +140,11 @@ describe('actionNowFor', () => {
     expect(actionNowFor({ ...healthy(), gameOver: 'bankruptcy', finalScore: 0 })).toBeNull();
   });
 
-  it('points at the Money tab when a raise is available', () => {
+  it('points at the Money tab when a term sheet is on the table', () => {
     const action = actionNowFor(healthy());
     expect(action?.kind).toBe('raise');
     expect(action?.href).toBe('/money');
-    expect(action?.line).toBe('Investors are ready to talk.');
+    expect(action?.line).toBe('A term sheet is waiting on the table.');
   });
 
   it('mentions thin runway when the raise is also the way out', () => {

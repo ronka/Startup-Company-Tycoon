@@ -132,8 +132,9 @@ function simulate(seed: number, floor = 26, headsPerWeek = 2, caps = { devs: 99,
     }
 
     // Money first: raise before the runway gets scary, the way a founder does.
-    if (weeklyStatsFor(state).runway < 18 && state.roundsRaised < 3) {
-      state = reduce(state, { type: 'RAISE_ROUND' });
+    const offer = state.fundingOffers?.[0];
+    if (weeklyStatsFor(state).runway < 18 && state.roundsRaised < 3 && offer) {
+      state = reduce(state, { type: 'ACCEPT_FUNDING_OFFER', offerId: offer.id });
     }
 
     if (isIpoEligible(state.stage, state.ipoWindowOpen, state.weeksRevenueAboveIpoBar)) {

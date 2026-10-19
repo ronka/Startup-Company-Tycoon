@@ -7,9 +7,9 @@
  * the same way as the rest of `src/state/`'s non-React logic.
  */
 
-import { canRaiseRound } from '@/game/balance';
+import { canRaiseRound, hasRoundsAvailable } from '@/game/balance';
 import { cliffhangerCardFor } from '@/game/engine';
-import { ROUND_ORDER, type GameState } from '@/game/types';
+import { type GameState } from '@/game/types';
 import { isUnlocked } from '@/game/unlocks';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 
@@ -105,13 +105,17 @@ export interface ActionNow {
 }
 
 /**
- * Whether the next funding round can be taken right now — the same gate the
- * Money tab uses. A guided run's locked Money tab counts as "not available",
+ * Whether a term sheet is on the table right now — the same thing the Money
+ * tab's offers card shows. A guided run's locked Money tab counts as "not available",
  * so nothing (tab dot, 💡 tip, push) advertises a door that's still shut.
  */
 export function raiseAvailable(state: GameState | null): boolean {
   if (!state || state.gameOver || !isUnlocked(state, 'money')) return false;
-  return state.roundsRaised < ROUND_ORDER.length && canRaiseRound(state.week, state.lastRoundRaisedWeek);
+  return (
+    (state.fundingOffers?.length ?? 0) > 0 &&
+    hasRoundsAvailable(state.roundsRaised) &&
+    canRaiseRound(state.week, state.lastRoundRaisedWeek)
+  );
 }
 
 /**
@@ -129,7 +133,7 @@ export function actionNowFor(state: GameState | null): ActionNow | null {
   const thin = Number.isFinite(runway) && runway <= AGENDA_RUNWAY_WEEKS;
   return {
     kind: 'raise',
-    line: thin ? "Runway's thin, but investors are ready to talk." : 'Investors are ready to talk.',
+    line: thin ? "Runway's thin, but there's a term sheet on the table." : 'A term sheet is waiting on the table.',
     href: '/money',
   };
 }

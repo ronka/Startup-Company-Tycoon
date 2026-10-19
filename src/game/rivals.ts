@@ -35,10 +35,16 @@ export const RIVAL_JITTER_MIN = -50;
 export const RIVAL_JITTER_MAX = 100;
 /** Extra growth multiplier rivals gain per round the player has raised — funding draws competition. */
 export const RIVAL_GROWTH_PER_ROUND_RAISED = 0.3;
+/**
+ * Only the first few rounds wake rivals up. Late-stage rounds (Series C–G)
+ * don't keep compounding their growth, or a run that raises all eight would
+ * face rivals growing 3x faster than one that stopped at B.
+ */
+export const RIVAL_GROWTH_ROUNDS_CAP = 3;
 
 /** Rivals accelerate as the player raises rounds, and further still during the Boom. */
 export function rivalGrowthMultiplier(roundsRaised: number, era: Era = 'scrappy'): number {
-  return (1 + roundsRaised * RIVAL_GROWTH_PER_ROUND_RAISED) * ERA_RIVAL_GROWTH_MULTIPLIER[era];
+  return (1 + Math.min(roundsRaised, RIVAL_GROWTH_ROUNDS_CAP) * RIVAL_GROWTH_PER_ROUND_RAISED) * ERA_RIVAL_GROWTH_MULTIPLIER[era];
 }
 
 /** Two named rivals with distinct names and distinct focuses, drawn deterministically from the run's RNG. */

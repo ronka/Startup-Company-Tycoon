@@ -1,7 +1,27 @@
+import { INVESTOR_FLAGS } from '../investor-flags';
 import { EventCard } from './types';
 
 /** The Reckoning-era timeline deck: cheap capital dries up, and weak players get culled. */
 export const RECKONING_DECK: EventCard[] = [
+  {
+    id: 'reckoning-softbanc-wants-growth',
+    era: 'reckoning',
+    kind: 'decision',
+    title: 'SoftBanc Wants Its Growth',
+    flavor: 'The Vision Fund that wired you a fortune in the Boom now has a new slide: "Path to Profitability." It is the only slide.',
+    teaser: 'Your biggest investor has a new favourite word, and it is not "growth".',
+    requiresFlag: INVESTOR_FLAGS.softbanc,
+    choices: [
+      {
+        label: 'Cut perks and hit their numbers',
+        effects: { deltas: [{ stat: 'morale', amount: -8 }, { stat: 'cash', amount: 50_000 }] },
+      },
+      {
+        label: 'Push back and keep spending',
+        effects: { deltas: [{ stat: 'hype', amount: -0.08 }] },
+      },
+    ],
+  },
   {
     id: 'reckoning-down-round-rumors',
     era: 'reckoning',

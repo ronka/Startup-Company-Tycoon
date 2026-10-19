@@ -86,13 +86,16 @@ describe('grantRoll effect (golden-tier reward)', () => {
 });
 
 describe('clean raise terms flag (rare-tier reward)', () => {
-  it('is set by setsFlag and consumed by the next RAISE_ROUND, discounting dilution', () => {
+  it('is set by setsFlag and consumed by the next accepted offer, discounting dilution', () => {
     const s0 = newGame('Acme', 3);
     const withFlag = applyEventEffects(s0, { setsFlag: CLEAN_RAISE_TERMS_FLAG });
     expect(withFlag.storyFlags).toContain(CLEAN_RAISE_TERMS_FLAG);
 
-    const withoutFlag = reduce(s0, { type: 'RAISE_ROUND' });
-    const withFlagRaised = reduce(withFlag, { type: 'RAISE_ROUND' });
+    // Any offer that actually costs equity: a 0% offer leaves the flag unspent.
+    const offer = (s0.fundingOffers ?? []).find((o) => o.dilution > 0)!;
+    expect(offer).toBeDefined();
+    const withoutFlag = reduce(s0, { type: 'ACCEPT_FUNDING_OFFER', offerId: offer.id });
+    const withFlagRaised = reduce(withFlag, { type: 'ACCEPT_FUNDING_OFFER', offerId: offer.id });
 
     const baseDilutedEquity = withoutFlag.founderEquity;
     const discountedDilutedEquity = withFlagRaised.founderEquity;

@@ -2,80 +2,80 @@
 
 exports[`sim balance snapshot > aggressive 1`] = `
 [
-  "Summary: strategy=aggressive seed=100 outcome=bankruptcy week=10 era=scrappy score=$0 peakRevenue=$4.7K trace=7adaa806dfbb5603 state=52ce68f6849efd12",
-  "Summary: strategy=aggressive seed=777 outcome=bankruptcy week=10 era=scrappy score=$0 peakRevenue=$4.8K trace=e5ee726d92d003d6 state=2e7ba19a0c031969",
-  "Summary: strategy=aggressive seed=12345 outcome=bankruptcy week=10 era=scrappy score=$0 peakRevenue=$4.6K trace=83b9e04f8cb23cfa state=807cf9f939cbe7ad",
+  "Summary: strategy=aggressive seed=100 outcome=bankruptcy week=9 era=scrappy score=$0 peakRevenue=$4.5K trace=85e5b1874366e2dd state=4f939a339791e323",
+  "Summary: strategy=aggressive seed=777 outcome=bankruptcy week=9 era=scrappy score=$0 peakRevenue=$4.6K trace=be7c5a57b884ff4e state=0323039bd1dc6dd2",
+  "Summary: strategy=aggressive seed=12345 outcome=bankruptcy week=10 era=scrappy score=$0 peakRevenue=$4.7K trace=220a9411a431b193 state=043f2617f40f2232",
 ]
 `;
 
 exports[`sim balance snapshot > balanced 1`] = `
 [
-  "Summary: strategy=balanced seed=100 outcome=bankruptcy week=35 era=boom score=$0 peakRevenue=$23K trace=58ce7dc2d82f7c87 state=7755279044677206",
-  "Summary: strategy=balanced seed=777 outcome=bankruptcy week=37 era=boom score=$0 peakRevenue=$19K trace=8c0300f13f0b5666 state=90648451fcf6b06b",
-  "Summary: strategy=balanced seed=12345 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$25K trace=2de9b47cf02c6314 state=c00e99bbde759cde",
+  "Summary: strategy=balanced seed=100 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$24K trace=74943fc7ba831ffb state=c693a8d172f8b7bc",
+  "Summary: strategy=balanced seed=777 outcome=bankruptcy week=45 era=boom score=$0 peakRevenue=$29K trace=1879db929c615e3a state=487443460efd690f",
+  "Summary: strategy=balanced seed=12345 outcome=bankruptcy week=46 era=boom score=$0 peakRevenue=$37K trace=739f464df7e4ec80 state=98cdcd8e91df4cd3",
 ]
 `;
 
 exports[`sim balance snapshot > complacent 1`] = `
 [
-  "Summary: strategy=complacent seed=100 outcome=bankruptcy week=35 era=boom score=$0 peakRevenue=$23K trace=00fcc38c97e094cc state=7755279044677206",
-  "Summary: strategy=complacent seed=777 outcome=bankruptcy week=37 era=boom score=$0 peakRevenue=$19K trace=ace8f81fc42a2f5e state=90648451fcf6b06b",
-  "Summary: strategy=complacent seed=12345 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$25K trace=7c4d7da85b6d1c36 state=c00e99bbde759cde",
+  "Summary: strategy=complacent seed=100 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$24K trace=aa0a5bbf807c5234 state=c693a8d172f8b7bc",
+  "Summary: strategy=complacent seed=777 outcome=bankruptcy week=45 era=boom score=$0 peakRevenue=$29K trace=c833133c9927d5bd state=487443460efd690f",
+  "Summary: strategy=complacent seed=12345 outcome=bankruptcy week=46 era=boom score=$0 peakRevenue=$37K trace=c070e675b7c42b62 state=98cdcd8e91df4cd3",
 ]
 `;
 
 exports[`sim balance snapshot > coregrinder 1`] = `
 [
-  "Summary: strategy=coregrinder seed=100 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$18K trace=a7aacdf49e7e8b3b state=faf60f1bf7d64f78",
-  "Summary: strategy=coregrinder seed=777 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$15K trace=e2fb561bd98a938e state=7bed4dfad4208416",
-  "Summary: strategy=coregrinder seed=12345 outcome=bankruptcy week=36 era=boom score=$0 peakRevenue=$19K trace=cc34fb6ad6051b18 state=85d5da70f038bd93",
+  "Summary: strategy=coregrinder seed=100 outcome=bankruptcy week=35 era=boom score=$0 peakRevenue=$18K trace=43ecd2dc1b84199d state=989e25d88f580441",
+  "Summary: strategy=coregrinder seed=777 outcome=bankruptcy week=40 era=boom score=$0 peakRevenue=$22K trace=6e689c202d879859 state=4dd8ada62dfb370e",
+  "Summary: strategy=coregrinder seed=12345 outcome=bankruptcy week=39 era=boom score=$0 peakRevenue=$27K trace=ecbf4408f3eedbc8 state=6f020bcbdd4331e6",
 ]
 `;
 
 exports[`sim balance snapshot > devheavy 1`] = `
 [
-  "Summary: strategy=devheavy seed=100 outcome=bankruptcy week=34 era=boom score=$0 peakRevenue=$1.9K trace=6bb84f848ec27078 state=198b7518cf1ff760",
-  "Summary: strategy=devheavy seed=777 outcome=bankruptcy week=34 era=boom score=$0 peakRevenue=$1.9K trace=49d5496da732f12b state=612a57910ffb1a18",
-  "Summary: strategy=devheavy seed=12345 outcome=bankruptcy week=34 era=boom score=$0 peakRevenue=$1.9K trace=2e3d807f1bbba3e3 state=d58ee8ee6ef1a9f8",
+  "Summary: strategy=devheavy seed=100 outcome=bankruptcy week=37 era=boom score=$0 peakRevenue=$1.9K trace=545b41f88b5d42a1 state=0a900d03c5483567",
+  "Summary: strategy=devheavy seed=777 outcome=bankruptcy week=35 era=boom score=$0 peakRevenue=$1.9K trace=ef0f05b0bb3e7a57 state=2e2adfca379ff5d8",
+  "Summary: strategy=devheavy seed=12345 outcome=bankruptcy week=37 era=boom score=$0 peakRevenue=$1.9K trace=b208f1d1b57f5b57 state=7fa135b4b697b6b9",
 ]
 `;
 
 exports[`sim balance snapshot > grower 1`] = `
 [
-  "Summary: strategy=grower seed=100 outcome=bankruptcy week=25 era=scrappy score=$0 peakRevenue=$29K trace=3ddfb040c3d0ce7a state=f3b1eca95522359b",
-  "Summary: strategy=grower seed=777 outcome=bankruptcy week=24 era=scrappy score=$0 peakRevenue=$29K trace=3fde4d35c2e46f5c state=93c3a5f77336acff",
-  "Summary: strategy=grower seed=12345 outcome=bankruptcy week=26 era=scrappy score=$0 peakRevenue=$29K trace=953018ea1746b03c state=68c6ced540039b2f",
+  "Summary: strategy=grower seed=100 outcome=bankruptcy week=26 era=scrappy score=$0 peakRevenue=$30K trace=9bdf4504b8378d4a state=d8c8fae38618a23d",
+  "Summary: strategy=grower seed=777 outcome=bankruptcy week=26 era=scrappy score=$0 peakRevenue=$30K trace=43a6a6b7a7115537 state=6bdf17ecff4817f0",
+  "Summary: strategy=grower seed=12345 outcome=bankruptcy week=29 era=scrappy score=$0 peakRevenue=$43K trace=f39bf1a05242df49 state=1e5b743cf77b7198",
 ]
 `;
 
 exports[`sim balance snapshot > hardware 1`] = `
 [
-  "Summary: strategy=hardware seed=100 outcome=bankruptcy week=107 era=reckoning score=$0 peakRevenue=$75K trace=fe8356e8c626e5a6 state=9f34fddf12cdab3a",
-  "Summary: strategy=hardware seed=777 outcome=bankruptcy week=70 era=reckoning score=$0 peakRevenue=$80K trace=ea50362cf42ac37c state=4323be2f36184430",
-  "Summary: strategy=hardware seed=12345 outcome=bankruptcy week=90 era=reckoning score=$0 peakRevenue=$87K trace=a62645a637632cbb state=8f49ca06384d0d28",
+  "Summary: strategy=hardware seed=100 outcome=bankruptcy week=325 era=reckoning score=$0 peakRevenue=$150K trace=2f52bfea9f53bd0e state=b47518eff55735dd",
+  "Summary: strategy=hardware seed=777 outcome=bankruptcy week=143 era=reckoning score=$0 peakRevenue=$115K trace=d0a6580d7364b8c5 state=c49515818bfba0d8",
+  "Summary: strategy=hardware seed=12345 outcome=bankruptcy week=418 era=reckoning score=$0 peakRevenue=$183K trace=aec246b7e98bc870 state=e439eabc36833f33",
 ]
 `;
 
 exports[`sim balance snapshot > hypechaser 1`] = `
 [
-  "Summary: strategy=hypechaser seed=100 outcome=bankruptcy week=32 era=boom score=$0 peakRevenue=$13K trace=9a97861ea38d6f5b state=1c442dfee5833c93",
-  "Summary: strategy=hypechaser seed=777 outcome=bankruptcy week=34 era=boom score=$0 peakRevenue=$11K trace=926e560fa1b48c0c state=c577bd90b2a2b6f0",
-  "Summary: strategy=hypechaser seed=12345 outcome=bankruptcy week=34 era=boom score=$0 peakRevenue=$11K trace=4217b9dc0b5c6187 state=f9476f0e58d6ed22",
+  "Summary: strategy=hypechaser seed=100 outcome=bankruptcy week=35 era=boom score=$0 peakRevenue=$15K trace=5f0f706388edae8f state=238dfb13f810c955",
+  "Summary: strategy=hypechaser seed=777 outcome=bankruptcy week=38 era=boom score=$0 peakRevenue=$15K trace=42f482fcbe553928 state=6927f669372cf0af",
+  "Summary: strategy=hypechaser seed=12345 outcome=bankruptcy week=38 era=boom score=$0 peakRevenue=$17K trace=f6c4d55046d54308 state=f21ac6d77597c6a5",
 ]
 `;
 
 exports[`sim balance snapshot > passive 1`] = `
 [
-  "Summary: strategy=passive seed=100 outcome=bankruptcy week=49 era=boom score=$0 peakRevenue=$1.4K trace=865826a41aa2f58a state=6cc66b7e7696084e",
-  "Summary: strategy=passive seed=777 outcome=bankruptcy week=50 era=boom score=$0 peakRevenue=$1.5K trace=8873f9638e3176e9 state=5b56d77aa057d39e",
-  "Summary: strategy=passive seed=12345 outcome=bankruptcy week=47 era=boom score=$0 peakRevenue=$1.5K trace=f701ad644c63d8bd state=76207a61cfdf2a2a",
+  "Summary: strategy=passive seed=100 outcome=bankruptcy week=49 era=boom score=$0 peakRevenue=$1.4K trace=865826a41aa2f58a state=19524291d774a7e8",
+  "Summary: strategy=passive seed=777 outcome=bankruptcy week=50 era=boom score=$0 peakRevenue=$1.5K trace=8873f9638e3176e9 state=d9eda696648dd33e",
+  "Summary: strategy=passive seed=12345 outcome=bankruptcy week=47 era=boom score=$0 peakRevenue=$1.5K trace=f701ad644c63d8bd state=ccba22e65d4a9a2c",
 ]
 `;
 
 exports[`sim balance snapshot > salesheavy 1`] = `
 [
-  "Summary: strategy=salesheavy seed=100 outcome=bankruptcy week=8 era=scrappy score=$0 peakRevenue=$2.9K trace=dc942414c9c36508 state=d5a9efc55dce9dfb",
-  "Summary: strategy=salesheavy seed=777 outcome=bankruptcy week=8 era=scrappy score=$0 peakRevenue=$1.3K trace=f80a1c5ebc482f4c state=60c6b210b5d0e032",
-  "Summary: strategy=salesheavy seed=12345 outcome=bankruptcy week=8 era=scrappy score=$0 peakRevenue=$2.8K trace=de8f8093cd6fc156 state=2cbd3962a5dac565",
+  "Summary: strategy=salesheavy seed=100 outcome=bankruptcy week=8 era=scrappy score=$0 peakRevenue=$2.9K trace=15be5c6479107f63 state=7031ae8b2b0b5ad1",
+  "Summary: strategy=salesheavy seed=777 outcome=bankruptcy week=7 era=scrappy score=$0 peakRevenue=$1.2K trace=d0cf4651bcffe1f4 state=644dcc93a4dd8ea0",
+  "Summary: strategy=salesheavy seed=12345 outcome=bankruptcy week=8 era=scrappy score=$0 peakRevenue=$2.8K trace=757145e99757a27a state=096276f1963de7d6",
 ]
 `;

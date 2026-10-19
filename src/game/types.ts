@@ -167,13 +167,41 @@ export interface Trend {
   phaseDuration: number;
 }
 
-/** The three funding rounds a run can raise, in order. */
-export const ROUND_ORDER = ['seed', 'seriesA', 'seriesB'] as const;
+/** The funding rounds a run can raise, in order: Seed, then Series A through G. */
+export const ROUND_ORDER = [
+  'seed',
+  'seriesA',
+  'seriesB',
+  'seriesC',
+  'seriesD',
+  'seriesE',
+  'seriesF',
+  'seriesG',
+] as const;
 export type RoundType = (typeof ROUND_ORDER)[number];
 
-/** Company stage; raising a round advances it (seriesB raises straight to growth). */
+/** Company stage; raising a round advances it (Series B and every later round land on growth). */
 export const STAGE_ORDER = ['garage', 'seed', 'seriesA', 'growth'] as const;
 export type Stage = (typeof STAGE_ORDER)[number];
+
+/**
+ * A term sheet on the table for the round currently open. Amount and base
+ * dilution are locked the week it arrives (an exploding term sheet); the CFO
+ * perk and the clean-terms reward are applied on top when it's accepted.
+ * The investor's name, pitch and strings live in `investors.ts`, keyed by
+ * `investorId`, so a save only carries the numbers.
+ */
+export interface FundingOffer {
+  id: string;
+  investorId: string;
+  round: RoundType;
+  amount: number;
+  dilution: number;
+  isBridge: boolean;
+  arrivedWeek: number;
+  /** Last week the offer can be taken; it's gone on the tick after. */
+  expiresWeek: number;
+}
 
 /** The entire serializable game model. */
 export interface GameState {
@@ -257,10 +285,17 @@ export interface GameState {
   /** Founder's remaining ownership, 0–1. Diluted by each round raised. */
   founderEquity: number;
   stage: Stage;
-  /** How many of the 3 rounds (seed/A/B) have been raised so far. */
+  /** How many rounds (Seed, then Series A–G) have been raised so far. */
   roundsRaised: number;
   /** Week the last round closed; null before any round is raised. Gates the raise cooldown. */
   lastRoundRaisedWeek: number | null;
+  /**
+   * Term sheets on the table for the open round, dealt on tick (see
+   * `dealFundingOffers` in investors.ts). Optional because saves from before
+   * investor offers don't have it: undefined reads as none, and the next
+   * hydrate or tick deals the table.
+   */
+  fundingOffers?: FundingOffer[];
 
   // Timeline events
   /** Set when a decision card is drawn; TICK is a no-op until it's answered. */
@@ -331,7 +366,10 @@ export type GameAction =
   | { type: 'ROLL_CANDIDATES'; role: CLevelRole }
   | { type: 'HIRE_CLEVEL'; role: CLevelRole; candidateId: string }
   | { type: 'FIRE_CLEVEL'; role: CLevelRole }
-  | { type: 'RAISE_ROUND' }
+  /** Takes one term sheet: closes the open round on its terms and withdraws every other offer. */
+  | { type: 'ACCEPT_FUNDING_OFFER'; offerId: string }
+  /** Passes on one term sheet; the rest stay on the table. */
+  | { type: 'DECLINE_FUNDING_OFFER'; offerId: string }
   | { type: 'ANSWER_EVENT'; choiceIndex: number }
   /**
    * Pins the next decision card so the week wall can tease it. Dispatched by
