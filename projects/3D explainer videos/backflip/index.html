@@ -132,8 +132,12 @@
       window.__hf.buildReady["scene"] = new Promise((resolve) => (window.__sceneReady = resolve));
     </script>
 
+    <script type="importmap">
+      { "imports": { "three": "./assets/vendor/three.module.js" } }
+    </script>
     <script type="module">
-      import * as THREE from "./assets/vendor/three.module.js";
+      import * as THREE from "three";
+      import { GLTFLoader } from "./assets/vendor/addons/loaders/GLTFLoader.js";
 
       const DUR = 27.5;
       const D2R = Math.PI / 180;
@@ -298,144 +302,82 @@
       }
       bush(-2.2, -3.9, 1); bush(2.6, -3.9, 0.9); bush(-5.4, -1.5, 1.1); bush(-5.3, 3.4, 0.9);
 
-      // ---------- character rig ----------
-      const M = {
-        skin: new THREE.MeshStandardMaterial({ color: "#e7ad84", roughness: 0.55 }),
-        shirt: new THREE.MeshStandardMaterial({ color: "#e4513b", roughness: 0.7 }),
-        shorts: new THREE.MeshStandardMaterial({ color: "#2c3c6b", roughness: 0.75 }),
-        hair: new THREE.MeshStandardMaterial({ color: "#3a2416", roughness: 0.8 }),
-        shoe: new THREE.MeshStandardMaterial({ color: "#f4f4f2", roughness: 0.5 }),
-        sole: new THREE.MeshStandardMaterial({ color: "#d63b2b", roughness: 0.6 }),
-        eye: new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.25 }),
-        pupil: new THREE.MeshStandardMaterial({ color: "#1b120c", roughness: 0.2 }),
-        brow: new THREE.MeshStandardMaterial({ color: "#2a190f", roughness: 0.8 }),
-        mouth: new THREE.MeshStandardMaterial({ color: "#7a2e2a", roughness: 0.6 }),
-      };
-      function mesh(geo, mat, parent, x = 0, y = 0, z = 0) {
-        const m = new THREE.Mesh(geo, mat);
-        m.position.set(x, y, z);
-        m.castShadow = true; m.receiveShadow = true;
-        parent.add(m);
-        return m;
-      }
-      // Capsule hanging down from its group origin.
-      function limb(r, len, mat, parent) {
-        const geo = new THREE.CapsuleGeometry(r, len, 6, 14);
-        geo.translate(0, -len / 2, 0);
-        return mesh(geo, mat, parent);
-      }
+      // ---------- character: Ready Player Me avatar (Mixamo skeleton) ----------
+      const gltf = await new GLTFLoader().loadAsync("assets/models/thanh.glb");
+      const avatar = gltf.scene;
+      const B = {};
+      const morphMeshes = [];
+      avatar.traverse((o) => {
+        if (o.isBone) B[o.name] = o;
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+          o.frustumCulled = false; // skinned bounds don't follow the pose
+          if (o.morphTargetDictionary) morphMeshes.push(o);
+          for (const m of [].concat(o.material)) m.metalness = 0; // no env map: metal would render black
+        }
+      });
 
-      const HIP_H = 0.92, THIGH = 0.43, SHIN = 0.42, ANKLE_H = 0.075;
-      const UPPER = 0.27, FORE = 0.25;
+      // Rest pose (T-pose) in model space: the avatar faces +z, its left is +x.
+      avatar.updateMatrixWorld(true);
+      const REST = {};
+      for (const n in B) {
+        REST[n] = { local: B[n].quaternion.clone(), world: B[n].getWorldQuaternion(new THREE.Quaternion()) };
+      }
+      const wp = (n) => B[n].getWorldPosition(new THREE.Vector3());
+      const HIP_H = wp("Hips").y;
+      // Rest directions of the arm segments (the avatar's rest pose is not a perfect T).
+      const ARM_DIR = {}, ELBOW_AXIS = {};
+      for (const side of ["Left", "Right"]) {
+        ARM_DIR[side] = wp(side + "ForeArm").sub(wp(side + "Arm")).normalize();
+        const fore = wp(side + "Hand").sub(wp(side + "ForeArm")).normalize();
+        ELBOW_AXIS[side] = fore.clone().cross(new THREE.Vector3(0, 0, 1)).normalize(); // flexes the forearm toward +z
+      }
+      const ANKLE_H = wp("LeftFoot").y;
+      const TOE_H = wp("LeftToeBase").y;
 
-      const root = new THREE.Group();
+      const root = new THREE.Group(); // pivot at the hips
       root.rotation.order = "YXZ";
       scene.add(root);
-      // pelvis
-      const pelvis = mesh(new THREE.CapsuleGeometry(0.135, 0.16, 6, 16), M.shorts, root, 0, 0.0, 0);
-      pelvis.rotation.x = Math.PI / 2; pelvis.scale.set(0.95, 1, 1);
+      const holder = new THREE.Group();
+      holder.rotation.y = Math.PI / 2; // the film's character faces +x
+      avatar.position.y = -HIP_H;
+      holder.add(avatar);
+      root.add(holder);
 
-      const spine = new THREE.Group();
-      spine.position.y = 0.05;
-      root.add(spine);
-      const torsoGeo = new THREE.CapsuleGeometry(0.17, 0.27, 8, 18);
-      torsoGeo.translate(0, 0.27, 0);
-      const torso = mesh(torsoGeo, M.shirt, spine);
-      torso.scale.set(0.82, 1, 1.18);
-
-      const neck = new THREE.Group();
-      neck.position.y = 0.52;
-      spine.add(neck);
-      limb(0.05, 0.06, M.skin, neck).rotation.z = Math.PI; // neck stub pointing up
-      const head = new THREE.Group();
-      head.position.y = 0.19;
-      head.scale.setScalar(1.17);
-      neck.add(head);
-      const skull = mesh(new THREE.SphereGeometry(0.135, 32, 24), M.skin, head);
-      skull.scale.set(0.96, 1.06, 0.9);
-      const hairCap = mesh(new THREE.SphereGeometry(0.145, 32, 16, 0, TAU, 0, Math.PI * 0.52), M.hair, head, -0.012, 0.012, 0);
-      hairCap.rotation.z = 0.42; hairCap.scale.set(1, 1.05, 0.95);
-      const fringe = mesh(new THREE.SphereGeometry(0.06, 16, 10), M.hair, head, 0.085, 0.105, 0.03);
-      fringe.scale.set(1.0, 0.45, 1.5); fringe.rotation.z = -0.4;
-      for (const s of [-1, 1]) {
-        const ear = mesh(new THREE.SphereGeometry(0.03, 12, 10), M.skin, head, -0.005, 0.0, s * 0.12);
-        ear.scale.set(0.8, 1.2, 0.5);
+      // Rotate a bone by D, a rotation in model space relative to its parent's motion:
+      // q_local = q_rest * W_rest^-1 * D * W_rest, so the bone's world rotation is (parents' D) * D * W_rest.
+      const qW = new THREE.Quaternion();
+      function setBone(name, D) {
+        const r = REST[name];
+        qW.copy(r.world).invert().multiply(D).multiply(r.world);
+        B[name].quaternion.copy(r.local).multiply(qW);
       }
-      mesh(new THREE.SphereGeometry(0.022, 12, 10), M.skin, head, 0.13, -0.015, 0).scale.set(1, 0.9, 0.85);
-      const eyes = [], brows = [];
-      for (const s of [-1, 1]) {
-        const eg = new THREE.Group();
-        eg.position.set(0.098, 0.022, s * 0.047);
-        head.add(eg);
-        const ew = mesh(new THREE.SphereGeometry(0.03, 16, 12), M.eye, eg);
-        ew.scale.set(0.7, 1, 1);
-        mesh(new THREE.SphereGeometry(0.016, 12, 10), M.pupil, eg, 0.018, 0, 0);
-        eyes.push(eg);
-        const br = mesh(new THREE.BoxGeometry(0.012, 0.012, 0.045), M.brow, head, 0.118, 0.068, s * 0.048);
-        br.rotation.x = s * 0.12;
-        brows.push(br);
+      const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1);
+      const q = (axis, a) => new THREE.Quaternion().setFromAxisAngle(axis, a);
+      function morph(name, v) {
+        for (const m of morphMeshes) {
+          const k = m.morphTargetDictionary[name];
+          if (k !== undefined) m.morphTargetInfluences[k] = v;
+        }
       }
-      const mouthGeo = new THREE.TorusGeometry(0.026, 0.0065, 8, 16, Math.PI);
-      const mouth = mesh(mouthGeo, M.mouth, head, 0.118, -0.05, 0);
-      mouth.rotation.y = Math.PI / 2; mouth.rotation.x = Math.PI; // smile
-
-      function makeArm(side) {
-        const sh = new THREE.Group();
-        sh.position.set(0, 0.46, side * 0.205);
-        sh.rotation.order = "XYZ";
-        spine.add(sh);
-        mesh(new THREE.SphereGeometry(0.07, 16, 12), M.shirt, sh);
-        const sleeve = limb(0.07, 0.06, M.shirt, sh);
-        sleeve.scale.set(1, 1, 1);
-        limb(0.06, UPPER - 0.04, M.skin, sh);
-        const el = new THREE.Group();
-        el.position.y = -UPPER;
-        sh.add(el);
-        limb(0.054, FORE, M.skin, el);
-        const hand = mesh(new THREE.SphereGeometry(0.06, 16, 12), M.skin, el, 0.01, -FORE - 0.05, 0);
-        hand.scale.set(0.8, 1.15, 0.6);
-        return { sh, el };
-      }
-      function makeLeg(side) {
-        const hip = new THREE.Group();
-        hip.position.set(0, -0.02, side * 0.088);
-        hip.rotation.order = "XYZ";
-        root.add(hip);
-        limb(0.095, 0.17, M.shorts, hip).scale.set(1.08, 1, 1.08);
-        limb(0.08, THIGH - 0.06, M.skin, hip);
-        const knee = new THREE.Group();
-        knee.position.y = -THIGH;
-        hip.add(knee);
-        limb(0.068, SHIN, M.skin, knee);
-        const sock = limb(0.07, 0.05, M.shoe, knee);
-        sock.position.y = -SHIN + 0.08;
-        const ankle = new THREE.Group();
-        ankle.position.y = -SHIN;
-        knee.add(ankle);
-        const shoe = mesh(new THREE.CapsuleGeometry(0.058, 0.15, 6, 12), M.shoe, ankle, 0.05, -0.035, 0);
-        shoe.rotation.z = Math.PI / 2; shoe.scale.set(0.85, 1, 1.05);
-        const sole = mesh(new THREE.BoxGeometry(0.27, 0.025, 0.11), M.sole, ankle, 0.05, -0.075, 0);
-        return { hip, knee, ankle, sole };
-      }
-      const arms = { L: makeArm(-1), R: makeArm(1) };
-      const legs = { L: makeLeg(-1), R: makeLeg(1) };
 
       // ---------- poses ----------
-      const BASE = { hip: 0, knee: 0, ank: 0, spine: 0, neck: 0, sh: 4, el: 12, abd: 0.1, leg: 0.045, turn: 0, yaw: 0, brow: 0 };
+      const BASE = { hip: 0, knee: 0, ank: 0, spine: 0, neck: 0, sh: 4, el: 12, abd: 0.1, leg: 0.045, turn: 0, yaw: 0, brow: 0, smile: 0.35, jaw: 0 };
       const P = {};
       P.stand = { ...BASE };
       P.wide = { ...BASE, leg: 0.11 };
       P.back = { ...P.wide, hip: 10, knee: -14, ank: 4, spine: -10, neck: 6, sh: -58, el: 6 };
-      P.squat = { ...P.wide, hip: 80, knee: -108, ank: 28, spine: -34, neck: 30, sh: -64, el: 8 };
-      P.extend = { ...P.wide, hip: -6, knee: 0, ank: -40, spine: 6, neck: 14, sh: 158, el: 6, abd: 0.14 };
-      P.rise = { ...P.wide, hip: -4, knee: -10, ank: -36, spine: 10, neck: 24, sh: 176, el: 2, abd: 0.2 };
-      P.tuck = { ...P.wide, hip: 128, knee: -142, ank: -25, spine: -18, neck: 20, sh: 22, el: 62, abd: 0.2, leg: 0.11 };
+      P.squat = { ...P.wide, smile: 0.1, hip: 80, knee: -108, ank: 28, spine: -34, neck: 30, sh: -64, el: 8 };
+      P.extend = { ...P.wide, smile: 0, jaw: 0.25, hip: -6, knee: 0, ank: -40, spine: 6, neck: 14, sh: 158, el: 6, abd: 0.14 };
+      P.rise = { ...P.wide, smile: 0, jaw: 0.3, hip: -4, knee: -10, ank: -36, spine: 10, neck: 24, sh: 176, el: 2, abd: 0.2 };
+      P.tuck = { ...P.wide, smile: 0, jaw: 0.1, hip: 128, knee: -142, ank: -25, spine: -18, neck: 20, sh: 22, el: 62, abd: 0.2, leg: 0.11 };
       P.open = { ...P.wide, hip: 45, knee: -55, ank: -6, spine: 2, neck: 38, sh: 108, el: 10, abd: 0.28, leg: 0.1 };
       P.touch = { ...P.open, hip: 28, knee: -34, ank: 8, neck: 22 };
       P.land = { ...P.wide, hip: 74, knee: -100, ank: 26, spine: -30, neck: 26, sh: 86, el: 12, abd: 0.26 };
-      P.proud = { ...P.wide, sh: 166, el: 10, abd: 0.48, neck: 8, brow: 0.6 };
-      P.look = { ...P.wide, sh: 10, el: 25, yaw: 0.85, turn: 0.35, neck: -10, brow: 1 };
-      P.shrug = { ...P.wide, sh: 16, el: 96, abd: 0.42, yaw: 0.85, turn: -0.25, neck: 4, spine: 3, brow: 1 };
+      P.proud = { ...P.wide, sh: 166, el: 10, abd: 0.48, neck: 8, brow: 0.6, smile: 1 };
+      P.look = { ...P.wide, sh: 10, el: 25, yaw: 0.85, turn: 0.35, neck: -10, brow: 1, smile: 0 };
+      P.shrug = { ...P.wide, sh: 16, el: 96, abd: 0.42, yaw: 0.85, turn: -0.25, neck: 4, spine: 3, brow: 1, smile: 0.5 };
 
       const POSE_KEYS = [
         [0, "stand"], [3.7, "stand"], [4.25, "wide"], [6.25, "wide"],
@@ -457,41 +399,49 @@
         return out;
       }
 
-      // Idle life: breathing and a seeded wobble so the body never freezes.
+      // Idle life: breathing, blinks, and the right side trailing a hair behind the left.
+      const BLINKS = [1.7, 5.1, 8.45, 21.6, 24.75, 26.6];
       function applyPose(t) {
-        const pL = poseAt(t), pR = poseAt(t - 0.035); // the right side trails a hair behind
+        const pL = poseAt(t), pR = poseAt(t - 0.035);
         const breath = Math.sin(t * 2.3) * 1.4;
-        spine.rotation.z = (pL.spine + breath * 0.6) * D2R;
-        neck.rotation.z = (pL.neck - breath * 0.4) * D2R;
-        neck.rotation.y = pL.turn;
-        for (const [side, p, s] of [["L", pL, -1], ["R", pR, 1]]) {
-          const a = arms[side], l = legs[side];
-          a.sh.rotation.set(-s * p.abd, 0, (p.sh + (side === "L" ? 2 : -2) + breath * 0.5) * D2R);
-          a.el.rotation.z = p.el * D2R;
-          l.hip.rotation.set(-s * p.leg, 0, p.hip * D2R);
-          l.knee.rotation.z = p.knee * D2R;
-          l.ankle.rotation.z = p.ank * D2R;
+        const sp = (-(pL.spine + breath * 0.6) * D2R) / 3;
+        for (const n of ["Spine", "Spine1", "Spine2"]) setBone(n, q(AX, sp));
+        const nk = -(pL.neck - breath * 0.4) * D2R;
+        setBone("Neck", q(AX, nk * 0.4));
+        setBone("Head", q(AY, pL.turn).multiply(q(AX, nk * 0.6)));
+        for (const [side, p, s] of [["Left", pL, 1], ["Right", pR, -1]]) {
+          // arm: drop from T-pose to the side (z), then swing in the sagittal plane (x)
+          const swing = -(p.sh + s * 2 + breath * 0.5) * D2R;
+          const hang = new THREE.Vector3(s * Math.sin(p.abd), -Math.cos(p.abd), 0);
+          setBone(side + "Arm", q(AX, swing).multiply(new THREE.Quaternion().setFromUnitVectors(ARM_DIR[side], hang)));
+          setBone(side + "ForeArm", q(ELBOW_AXIS[side], p.el * D2R));
+          setBone(side + "UpLeg", q(AX, -p.hip * D2R).multiply(q(AZ, s * p.leg)));
+          setBone(side + "Leg", q(AX, -p.knee * D2R));
+          setBone(side + "Foot", q(AX, -p.ank * D2R));
         }
-        for (const b of brows) b.position.y = 0.068 + pL.brow * 0.014;
-        // blinks
-        const blinks = [1.7, 5.1, 8.45, 21.6, 24.75, 26.6];
         let lid = 1;
-        for (const bt of blinks) { const d = Math.abs(t - bt); if (d < 0.08) lid = Math.min(lid, d / 0.08); }
-        for (const e of eyes) e.scale.y = Math.max(0.08, lid);
+        for (const bt of BLINKS) { const d = Math.abs(t - bt); if (d < 0.08) lid = Math.min(lid, d / 0.08); }
+        morph("eyeBlinkLeft", 1 - lid);
+        morph("eyeBlinkRight", 1 - lid);
+        morph("mouthSmile", pL.smile);
+        morph("jawOpen", pL.jaw);
+        morph("browInnerUp", pL.brow * 0.8);
         return pL;
       }
 
-      // Place the body so the lower ankle sits on the ground, feet centred on anchorX.
-      const vA = new THREE.Vector3(), vB = new THREE.Vector3();
+      // Place the body so the lower foot sits on the ground, feet centred on anchorX.
+      const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), vD = new THREE.Vector3();
       function groundSolve(t, anchorX) {
         const p = applyPose(t);
         root.position.set(0, HIP_H, 0);
         root.rotation.set(0, p.yaw, 0);
         root.updateMatrixWorld(true);
-        legs.L.sole.getWorldPosition(vA);
-        legs.R.sole.getWorldPosition(vB);
-        const minY = Math.min(vA.y, vB.y);
-        return new THREE.Vector3(anchorX - (vA.x + vB.x) / 2 + 0.05, HIP_H - minY + 0.0125, 0);
+        B.LeftFoot.getWorldPosition(vA);
+        B.RightFoot.getWorldPosition(vB);
+        B.LeftToeBase.getWorldPosition(vC);
+        B.RightToeBase.getWorldPosition(vD);
+        const minY = Math.min(vA.y - ANKLE_H, vB.y - ANKLE_H, vC.y - TOE_H, vD.y - TOE_H);
+        return new THREE.Vector3(anchorX - (vA.x + vB.x) / 2 + 0.05, HIP_H - minY, 0);
       }
 
       // Flights: slow-motion explainer flip, then the real-speed one.
@@ -613,10 +563,17 @@
         // shoulder-width bars (4.6 -> 6.0)
         const bw = ease((t - 4.6) / 0.35) * (1 - ease((t - 5.85) / 0.2));
         barFeet.visible = barShoulders.visible = bw > 0.001;
-        barFeet.scale.set(1, 1, 0.38 * bw + 0.0001);
-        barFeet.position.set(0.32, 0.03, 0);
-        barShoulders.scale.set(1, 1, 0.42 * bw + 0.0001);
-        barShoulders.position.set(0.3, HIP_H + 0.56, 0);
+        if (barFeet.visible) {
+          root.updateMatrixWorld(true);
+          B.LeftFoot.getWorldPosition(vA);
+          B.RightFoot.getWorldPosition(vB);
+          barFeet.scale.set(1, 1, (Math.abs(vA.z - vB.z) + 0.12) * bw);
+          barFeet.position.set((vA.x + vB.x) / 2 + 0.3, 0.03, (vA.z + vB.z) / 2);
+          B.LeftArm.getWorldPosition(vA);
+          B.RightArm.getWorldPosition(vB);
+          barShoulders.scale.set(1, 1, Math.abs(vA.z - vB.z) * 1.3 * bw);
+          barShoulders.position.set((vA.x + vB.x) / 2 + 0.3, (vA.y + vB.y) / 2 + 0.02, (vA.z + vB.z) / 2);
+        }
 
         // spin arrow (16.7 -> 18.4)
         const aw = ease((t - 16.75) / 0.3) * (1 - ease((t - 18.2) / 0.25));
