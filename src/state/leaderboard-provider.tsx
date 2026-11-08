@@ -22,6 +22,8 @@ import {
   initialLeaderboardPrefs,
   nextRevision,
   normalizePrefs,
+  noteFailure,
+  noteSuccess,
   optedIn,
   optedOut,
   recordDelete,
@@ -29,6 +31,7 @@ import {
   recordSend,
   shouldPromptOptIn,
   snapshotFor,
+  type FailureStreaks,
   type LeaderboardPrefs,
   type RunSnapshot,
 } from '@/state/leaderboard-sync';
@@ -83,6 +86,8 @@ export function LeaderboardProvider({ children }: { children: ReactNode }) {
   // state (a hire that didn't move the stake) from re-queueing an upload.
   const lastSentRef = useRef<Record<string, RunSnapshot>>({});
   const flushingRef = useRef(false);
+  // Open failure streaks per run, so an offline player's retries report once, not per attempt.
+  const failuresRef = useRef<FailureStreaks>({});
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tagged with the run it was fetched for, so a new run never shows the last one's rank.
   const [rankFor, setRankFor] = useState<{ runId: string | null; rank: BoardRank } | null>(null);
@@ -142,8 +147,20 @@ export function LeaderboardProvider({ children }: { children: ReactNode }) {
       if (prefsRef.current?.optIn !== 'in') return;
       for (const [runId, snapshot] of Object.entries(prefsRef.current.unsent)) {
         const revision = nextRevision(prefsRef.current ?? initialLeaderboardPrefs(), runId);
-        const { result, status } = await putRun(token, runId, { ...snapshot, revision });
-        if (result !== 'ok') track(EVENTS.LEADERBOARD_PUBLISH_FAILED, { status, result });
+        const { result, status, error } = await putRun(token, runId, { ...snapshot, revision });
+        if (result === 'ok') {
+          const { streaks, recoveredAfter } = noteSuccess(failuresRef.current, runId);
+          failuresRef.current = streaks;
+          if (recoveredAfter !== null)
+            track(EVENTS.LEADERBOARD_PUBLISH_RECOVERED, { failed_attempts: recoveredAfter });
+        } else {
+          const noted = noteFailure(failuresRef.current, runId, `${result}:${status ?? error ?? 'none'}`);
+          failuresRef.current = noted.streaks;
+          if (noted.report)
+            track(EVENTS.LEADERBOARD_PUBLISH_FAILED, { status, result, error: error ?? null, attempt: noted.attempts });
+          // A conflict drops the snapshot, so its streak is over either way.
+          if (result === 'conflict') failuresRef.current = noteSuccess(failuresRef.current, runId).streaks;
+        }
         if (result === 'retry') {
           retryLater = true;
           continue;

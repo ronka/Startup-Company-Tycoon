@@ -244,3 +244,38 @@ export function recordPromptShown(prefs: LeaderboardPrefs, runId: string, week: 
     lastPrompt: { runId, week },
   };
 }
+
+/**
+ * Per-run failure streaks, in memory only. An offline player retries on every
+ * week advance and every foreground, so reporting each attempt turns one
+ * subway ride into dozens of `leaderboard_publish_failed` events. A streak
+ * reports its first failure (and again only if the kind of failure changes),
+ * then a single recovery event once an upload lands.
+ */
+export type FailureStreaks = Record<string, { kind: string; attempts: number }>;
+
+export function noteFailure(
+  streaks: FailureStreaks,
+  runId: string,
+  kind: string,
+): { streaks: FailureStreaks; report: boolean; attempts: number } {
+  const prev = streaks[runId];
+  const attempts = (prev?.attempts ?? 0) + 1;
+  return {
+    streaks: { ...streaks, [runId]: { kind, attempts } },
+    report: prev?.kind !== kind,
+    attempts,
+  };
+}
+
+/** Ends a run's streak; `recoveredAfter` is how many attempts failed first, or null if none did. */
+export function noteSuccess(
+  streaks: FailureStreaks,
+  runId: string,
+): { streaks: FailureStreaks; recoveredAfter: number | null } {
+  const prev = streaks[runId];
+  if (!prev) return { streaks, recoveredAfter: null };
+  const next = { ...streaks };
+  delete next[runId];
+  return { streaks: next, recoveredAfter: prev.attempts };
+}
