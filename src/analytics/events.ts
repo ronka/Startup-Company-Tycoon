@@ -31,8 +31,14 @@ export const EVENTS = {
   LEADERBOARD_OPTOUT: 'leaderboard_optout',
   /** A run snapshot reached the server — `{ outcome, week }`. Once per run, on first publish. */
   LEADERBOARD_RUN_PUBLISHED: 'leaderboard_run_published',
-  /** A run upload didn't land — `{ status, result }`; `status` is null when offline. Retries follow for transient failures. */
+  /**
+   * A run upload didn't land — `{ status, result, error, attempt }`. `status` is null when no
+   * answer came back, and `error` says why (`network` = offline/unreachable, `timeout`). Sent once
+   * per failure streak per run (again only if the kind of failure changes), not on every retry.
+   */
   LEADERBOARD_PUBLISH_FAILED: 'leaderboard_publish_failed',
+  /** A run upload landed after failing — `{ failed_attempts }`. Closes the streak `leaderboard_publish_failed` opened. */
+  LEADERBOARD_PUBLISH_RECOVERED: 'leaderboard_publish_recovered',
   /** The HQ rank card was closed with its ✕ — `{ opted_in, rank }`. Hidden for the rest of that run. */
   LEADERBOARD_TEASER_DISMISSED: 'leaderboard_teaser_dismissed',
   /** The HQ rank card was tapped — `{ opted_in, rank }`. */

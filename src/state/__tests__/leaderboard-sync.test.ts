@@ -17,6 +17,8 @@ import {
   publicCompanyName,
   recordDelete,
   recordPromptShown,
+  noteFailure,
+  noteSuccess,
   recordSend,
   shouldPromptOptIn,
   snapshotFor,
@@ -157,5 +159,37 @@ describe('revive', () => {
   it('keeps the run id across a revive', () => {
     const dead = runAt(9, { gameOver: 'bankruptcy', finalScore: 0 });
     expect(reduce(dead, { type: 'REVIVE', reason: 'x' }).runId).toBe(RUN);
+  });
+});
+
+describe('failure streaks', () => {
+  it('reports the first offline failure of a streak, not every retry', () => {
+    let streaks = {};
+    const reports: boolean[] = [];
+    for (let i = 0; i < 13; i++) {
+      const noted = noteFailure(streaks, RUN, 'retry:network');
+      streaks = noted.streaks;
+      reports.push(noted.report);
+    }
+    expect(reports.filter(Boolean)).toHaveLength(1);
+    expect(noteSuccess(streaks, RUN).recoveredAfter).toBe(13);
+  });
+
+  it('reports again when the kind of failure changes', () => {
+    const first = noteFailure({}, RUN, 'retry:network');
+    const second = noteFailure(first.streaks, RUN, 'retry:503');
+    expect(second.report).toBe(true);
+    expect(second.attempts).toBe(2);
+  });
+
+  it('a clean success is not a recovery, and a recovery ends the streak', () => {
+    expect(noteSuccess({}, RUN).recoveredAfter).toBeNull();
+    const { streaks } = noteSuccess(noteFailure({}, RUN, 'retry:network').streaks, RUN);
+    expect(noteFailure(streaks, RUN, 'retry:network').report).toBe(true);
+  });
+
+  it('keeps streaks per run', () => {
+    const a = noteFailure({}, RUN, 'retry:network');
+    expect(noteFailure(a.streaks, 'other-run', 'retry:network').report).toBe(true);
   });
 });

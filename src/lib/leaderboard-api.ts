@@ -183,12 +183,19 @@ function writeResultFor(status: number): WriteResult {
   return 'retry';
 }
 
-/** The write's outcome plus the raw HTTP status (null when the request never got an answer), for failure analytics. */
+/** Why a request got no HTTP answer: the 8s timeout fired, or the network refused it outright (offline, DNS, TLS). */
+export type NoAnswer = 'timeout' | 'network';
+
+/**
+ * The write's outcome plus the raw HTTP status (null when the request never got
+ * an answer, with `error` saying why), for failure analytics.
+ */
 export async function putRun(
   token: string,
   runId: string,
   body: RunUpload,
-): Promise<{ result: WriteResult; status: number | null }> {
+): Promise<{ result: WriteResult; status: number | null; error?: NoAnswer }> {
+  const startedAt = Date.now();
   try {
     const response = await timedFetch(`${LEADERBOARD_ORIGIN}/api/leaderboard/runs/${runId}`, {
       method: 'PUT',
@@ -197,7 +204,7 @@ export async function putRun(
     });
     return { result: writeResultFor(response.status), status: response.status };
   } catch {
-    return { result: 'retry', status: null };
+    return { result: 'retry', status: null, error: Date.now() - startedAt >= REQUEST_TIMEOUT_MS ? 'timeout' : 'network' };
   }
 }
 
