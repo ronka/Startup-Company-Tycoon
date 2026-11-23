@@ -268,7 +268,8 @@ export function GameChrome({
       week: dayCompleteWeek,
       source,
       all_nighter_offer: firstAllNighterOffered,
-      price_shown: agenda?.kind === 'cliffhanger' && priceTeaser !== null,
+      // The all-nighter gift replaces the priced button, so no price is shown then.
+      price_shown: agenda?.kind === 'cliffhanger' && priceTeaser !== null && !firstAllNighterOffered,
     });
     notificationAskSpentOnDateKey()
       .then((spentOn) => setReminderOfferable(Platform.OS !== 'web' && spentOn === null))
