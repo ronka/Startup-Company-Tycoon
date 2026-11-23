@@ -4,11 +4,14 @@ import {
   MAX_REVIEW_ASKS,
   REVIEW_COOLDOWN_DAYS,
   canAskForReview,
+  finishedMissions,
   initialReviewAskRecord,
+  missionsReviewOnRecapDismiss,
   notificationAskSettled,
   parseReviewAskRecord,
   recordReviewAsk,
   reviewAskBlockedBy,
+  reviewMomentBlockedBy,
 } from '../review-ask';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -101,5 +104,39 @@ describe('notificationAskSettled', () => {
     expect(notificationAskSettled('2026-07-31', '2026-08-01')).toBe(true);
     expect(notificationAskSettled('2026-12-31', '2027-01-01')).toBe(true);
     expect(notificationAskSettled('2027-01-01', '2026-12-31')).toBe(false);
+  });
+});
+
+describe('reviewMomentBlockedBy', () => {
+  it('blocks an insolvent run first, then a busy modal', () => {
+    expect(reviewMomentBlockedBy({ insolvent: true, modalBusy: true })).toBe('insolvent');
+    expect(reviewMomentBlockedBy({ insolvent: false, modalBusy: true })).toBe('modal_busy');
+    expect(reviewMomentBlockedBy({ insolvent: false, modalBusy: false })).toBeNull();
+  });
+});
+
+describe('missions_complete arming', () => {
+  it('arms only when the final mission is among the newly completed quests', () => {
+    expect(finishedMissions(['income', 'customers'], 'customers')).toBe(true);
+    expect(finishedMissions(['income'], 'customers')).toBe(false);
+    expect(finishedMissions([], 'customers')).toBe(false);
+  });
+
+  it('does nothing on a recap dismissal when not armed', () => {
+    expect(missionsReviewOnRecapDismiss({ armed: false, insolvent: false, otherSurfaceDue: false })).toBe('idle');
+  });
+
+  it('asks on the next recap dismissal when nothing else claims the beat', () => {
+    expect(missionsReviewOnRecapDismiss({ armed: true, insolvent: false, otherSurfaceDue: false })).toBe('ask');
+  });
+
+  it('holds (stays armed) when the wall panel or another ask is about to present', () => {
+    expect(missionsReviewOnRecapDismiss({ armed: true, insolvent: false, otherSurfaceDue: true })).toBe('hold');
+    // Even an insolvent run waits rather than reporting a suppression it might recover from.
+    expect(missionsReviewOnRecapDismiss({ armed: true, insolvent: true, otherSurfaceDue: true })).toBe('hold');
+  });
+
+  it('suppresses on an insolvent run, like the funding-round ask', () => {
+    expect(missionsReviewOnRecapDismiss({ armed: true, insolvent: true, otherSurfaceDue: false })).toBe('suppress');
   });
 });

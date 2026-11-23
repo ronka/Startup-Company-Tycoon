@@ -158,6 +158,74 @@ export function spendWeek(budget: WeekBudget, now: Date): WeekBudget {
 }
 
 /**
+ * The install's first wall comes with one free all-nighter: this many weeks,
+ * credited to the *free* budget (never the purchased pool — no transaction, no
+ * ledger, nothing for reconciliation or the entitlement sync to see).
+ */
+export const FIRST_ALL_NIGHTER_WEEKS = 3;
+
+/**
+ * Where an install stands on its one free all-nighter. Persisted as a bare
+ * string under its own key.
+ *
+ * - `eligible`: hasn't hit a wall yet.
+ * - `offered`: sitting at its first wall — the closing panel offers the gift.
+ * - `claimed`: took it. Terminal.
+ * - `ineligible`: got past its first wall without claiming, or was already a
+ *   wall veteran when this shipped. Terminal.
+ */
+export type FirstAllNighterStatus = 'eligible' | 'offered' | 'claimed' | 'ineligible';
+
+const FIRST_ALL_NIGHTER_STATUSES: readonly FirstAllNighterStatus[] = ['eligible', 'offered', 'claimed', 'ineligible'];
+
+/**
+ * The status for an install that has never stored one. `hasSeenWallBefore` is
+ * whether the closing panel's last-shown day was already written — the only
+ * trace earlier builds leave of a wall. Without it, every existing player who
+ * picked up the OTA would read as "first wall" and get the gift.
+ */
+export function initialFirstAllNighterStatus(hasSeenWallBefore: boolean): FirstAllNighterStatus {
+  return hasSeenWallBefore ? 'ineligible' : 'eligible';
+}
+
+/** Reads a persisted status; anything unrecognised is treated as spent, never as a fresh gift. */
+export function parseFirstAllNighterStatus(raw: string | null): FirstAllNighterStatus | null {
+  if (raw === null) return null;
+  return (FIRST_ALL_NIGHTER_STATUSES as readonly string[]).includes(raw) ? (raw as FirstAllNighterStatus) : 'ineligible';
+}
+
+/**
+ * Status after a successful week advance. `returningFromWall` is whether that
+ * advance carried the player past a wall (`wallHitAt` was set); `hitWall` is
+ * whether it emptied both pools. Returning past the first wall without having
+ * claimed retires the offer — it belongs to the first wall only.
+ */
+export function advanceFirstAllNighter(
+  status: FirstAllNighterStatus,
+  { returningFromWall, hitWall }: { returningFromWall: boolean; hitWall: boolean },
+): FirstAllNighterStatus {
+  let next = status;
+  if (returningFromWall && next === 'offered') next = 'ineligible';
+  if (hitWall && next === 'eligible') next = 'offered';
+  return next;
+}
+
+/** Whether the closing panel may offer the free all-nighter right now. */
+export function canClaimFirstAllNighter(status: FirstAllNighterStatus | null, atWall: boolean): boolean {
+  return status === 'offered' && atWall;
+}
+
+/**
+ * Credits the free all-nighter to the free budget. Leaves the regen clock
+ * running (the bank is still below the cap) and keeps `wallHitAt`, so the next
+ * week's `returned_after_wall` still measures this wall.
+ */
+export function creditFirstAllNighter(budget: WeekBudget, weeks = FIRST_ALL_NIGHTER_WEEKS): WeekBudget {
+  const weeksRemaining = budget.weeksRemaining + weeks;
+  return { ...budget, weeksRemaining, regenFrom: weeksRemaining >= WEEKS_BANK_CAP ? null : (budget.regenFrom ?? null) };
+}
+
+/**
  * Weeks bought via IAP (PRD week-packs). Kept as a pool entirely separate
  * from the free `WeekBudget`: unlike the free budget it is exempt from
  * `WEEKS_BANK_CAP`, never expires, and outlives `NEW_GAME` — a purchase is a
