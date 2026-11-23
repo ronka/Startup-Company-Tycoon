@@ -16,6 +16,7 @@ import type { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
 import { REVENUECAT_IOS_API_KEY } from './config';
 import { purchaseErrorDetails } from './error-details';
+import { cheapestPriceTeaser, selectWeeksOffering, type PriceTeaser } from './offering-select';
 import { isReviveProduct, shortIdFromProductIdentifier, weeksForProduct } from './product-weeks';
 import {
   reconcilePurchases,
@@ -27,8 +28,6 @@ import {
 import { WEEK_PACKS } from './stub';
 import type { PaywallOutcome, PaywallPresentation, PurchaseResult, PurchasesClient, WeekPack } from './types';
 
-/** Matches the `weeks` offering created in Task 3. */
-const OFFERING_LOOKUP_KEY = 'weeks';
 /** Matches the `revive` offering — one package, the single bailout consumable. */
 const OFFERING_LOOKUP_KEY_REVIVE = 'revive';
 
@@ -145,9 +144,14 @@ function isUserCancelled(error: unknown): boolean {
   return err?.code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR || err?.userCancelled === true;
 }
 
-async function fetchWeeksOffering() {
+/**
+ * The weeks offering for `trigger`: `weeks_cliffhanger` for the cliffhanger
+ * when RevenueCat has one, otherwise the `weeks` offering (then the current
+ * one) exactly as before. See `offering-select.ts`.
+ */
+async function fetchWeeksOffering(trigger?: string) {
   const offerings = await Purchases.getOfferings();
-  return offerings.all[OFFERING_LOOKUP_KEY] ?? offerings.current;
+  return selectWeeksOffering(offerings, trigger);
 }
 
 /** The revive offering's single package (the bailout consumable), or undefined if misconfigured. */
@@ -208,13 +212,13 @@ const PAYWALL_OUTCOMES: Record<PAYWALL_RESULT, PaywallOutcome> = {
  * `getCustomerInfo()`-against-the-ledger pass that already guarantees a paid
  * purchase can't be lost or granted twice. One crediting path, one ledger.
  */
-export async function presentWeeksPaywall(onPresented?: () => void): Promise<PaywallPresentation> {
+export async function presentWeeksPaywall(trigger: string, onPresented?: () => void): Promise<PaywallPresentation> {
   if (!configured) return { outcome: 'not_presented', notPresentedReason: 'not_configured' };
   const ui = loadPaywallUI();
   if (!ui) return { outcome: 'not_presented', notPresentedReason: 'ui_module_missing' };
   let offering: Awaited<ReturnType<typeof fetchWeeksOffering>>;
   try {
-    offering = await fetchWeeksOffering();
+    offering = await fetchWeeksOffering(trigger);
   } catch (err) {
     // Split out from the present step below because this is where the
     // Sep 2026 failure loops actually died: 2 impressions in 109 attempts.
@@ -241,6 +245,29 @@ export async function presentWeeksPaywall(onPresented?: () => void): Promise<Pay
   } catch (err) {
     console.warn('[purchases] failed to present paywall', err);
     return { outcome: 'error', error: purchaseErrorDetails('present', err) };
+  }
+}
+
+/**
+ * The live price the cliffhanger button quotes ("20 weeks for $1.99"), read
+ * from the same offering `presentWeeksPaywall(trigger)` would show, so the
+ * button never promises a price the paywall doesn't carry. Null on any failure
+ * — the caller falls back to its plain copy rather than a hardcoded USD price.
+ */
+export async function getWeeksPriceTeaser(trigger: string): Promise<PriceTeaser | null> {
+  if (!configured) return null;
+  try {
+    const offering = await fetchWeeksOffering(trigger);
+    if (!offering) return null;
+    return cheapestPriceTeaser(
+      offering.availablePackages.map((pkg) => ({
+        weeks: weeksForProduct(pkg.product.identifier),
+        priceLabel: pkg.product.priceString,
+      })),
+    );
+  } catch (err) {
+    console.warn('[purchases] failed to load the price teaser', err);
+    return null;
   }
 }
 

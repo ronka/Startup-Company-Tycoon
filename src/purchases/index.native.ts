@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 import * as fallback from './fallback';
+import type { PriceTeaser } from './offering-select';
 import type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 import { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
 import type {
@@ -46,11 +47,13 @@ export const restorePurchases: (
   grantedReviveTransactionIds: ReadonlySet<string>,
 ) => Promise<RestoreResult> = impl.restorePurchases;
 export const syncPostHogAttribute: (distinctId: string) => Promise<void> = impl.syncPostHogAttribute;
-export const presentWeeksPaywall: (onPresented?: () => void) => Promise<PaywallPresentation> = impl.presentWeeksPaywall;
+export const presentWeeksPaywall: (trigger: string, onPresented?: () => void) => Promise<PaywallPresentation> =
+  impl.presentWeeksPaywall;
+export const getWeeksPriceTeaser: (trigger: string) => Promise<PriceTeaser | null> = impl.getWeeksPriceTeaser;
 export const getStoreTransactions: () => Promise<PurchaseTransaction[]> = impl.getStoreTransactions;
 export { purchaseErrorDetails, purchaseErrorProps } from './error-details';
 export { REVIVE_PRICE_LABEL, WEEK_PACKS };
-export type { LaunchReconciliation, PurchaseTransaction, RestoreResult };
+export type { LaunchReconciliation, PriceTeaser, PurchaseTransaction, RestoreResult };
 export type {
   PaywallNotPresentedReason,
   PaywallOutcome,
