@@ -29,7 +29,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * `PermissionTrigger` is one: the point of the prop is comparing these buckets, and
  * a typo would silently corrupt that comparison.
  */
-export type ReviewTrigger = 'run_ended_best' | 'funding_round' | 'day_streak';
+export type ReviewTrigger = 'run_ended_best' | 'funding_round' | 'day_streak' | 'missions_complete';
 
 /** Why an eligible-looking trigger didn't get to ask. */
 export type ReviewSuppressedReason =
@@ -97,6 +97,57 @@ export function canAskForReview(record: ReviewAskRecord, nowMs: number): boolean
 /** The record as it should be after an ask at `nowMs`. */
 export function recordReviewAsk(record: ReviewAskRecord, nowMs: number): ReviewAskRecord {
   return { askCount: record.askCount + 1, lastAskedAtMs: nowMs };
+}
+
+/**
+ * The game-state half of "is this a good moment to ask?", shared by the
+ * in-the-moment triggers (a funding round, the guided missions finishing). An
+ * insolvent run is a rescue, not a victory lap; a decision card on screen means
+ * the OS sheet would present into a modal (docs/bug-stuck-decision-modal.md).
+ */
+export function reviewMomentBlockedBy({
+  insolvent,
+  modalBusy,
+}: {
+  insolvent: boolean;
+  modalBusy: boolean;
+}): 'insolvent' | 'modal_busy' | null {
+  if (insolvent) return 'insolvent';
+  if (modalBusy) return 'modal_busy';
+  return null;
+}
+
+/**
+ * Whether a guided run just finished its last mission — the moment that arms
+ * the `missions_complete` review ask.
+ */
+export function finishedMissions(newlyCompletedQuestIds: readonly string[], finalQuestId: string): boolean {
+  return newlyCompletedQuestIds.includes(finalQuestId);
+}
+
+/**
+ * What to do with an armed `missions_complete` ask when a Week in Review is
+ * dismissed.
+ *
+ * - `hold`: stay armed for the next recap. Another surface is about to take
+ *   this beat — the closing panel at the wall, the first-session notification
+ *   ask, a buy surface — and two presentations in one beat hang iOS.
+ * - `suppress`: the run is insolvent; disarm and report it, like the funding-round ask.
+ * - `ask`: request the review (on a later frame, never in the dismissal's own).
+ */
+export function missionsReviewOnRecapDismiss({
+  armed,
+  insolvent,
+  otherSurfaceDue,
+}: {
+  armed: boolean;
+  insolvent: boolean;
+  otherSurfaceDue: boolean;
+}): 'ask' | 'hold' | 'suppress' | 'idle' {
+  if (!armed) return 'idle';
+  if (otherSurfaceDue) return 'hold';
+  if (insolvent) return 'suppress';
+  return 'ask';
 }
 
 /**

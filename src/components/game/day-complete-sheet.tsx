@@ -6,6 +6,7 @@ import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
+import type { PriceTeaser } from '@/purchases';
 import type { ActionNow, TomorrowAgenda } from '@/state/day-close';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP } from '@/state/week-budget';
 
@@ -28,6 +29,8 @@ export function DayCompleteSheet({
   actionTip,
   onActionTip,
   onBuyWeeks,
+  priceTeaser,
+  allNighterOffer,
   onRemindMe,
   onDismiss,
   onDismissed,
@@ -43,6 +46,16 @@ export function DayCompleteSheet({
   onActionTip?: () => void;
   /** Present only where real purchases work; omit to render no purchase affordance. */
   onBuyWeeks?: () => void;
+  /**
+   * The live store price of the cheapest pack in the offering "Find out now"
+   * opens, quoted on that button. Null (or absent) keeps the plain label.
+   */
+  priceTeaser?: PriceTeaser | null;
+  /**
+   * The install's first wall: the buy button becomes a free all-nighter
+   * instead, on every platform (nothing is bought).
+   */
+  allNighterOffer?: { weeks: number; onClaim: () => void } | null;
   /**
    * Present only while the one-shot OS permission ask is still unspent. The
    * system dialog follows this tap and nothing else at the wall, so the player
@@ -98,15 +111,23 @@ export function DayCompleteSheet({
       ) : (
         <PrimaryButton label="Back soon" onPress={onDismiss} />
       )}
-      {onBuyWeeks ? (
+      {allNighterOffer ? (
         <PrimaryButton
-          label={cliffhanger ? 'Find out now' : 'Pull an all-nighter'}
+          label={`First all-nighter's on us (+${allNighterOffer.weeks} weeks)`}
           variant="secondary"
-          onPress={onBuyWeeks}
+          onPress={allNighterOffer.onClaim}
         />
+      ) : onBuyWeeks ? (
+        <PrimaryButton label={buyLabel(cliffhanger, priceTeaser ?? null)} variant="secondary" onPress={onBuyWeeks} />
       ) : null}
     </BottomSheet>
   );
+}
+
+/** "Find out now · 20 weeks for $1.99" when a live price is known; the plain labels otherwise. */
+function buyLabel(cliffhanger: boolean, priceTeaser: PriceTeaser | null): string {
+  if (!cliffhanger) return 'Pull an all-nighter';
+  return priceTeaser ? `Find out now · ${priceTeaser.weeks} weeks for ${priceTeaser.priceLabel}` : 'Find out now';
 }
 
 const styles = StyleSheet.create({

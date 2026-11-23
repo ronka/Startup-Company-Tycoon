@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import type { PriceTeaser } from '@/purchases';
 import type { CliffhangerTeaser } from '@/state/day-close';
 import { formatClockCountdown, nextWeekRegenAt, type WeekBudget } from '@/state/week-budget';
 
@@ -23,11 +24,14 @@ export function CliffhangerBanner({
   companyName,
   teaser,
   weekBudget,
+  priceTeaser,
   onFindOut,
 }: {
   companyName: string;
   teaser: CliffhangerTeaser;
   weekBudget: WeekBudget | null;
+  /** Live store price for the button; null keeps the plain "Find out now". */
+  priceTeaser?: PriceTeaser | null;
   /** Present only where real purchases work; omit to render the wait alone. */
   onFindOut?: () => void;
 }) {
@@ -52,10 +56,14 @@ export function CliffhangerBanner({
           <Pressable
             onPress={onFindOut}
             accessibilityRole="button"
-            accessibilityLabel="Find out now. Get more weeks."
+            accessibilityLabel={
+              priceTeaser
+                ? `Find out now. ${priceTeaser.weeks} weeks for ${priceTeaser.priceLabel}.`
+                : 'Find out now. Get more weeks.'
+            }
             style={({ pressed }) => [styles.cta, { backgroundColor: theme.accent }, pressed && styles.pressed]}>
             <ThemedText type="smallBold" style={{ color: theme.accentInk }}>
-              Find out now
+              {priceTeaser ? `Find out now · ${priceTeaser.priceLabel}` : 'Find out now'}
             </ThemedText>
           </Pressable>
         ) : null}

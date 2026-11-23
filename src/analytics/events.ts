@@ -89,6 +89,27 @@ export const EVENTS = {
    * without one.
    */
   RETURNED_AFTER_WALL: 'returned_after_wall',
+  /**
+   * The app went to the background — the closest thing to a "quit" event. `{
+   * ...gameProps (when a run exists), session_seconds, weeks_this_session,
+   * at_wall, free_weeks_remaining, purchased_weeks_remaining, pending_event_id,
+   * route, onboarding_done }`. A session starts at launch or at the last return
+   * from the background. Read with `week_advance_blocked` to see who quits at
+   * the wall versus mid-run.
+   */
+  SESSION_BACKGROUNDED: 'session_backgrounded',
+  /**
+   * A run reached week 1, 3, 5, 10 or 20 — `{ milestone, ...gameProps }`.
+   * Funnel steps without counting `week_advanced`. Sets the person property
+   * `max_week_reached` (best across every run, never regressing).
+   */
+  RUN_MILESTONE: 'run_milestone',
+  /**
+   * The install's first wall: the closing panel's free "+3 weeks" was taken —
+   * `{ weeks_granted, ...gameProps, cliffhanger_card_id }`. Once per install.
+   * The next `returned_after_wall` carries `returned_via: 'first_all_nighter'`.
+   */
+  FIRST_ALL_NIGHTER_CLAIMED: 'first_all_nighter_claimed',
   STAGE_ADVANCED: 'stage_advanced',
   ERA_CHANGED: 'era_changed',
   TREND_PHASE_CHANGED: 'trend_phase_changed',
@@ -145,11 +166,20 @@ export const EVENTS = {
   /**
    * The OS permission dialog was spent — once per install, so `trigger`
    * records which moment spent it: `reminder_optin` (the player tapped "Remind
-   * me at 9am" on the end-of-day panel) or `second_launch` (the fallback).
+   * me at 9am" on the end-of-day panel), `first_session` (a yes on the
+   * week-3 soft ask) or `second_launch` (the fallback).
    * Builds up to 1.0.4-19 also sent `daily_wall`, the unannounced ask at the
    * wall this replaced. Break `granted` down by `trigger` to compare them.
    */
   NOTIFICATION_PERMISSION_REQUESTED: 'notification_permission_requested',
+  /**
+   * The one-time first-session soft ask ("Your investors check in every
+   * morning — want a heads-up?") was shown — `{ week }`. A yes is followed by
+   * `notification_permission_requested` with `trigger: first_session`.
+   */
+  FIRST_SESSION_ASK_SHOWN: 'first_session_ask_shown',
+  /** How the first-session soft ask was answered — `{ accepted, week }`. */
+  FIRST_SESSION_ASK_ANSWERED: 'first_session_ask_answered',
   REENGAGEMENT_NOTIFICATION_SCHEDULED: 'reengagement_notification_scheduled',
   /**
    * The app backgrounded at the wall, with notifications allowed — `{
@@ -164,7 +194,14 @@ export const EVENTS = {
    * `reminder_day` is null) and 'agenda' for the day 1/3/7 sequence.
    */
   NOTIFICATION_OPENED: 'notification_opened',
-  /** The end-of-day panel was shown — `{ agenda_kind, action_kind }`: the tomorrow hook, and the 💡 tip if any. */
+  /**
+   * The end-of-day panel was shown — `{ agenda_kind, action_kind, source,
+   * all_nighter_offer, price_shown }`: the tomorrow hook, and the 💡 tip if
+   * any. `source` is 'auto' (the once-a-day open at the wall) or 'chip' (a
+   * Next Week tap at the wall brought it back; before this, that tap opened the
+   * paywall directly). `all_nighter_offer` is true on the install's first wall,
+   * where the buy button is the free "+3 weeks" instead.
+   */
   DAY_COMPLETE_SHOWN: 'day_complete_shown',
   /**
    * The week wall pinned next week's decision card — `{ card_id, week }`.
@@ -174,9 +211,16 @@ export const EVENTS = {
   CLIFFHANGER_PINNED: 'cliffhanger_pinned',
   /** The pinned card landed as a decision — `{ card_id, week }`. Join to `event_decision_made` by `card_id`. */
   CLIFFHANGER_LANDED: 'cliffhanger_landed',
-  /** "Find out now" on the wall's cliffhanger banner — opens the week-pack paywall with trigger `cliffhanger`. */
+  /**
+   * "Find out now" on the wall's cliffhanger banner — opens the week-pack
+   * paywall with trigger `cliffhanger`. `price_shown` is whether the button
+   * quoted a live store price.
+   */
   CLIFFHANGER_FIND_OUT_TAPPED: 'cliffhanger_find_out_tapped',
-  /** How the end-of-day panel was closed — `{ action }` is 'dismiss' | 'buy_weeks' | 'remind_me' | 'action_tip'. */
+  /**
+   * How the end-of-day panel was closed — `{ action }` is 'dismiss' |
+   * 'buy_weeks' | 'remind_me' | 'action_tip' | 'first_all_nighter'.
+   */
   DAY_COMPLETE_DISMISSED: 'day_complete_dismissed',
   /**
    * "Notify me when weeks are back" was tapped on the end-of-day panel — `{ agenda_kind }`.
@@ -199,7 +243,14 @@ export const EVENTS = {
   DEV_FREE_PLAY_TOGGLED: 'dev_free_play_toggled',
 
   // IAP week packs + revive
-  /** A buy surface was requested. A later `paywall_shown` confirms it actually rendered. */
+  /**
+   * A buy surface was requested. A later `paywall_shown` confirms it actually
+   * rendered. Every paywall event carries `trigger` and `source` ('chip' |
+   * 'day_complete' | null — see `BuyWeeksSource`). Since the cliffhanger
+   * offer shipped, the closing panel's "Find out now" sends trigger
+   * `cliffhanger` (it was `out_of_weeks`); "Pull an all-nighter" still sends
+   * `out_of_weeks`.
+   */
   PAYWALL_PRESENTATION_ATTEMPTED: 'paywall_presentation_attempted',
   PAYWALL_SHOWN: 'paywall_shown',
   /** A rendered paywall closed without a purchase or restore. */

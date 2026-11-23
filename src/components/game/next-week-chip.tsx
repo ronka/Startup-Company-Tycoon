@@ -7,7 +7,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { purchasesAvailable } from '@/purchases';
-import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { useGame } from '@/state/game-store';
 import {
   WEEK_REGEN_MS,
@@ -26,15 +25,19 @@ import {
  * purchased pool). At the wall it swaps the dots for the countdown to the next
  * free week and a bar filling toward it — no "0/10", just when play resumes.
  * A press there still dispatches `TICK` (the store's gate swallows it and
- * records `week_advance_blocked`) and, where purchases exist, opens the
- * paywall.
+ * records `week_advance_blocked`) and brings back the closing panel — what
+ * next week holds and when weeks return. It no longer opens the paywall
+ * straight away: a tap on "Next Week" is a player wanting to play, not to
+ * shop, and the panel's "Find out now" / "Pull an all-nighter" is where a
+ * purchase is an explicit choice.
  */
 export function NextWeekChip({
-  onBuyWeeks,
+  onWallTap,
   onLayout,
   style,
 }: {
-  onBuyWeeks: (trigger: BuyWeeksTrigger) => void;
+  /** A press at the wall — the chrome re-opens the closing panel. */
+  onWallTap: () => void;
   onLayout?: (event: LayoutChangeEvent) => void;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -55,7 +58,7 @@ export function NextWeekChip({
 
   const accessibilityLabel = exhausted
     ? purchasesAvailable
-      ? 'Next week. Out of free weeks. Get more weeks.'
+      ? "Next week. Out of free weeks. Shows what's next and ways to keep playing."
       : 'Out of free weeks. A free week comes back soon.'
     : `Next week. ${freeWeeks} of ${WEEKS_BANK_CAP} free weeks${purchased > 0 ? ` plus ${purchased} purchased` : ''} remaining.`;
 
@@ -68,7 +71,7 @@ export function NextWeekChip({
         // captures WEEK_ADVANCE_BLOCKED, the only signal that tells a
         // hit-the-wall player apart from one who drifted off before reaching it.
         dispatch({ type: 'TICK' });
-        if (exhausted && purchasesAvailable) onBuyWeeks('out_of_weeks');
+        if (exhausted) onWallTap();
       }}
       onLongPress={__DEV__ ? () => setDevFreePlay(!devFreePlay) : undefined}
       disabled={pending}

@@ -38,6 +38,10 @@ export default function GameTabsLayout() {
   // chrome's closing panel): its `isOpen` gates the chrome's other surfaces, and
   // its guard against a double-present only works if there's one of it.
   const buyWeeks = useBuyWeeksFlow(state !== null && !state.gameOver);
+  // A Next Week tap at the wall asks the chrome to bring the closing panel
+  // back. A counter rather than a boolean, so every tap is a fresh request the
+  // chrome can see even if the last one was never consumed.
+  const [wallTapRequest, setWallTapRequest] = useState(0);
   // Guided first weeks: the unlock moment, the locked tabs, and the coach's
   // one tooltip — on a tab, on a control in this tab, or on Next Week.
   const [freshUnlocks, dismissUnlocks] = useUnlockMoment(state);
@@ -67,7 +71,13 @@ export default function GameTabsLayout() {
   return (
     <GuideContext.Provider value={guide}>
       <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <Hud onBuyWeeks={buyWeeks.open}>
+        <Hud
+          onWallTap={() =>
+            // A paywall iOS dropped leaves isOpen stuck true; open() re-presents
+            // it after LOST_PRESENTATION_MS (and no-ops inside that window).
+            buyWeeks.isOpen ? buyWeeks.open('out_of_weeks', { source: 'chip' }) : setWallTapRequest((n) => n + 1)
+          }
+        >
           <QuestStrip freshUnlocks={freshUnlocks} onDismissUnlocks={dismissUnlocks} />
         </Hud>
         <View style={{ flex: 1 }}>
@@ -75,7 +85,7 @@ export default function GameTabsLayout() {
             <Tabs
               tabBar={(props) => (
                 <GameTabBarStack routes={props.state.routes} guide={step?.target.kind === 'tab' ? step : null}>
-                  <GameChrome buyWeeks={buyWeeks} />
+                  <GameChrome buyWeeks={buyWeeks} wallTapRequest={wallTapRequest} />
                   <GameTabBar
                     {...props}
                     bottomInset={insets.bottom}

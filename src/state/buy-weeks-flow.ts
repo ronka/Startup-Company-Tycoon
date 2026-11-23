@@ -11,6 +11,14 @@ import { notePurchaseFailed } from '@/state/store-review';
 export type BuyWeeksTrigger = 'out_of_weeks' | 'hud' | 'cliffhanger';
 
 /**
+ * Which door into the closing panel the buy tap came through, sent as `source`
+ * on every paywall event: `day_complete` when the panel opened on its own at
+ * the wall, `chip` when a Next Week tap at the wall brought it back. Taps from
+ * the wall's cliffhanger banner carry none.
+ */
+export type BuyWeeksSource = 'chip' | 'day_complete';
+
+/**
  * How long to wait before re-running the ledger diff when a completed purchase
  * credited nothing.
  *
@@ -36,6 +44,11 @@ type BuyFlow =
   | { kind: 'idle' }
   | { kind: 'paywall'; trigger: BuyWeeksTrigger }
   | { kind: 'sheet'; trigger: BuyWeeksTrigger };
+
+/** Options for `open`. */
+export interface BuyWeeksOpenOptions {
+  source?: BuyWeeksSource;
+}
 
 const IDLE: BuyFlow = { kind: 'idle' };
 
@@ -89,7 +102,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
   isOpen: boolean;
   /** Non-null only while the fallback sheet should be on screen. */
   sheetTrigger: BuyWeeksTrigger | null;
-  open: (trigger: BuyWeeksTrigger) => void;
+  open: (trigger: BuyWeeksTrigger, options?: BuyWeeksOpenOptions) => void;
   closeSheet: () => void;
 } {
   const { reconcileAfterPaywall } = useGame();
@@ -128,17 +141,18 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
   }, [runIsLive]);
 
   const open = useCallback(
-    (trigger: BuyWeeksTrigger) => {
+    (trigger: BuyWeeksTrigger, options?: BuyWeeksOpenOptions) => {
+      const source = options?.source ?? null;
       const current = flowRef.current;
       if (current.kind === 'paywall') {
         const calledAt = presentCalledAtRef.current;
         if (calledAt === null || Date.now() - calledAt < LOST_PRESENTATION_MS) return;
-        track(EVENTS.PAYWALL_PRESENTATION_LOST, { trigger, lost_trigger: current.trigger });
+        track(EVENTS.PAYWALL_PRESENTATION_LOST, { trigger, source, lost_trigger: current.trigger });
       } else if (current.kind !== 'idle') {
         return;
       }
       if (purchasesBlocked()) {
-        track(EVENTS.PURCHASE_RETRY_SUPPRESSED, { trigger });
+        track(EVENTS.PURCHASE_RETRY_SUPPRESSED, { trigger, source });
         explainPurchasesUnavailable();
         return;
       }
@@ -150,14 +164,16 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
         if (attempt === attemptRef.current) enter(next);
       };
       enter({ kind: 'paywall', trigger });
-      track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger, surface: 'revenuecat' });
-      presentWeeksPaywall(() => {
+      track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger, source, surface: 'revenuecat' });
+      // The trigger picks the offering: the cliffhanger prefers its own
+      // `weeks_cliffhanger` one when RevenueCat has it (see `offering-select.ts`).
+      presentWeeksPaywall(trigger, () => {
         if (attempt === attemptRef.current) presentCalledAtRef.current = Date.now();
-        track(EVENTS.PAYWALL_SHOWN, { trigger, surface: 'revenuecat' });
+        track(EVENTS.PAYWALL_SHOWN, { trigger, source, surface: 'revenuecat' });
       })
         .then(async ({ outcome, notPresentedReason, error }) => {
           if (outcome === 'not_presented') {
-            track(EVENTS.PAYWALL_NOT_PRESENTED, { trigger, surface: 'revenuecat', reason: notPresentedReason });
+            track(EVENTS.PAYWALL_NOT_PRESENTED, { trigger, source, surface: 'revenuecat', reason: notPresentedReason });
             // Offerings failed to load, no paywall is attached, or this binary
             // predates the paywall UI native module. The sheet renders from a
             // hardcoded pack catalog, so it still works where this doesn't —
@@ -180,6 +196,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
             if (outcome === 'purchased') {
               track(EVENTS.PURCHASE_COMPLETED, {
                 trigger,
+                source,
                 surface: 'revenuecat',
                 outcome: 'purchased',
                 weeks_granted: weeks,
@@ -190,16 +207,19 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
                 source: 'revenuecat_paywall',
                 surface: 'revenuecat',
                 trigger,
+                // `source` already names the restore surface on this event.
+                buy_source: source,
                 outcome: 'restored',
                 weeks,
                 revives,
               });
             }
           } else if (outcome === 'cancelled') {
-            track(EVENTS.PAYWALL_DISMISSED, { trigger, surface: 'revenuecat', outcome });
+            track(EVENTS.PAYWALL_DISMISSED, { trigger, source, surface: 'revenuecat', outcome });
           } else if (outcome === 'error') {
             track(EVENTS.PURCHASE_FAILED, {
               trigger,
+              source,
               surface: 'revenuecat',
               error_code: 'unknown',
               ...purchaseErrorProps(error),
@@ -216,6 +236,7 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
         .catch((err: unknown) => {
           track(EVENTS.PURCHASE_FAILED, {
             trigger,
+            source,
             surface: 'revenuecat',
             error_code: 'unknown',
             ...purchaseErrorProps(purchaseErrorDetails('unexpected', err)),

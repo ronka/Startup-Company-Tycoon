@@ -10,6 +10,7 @@
 import { usePathname } from 'expo-router';
 import { useEffect } from 'react';
 
+import { setCurrentRoute } from './current-route';
 import { posthog } from './posthog';
 
 export function useScreenTracking(): void {
@@ -17,6 +18,7 @@ export function useScreenTracking(): void {
 
   useEffect(() => {
     if (!pathname) return;
+    setCurrentRoute(pathname);
     posthog.screen(pathname);
   }, [pathname]);
 }

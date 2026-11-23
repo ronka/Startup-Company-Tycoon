@@ -1,16 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { purchasesAvailable } from '@/purchases';
+import { getWeeksPriceTeaser, purchasesAvailable, type PriceTeaser } from '@/purchases';
 import { EVENTS, track } from '@/analytics/events';
 import { ActionTip } from '@/components/game/action-tip';
 import { BuyWeeksSheet } from '@/components/game/buy-weeks-sheet';
 import { CliffhangerBanner } from '@/components/game/cliffhanger-banner';
 import { DayCompleteSheet } from '@/components/game/day-complete-sheet';
 import { DecisionModal } from '@/components/game/decision-modal';
+import { FirstSessionAskSheet } from '@/components/game/first-session-ask-sheet';
 import { NotificationPermissionAsk } from '@/components/game/notification-permission-ask';
 import { WeekInReviewSheet, type RivalShareMove } from '@/components/game/week-in-review-sheet';
 import { WeekTicker } from '@/components/game/week-ticker';
@@ -18,16 +19,25 @@ import { Spacing } from '@/constants/theme';
 import { isNotableWeek } from '@/game/digest';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { actionNowFor, cliffhangerTeaserFor, tomorrowAgendaFor, type ActionNow } from '@/state/day-close';
-import type { useBuyWeeksFlow } from '@/state/buy-weeks-flow';
-import { useGame } from '@/state/game-store';
+import type { BuyWeeksSource, BuyWeeksTrigger, useBuyWeeksFlow } from '@/state/buy-weeks-flow';
+import { firstSessionAskDue } from '@/state/first-session-ask';
+import { DAY_COMPLETE_STORAGE_KEY, useGame } from '@/state/game-store';
 import { useLeaderboard } from '@/state/leaderboard-provider';
-import { notificationAskSpentOnDateKey } from '@/state/notification-permission';
-import { notificationAskSettled } from '@/state/review-ask';
+import {
+  firstSessionSoftAskShown,
+  markFirstSessionSoftAskShown,
+  notificationAskSpentOnDateKey,
+} from '@/state/notification-permission';
+import { missionsReviewOnRecapDismiss, notificationAskSettled } from '@/state/review-ask';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
-import { dateKey, isWeekBudgetExhausted } from '@/state/week-budget';
+import { dateKey, FIRST_ALL_NIGHTER_WEEKS, isWeekBudgetExhausted } from '@/state/week-budget';
 
-/** Local calendar day the end-of-day panel was last shown for. This module owns the key outright. */
-const DAY_COMPLETE_KEY = 'startup-tycoon/day-complete/last-shown';
+/**
+ * Local calendar day the end-of-day panel was last shown for. This module is
+ * the only writer; the store reads it once, as "has this install ever hit a
+ * wall" (the free first all-nighter).
+ */
+const DAY_COMPLETE_KEY = DAY_COMPLETE_STORAGE_KEY;
 /**
  * Same beat as `recapArmedWeek` below, for the same reason: the closing panel
  * is the last thing in the day, so it presents a frame *after* whatever it is
@@ -47,6 +57,26 @@ const LEADERBOARD_ASK_ARM_MS = 700;
  * enough to clear the sheet's slide-out.
  */
 const BUY_AFTER_SHEET_FALLBACK_MS = 700;
+/**
+ * A Next Week tap at the wall brings the closing panel back. Nothing is
+ * dismissing at that moment, so the beat is short — just off the tap's own
+ * commit (the blocked TICK).
+ */
+const CHIP_REOPEN_ARM_MS = 150;
+/**
+ * The first-session soft ask arms slower than the closing panel (350) and the
+ * leaderboard ask (700), so either of those wins a tie and this one waits for
+ * it to clear rather than racing it.
+ */
+const FIRST_SESSION_ASK_ARM_MS = 900;
+/** Same role as `BUY_AFTER_SHEET_FALLBACK_MS`, for the OS dialog after the soft ask (Android has no `onDismissed`). */
+const PERMISSION_AFTER_SHEET_FALLBACK_MS = 700;
+/**
+ * The `missions_complete` review ask fires this long after the Week in Review
+ * is dismissed — clear of the sheet's slide-out, and of the 350ms beat other
+ * surfaces arm on. Every guard is re-checked when it fires.
+ */
+const MISSIONS_REVIEW_ARM_MS = 1200;
 
 /**
  * Streak length at which coming back counts as a genuine "I like this" signal
@@ -63,7 +93,14 @@ const REVIEW_STREAK_DAYS = 3;
  * rather than per-screen so its two `Modal`s never stack duplicates across
  * tabs that stay mounted in the background.
  */
-export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWeeksFlow> }) {
+export function GameChrome({
+  buyWeeks,
+  wallTapRequest = 0,
+}: {
+  buyWeeks: ReturnType<typeof useBuyWeeksFlow>;
+  /** Bumped by every Next Week tap at the wall (see `(tabs)/_layout.tsx`): bring the closing panel back. */
+  wallTapRequest?: number;
+}) {
   const {
     state,
     previousState,
@@ -73,6 +110,10 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     creditPurchase,
     devFreePlay,
     streak,
+    firstAllNighterOffered,
+    claimFirstAllNighter,
+    missionsReviewArmed,
+    settleMissionsReview,
   } = useGame();
   const leaderboard = useLeaderboard();
   const insets = useSafeAreaInsets();
@@ -99,11 +140,31 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   // unannounced; asking after the close keeps it out of the frame the sheet is
   // dismissing in.
   const [reminderOptedIn, setReminderOptedIn] = useState(false);
-  // Set by "Pull an all-nighter": the paywall waits for the closing panel to
-  // finish sliding away. Presenting it in the same frame the panel starts
-  // dismissing is the iOS present-while-dismiss case — UIKit drops the
-  // paywall, nothing appears, and the tap looks dead.
-  const [buyAfterSheet, setBuyAfterSheet] = useState(false);
+  // Set by "Pull an all-nighter" / "Find out now": the paywall waits for the
+  // closing panel to finish sliding away. Presenting it in the same frame the
+  // panel starts dismissing is the iOS present-while-dismiss case — UIKit
+  // drops the paywall, nothing appears, and the tap looks dead. Carries the
+  // trigger and source the paywall will report.
+  const [buyAfterSheet, setBuyAfterSheet] = useState<{ trigger: BuyWeeksTrigger; source: BuyWeeksSource } | null>(
+    null,
+  );
+  // How the closing panel currently on screen was opened: on its own at the
+  // wall, or brought back by a Next Week tap. Becomes the paywall's `source`.
+  const [dayCompleteSource, setDayCompleteSource] = useState<'auto' | 'chip'>('auto');
+  // The live price the cliffhanger buttons quote; null until (and unless) it loads.
+  const [priceTeaser, setPriceTeaser] = useState<PriceTeaser | null>(null);
+  // First-session soft ask. The two reads are null until they land.
+  const [permissionUnspent, setPermissionUnspent] = useState<boolean | null>(null);
+  const [softAskShown, setSoftAskShown] = useState<boolean | null>(null);
+  const [softAskVisible, setSoftAskVisible] = useState(false);
+  // "Yes" was tapped: the OS dialog waits for the sheet to finish closing.
+  const [softAskAccepted, setSoftAskAccepted] = useState(false);
+  // The sheet is gone; mounting `NotificationPermissionAsk` is the OS ask.
+  const [firstSessionPermissionAsk, setFirstSessionPermissionAsk] = useState(false);
+  // The `missions_complete` review ask is on its timer. The state mirrors the
+  // ref so the soft ask can wait on it during render.
+  const missionsReviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [missionsReviewPending, setMissionsReviewPending] = useState(false);
 
   // Store-layer daily week budget (PRD F12) plus the IAP-purchased pool — a
   // no-op while either is still resolving (null), so play is never blocked
@@ -116,7 +177,21 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
       .then((value) => setDayCompleteShownFor(value))
       .catch(() => {})
       .finally(() => setDayCompleteLoaded(true));
+    if (Platform.OS === 'web') return;
+    notificationAskSpentOnDateKey()
+      .then((spentOn) => setPermissionUnspent(spentOn === null))
+      .catch(() => setPermissionUnspent(false));
+    firstSessionSoftAskShown()
+      .then(setSoftAskShown)
+      .catch(() => setSoftAskShown(true));
   }, []);
+
+  useEffect(
+    () => () => {
+      if (missionsReviewTimerRef.current) clearTimeout(missionsReviewTimerRef.current);
+    },
+    [],
+  );
 
   // Hoisted above the early return because the closing-panel gate below needs
   // them and hooks can't run conditionally.
@@ -135,6 +210,27 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   // The card the wall pinned for next week — the cliffhanger (see `PIN_CLIFFHANGER`).
   const cliffhanger = useMemo(() => cliffhangerTeaserFor(state), [state]);
 
+  // The cliffhanger buttons quote a live store price from the offering they
+  // open. Fetched once, the first time the wall has a cliffhanger to sell;
+  // null (any failure) keeps the plain "Find out now".
+  const wantsPriceTeaser = purchasesAvailable && budgetExhausted && cliffhanger !== null && priceTeaser === null;
+  useEffect(() => {
+    if (!wantsPriceTeaser) return;
+    let cancelled = false;
+    getWeeksPriceTeaser('cliffhanger')
+      .then((teaser) => {
+        if (!cancelled && teaser) setPriceTeaser(teaser);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsPriceTeaser]);
+
+  // The soft ask owns the screen from the moment it opens until the OS dialog
+  // it leads to has been requested.
+  const softAskBusy = softAskVisible || softAskAccepted;
+
   // Every condition that has to hold before the day can be closed out. The
   // ordering ones are what matter: each names another surface that owns the
   // screen first, because iOS hangs when one modal presents into a frame
@@ -147,6 +243,7 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     !state.pendingEvent && // DecisionModal owns the screen
     !buyWeeks.isOpen && // never stack on a buy-weeks surface
     !buyAfterSheet && // …or on one that is about to open
+    !softAskBusy && // the first-session soft ask, or the OS dialog after it
     // The tick that spent the last week still owes the player its recap:
     // `WeekInReviewSheet` arms 350ms *after* this panel would otherwise open,
     // and would present straight into it. The recap is the earlier beat, so
@@ -154,29 +251,54 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     !recapOwed;
   const dayCompleteWeek = state?.week ?? null;
 
+  // Opens the closing panel and latches today, from either door: the
+  // once-a-day auto open below, or a Next Week tap at the wall. The clock is
+  // read here rather than during render — `week-budget.ts` keeps `Date` out of
+  // derivations on purpose, and the day must be latched when it's shown.
+  const showDayComplete = useEffectEvent((source: 'auto' | 'chip') => {
+    const today = dateKey(new Date());
+    setDayCompleteShownFor(today);
+    AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
+    setDayCompleteSource(source);
+    setDayCompleteVisible(true);
+    track(EVENTS.DAY_COMPLETE_SHOWN, {
+      agenda_kind: agenda?.kind ?? null,
+      action_kind: actionNow?.kind ?? null,
+      teaser_card_id: cliffhanger?.cardId ?? null,
+      week: dayCompleteWeek,
+      source,
+      all_nighter_offer: firstAllNighterOffered,
+      // The all-nighter gift replaces the priced button, so no price is shown then.
+      price_shown: agenda?.kind === 'cliffhanger' && priceTeaser !== null && !firstAllNighterOffered,
+    });
+    notificationAskSpentOnDateKey()
+      .then((spentOn) => setReminderOfferable(Platform.OS !== 'web' && spentOn === null))
+      .catch(() => {});
+  });
+
   useEffect(() => {
     if (!dayCompleteDue) return;
-    // Armed rather than immediate, and the clock is read here rather than
-    // during render — `week-budget.ts` keeps `Date` out of derivations on
-    // purpose, and the day must be latched at the moment it's actually shown.
+    // Armed rather than immediate: see `DAY_COMPLETE_ARM_MS`.
     const timer = setTimeout(() => {
-      const today = dateKey(new Date());
-      if (dayCompleteShownFor === today) return;
-      setDayCompleteShownFor(today);
-      AsyncStorage.setItem(DAY_COMPLETE_KEY, today).catch(() => {});
-      setDayCompleteVisible(true);
-      track(EVENTS.DAY_COMPLETE_SHOWN, {
-        agenda_kind: agenda?.kind ?? null,
-        action_kind: actionNow?.kind ?? null,
-        teaser_card_id: cliffhanger?.cardId ?? null,
-        week: dayCompleteWeek,
-      });
-      notificationAskSpentOnDateKey()
-        .then((spentOn) => setReminderOfferable(Platform.OS !== 'web' && spentOn === null))
-        .catch(() => {});
+      if (dayCompleteShownFor === dateKey(new Date())) return;
+      showDayComplete('auto');
     }, DAY_COMPLETE_ARM_MS);
     return () => clearTimeout(timer);
-  }, [dayCompleteDue, dayCompleteShownFor, agenda, actionNow, cliffhanger, dayCompleteWeek]);
+  }, [dayCompleteDue, dayCompleteShownFor]);
+
+  // A Next Week tap at the wall brings the panel back, under the same ordering
+  // rules as the auto open — minus the once-a-day latch, since the player
+  // asked for it. A tap while another surface owns the screen is dropped (the
+  // chip is covered by most of them anyway).
+  const wallReopenAllowed = dayCompleteDue && !dayCompleteVisible;
+  const handledWallTapRef = useRef(wallTapRequest);
+  useEffect(() => {
+    if (wallTapRequest === handledWallTapRef.current) return;
+    handledWallTapRef.current = wallTapRequest;
+    if (!wallReopenAllowed) return;
+    const timer = setTimeout(() => showDayComplete('chip'), CHIP_REOPEN_ARM_MS);
+    return () => clearTimeout(timer);
+  }, [wallTapRequest, wallReopenAllowed]);
 
   const pendingWeek =
     state !== null && !state.gameOver && previousState !== null && !state.pendingEvent
@@ -199,17 +321,101 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
     !buyWeeks.isOpen &&
     !buyAfterSheet &&
     !dayCompleteVisible &&
+    !softAskBusy &&
     (previousState === null || recapArmedWeek === state.week) &&
     !recapOwed;
   const { open: openBuyWeeks } = buyWeeks;
   useEffect(() => {
     if (!buyAfterSheet) return;
     const timer = setTimeout(() => {
-      setBuyAfterSheet(false);
-      openBuyWeeks('out_of_weeks');
+      setBuyAfterSheet(null);
+      openBuyWeeks(buyAfterSheet.trigger, { source: buyAfterSheet.source });
     }, BUY_AFTER_SHEET_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [buyAfterSheet, openBuyWeeks]);
+
+  // The first-session soft ask: once the player is a few weeks in and this
+  // week's recap has settled, with nothing else on screen or queued. It
+  // yields to the leaderboard ask (`promptDue`), which in turn waits on it.
+  const atWall = budgetExhausted;
+  const roundCelebrating = roundJustClosed;
+  const softAskInputs = {
+    week: state?.week ?? 0,
+    permissionUnspent,
+    softAskShown,
+    isWeb: Platform.OS === 'web',
+    atWall,
+    otherSurfaceBusy:
+      state === null ||
+      state.gameOver !== null ||
+      state.pendingEvent !== null ||
+      buyWeeks.isOpen ||
+      buyAfterSheet !== null ||
+      dayCompleteVisible ||
+      leaderboard.promptDue ||
+      leaderboard.joinSource !== null ||
+      roundCelebrating ||
+      missionsReviewPending,
+  };
+  const softAskDue =
+    !softAskBusy &&
+    firstSessionAskDue({
+      ...softAskInputs,
+      recapSettled: previousState !== null && state !== null && recapArmedWeek === state.week && !recapOwed,
+    });
+  const softAskWeek = state?.week ?? null;
+  useEffect(() => {
+    if (!softAskDue) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      // Re-read the shot right before presenting: the wall's "Notify me" may
+      // have spent it since the mount-time read.
+      notificationAskSpentOnDateKey()
+        .then((spentOn) => {
+          if (cancelled) return;
+          if (spentOn !== null) {
+            setPermissionUnspent(false);
+            return;
+          }
+          setSoftAskShown(true);
+          markFirstSessionSoftAskShown().catch(() => {});
+          setSoftAskVisible(true);
+          track(EVENTS.FIRST_SESSION_ASK_SHOWN, { week: softAskWeek });
+        })
+        .catch(() => {});
+    }, FIRST_SESSION_ASK_ARM_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [softAskDue, softAskWeek]);
+
+  // What the missions review timer re-checks when it fires.
+  const missionsReviewBusy =
+    state === null ||
+    state.gameOver !== null ||
+    state.pendingEvent !== null ||
+    budgetExhausted ||
+    buyWeeks.isOpen ||
+    buyAfterSheet !== null ||
+    dayCompleteVisible ||
+    softAskBusy ||
+    leaderboard.joinSource !== null;
+  const missionsReviewBusyRef = useRef(missionsReviewBusy);
+  useEffect(() => {
+    missionsReviewBusyRef.current = missionsReviewBusy;
+  });
+
+  // Backstop for "Yes": the OS dialog normally mounts on the sheet's
+  // `onDismissed` (iOS only); this covers platforms where that never fires.
+  useEffect(() => {
+    if (!softAskAccepted || firstSessionPermissionAsk) return;
+    const timer = setTimeout(() => {
+      setFirstSessionPermissionAsk(true);
+      setSoftAskAccepted(false);
+    }, PERMISSION_AFTER_SHEET_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [softAskAccepted, firstSessionPermissionAsk]);
 
   const { openJoin } = leaderboard;
   useEffect(() => {
@@ -228,6 +434,47 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
   const hasUnseenTick = previousState !== null && !state.pendingEvent && recapArmedWeek === state.week;
   const showReview = hasUnseenTick && recapOwed;
   const showTicker = hasUnseenTick && !notable && state.week !== tickerDismissedWeek;
+
+  /**
+   * The `missions_complete` review ask rides the first Week in Review dismissal
+   * after the guided run's last mission. Never in the dismissal's own frame:
+   * it waits `MISSIONS_REVIEW_ARM_MS`, then re-checks that nothing took the
+   * screen meanwhile. When another surface owns this beat — the wall's closing
+   * panel, the soft ask, a buy surface — it stays armed for the next recap.
+   */
+  function maybeAskForReviewAfterMissions(): void {
+    if (!state || missionsReviewPending) return;
+    const action = missionsReviewOnRecapDismiss({
+      armed: missionsReviewArmed,
+      insolvent,
+      otherSurfaceDue:
+        budgetExhausted ||
+        state.pendingEvent !== null ||
+        buyWeeks.isOpen ||
+        buyAfterSheet !== null ||
+        dayCompleteVisible ||
+        softAskBusy ||
+        leaderboard.promptDue ||
+        leaderboard.joinSource !== null ||
+        // The soft ask is about to take this very dismissal.
+        firstSessionAskDue({ ...softAskInputs, recapSettled: true }),
+    });
+    if (action === 'suppress') {
+      settleMissionsReview();
+      reportReviewSuppressed('missions_complete', 'insolvent');
+      return;
+    }
+    if (action !== 'ask') return;
+    setMissionsReviewPending(true);
+    missionsReviewTimerRef.current = setTimeout(() => {
+      missionsReviewTimerRef.current = null;
+      setMissionsReviewPending(false);
+      // Something presented meanwhile: stay armed for the next recap.
+      if (missionsReviewBusyRef.current) return;
+      settleMissionsReview();
+      requestReviewOnce('missions_complete');
+    }, MISSIONS_REVIEW_ARM_MS);
+  }
 
   const cashDelta = previousState ? state.cash - previousState.cash : 0;
   const moraleDelta = previousState ? state.morale - previousState.morale : 0;
@@ -257,6 +504,9 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
           players granted the old unannounced dialog here, and presenting it
           into the sheet's frame hangs iOS (docs/bug-stuck-decision-modal.md). */}
       {reminderOptedIn ? <NotificationPermissionAsk trigger="reminder_optin" /> : null}
+      {/* A yes on the first-session soft ask, mounted only once that sheet has
+          slid away — same reason as above. */}
+      {firstSessionPermissionAsk ? <NotificationPermissionAsk trigger="first_session" /> : null}
 
       {/* At the wall: what next week brings (the cliffhanger), and the one
           thing still worth doing while the Hud's Next Week chip counts down to
@@ -268,10 +518,15 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
               companyName={state.companyName}
               teaser={cliffhanger}
               weekBudget={weekBudget}
+              priceTeaser={priceTeaser}
               onFindOut={
                 purchasesAvailable
                   ? () => {
-                      track(EVENTS.CLIFFHANGER_FIND_OUT_TAPPED, { teaser_card_id: cliffhanger.cardId, week: state.week });
+                      track(EVENTS.CLIFFHANGER_FIND_OUT_TAPPED, {
+                        teaser_card_id: cliffhanger.cardId,
+                        week: state.week,
+                        price_shown: priceTeaser !== null,
+                      });
                       openBuyWeeks('cliffhanger');
                     }
                   : undefined
@@ -298,7 +553,29 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
         yourShareDelta={yourShareDelta}
         rivalShares={rivalShares}
         entries={weekEntries}
-        onDismiss={() => setReviewedWeek(state.week)}
+        onDismiss={() => {
+          setReviewedWeek(state.week);
+          maybeAskForReviewAfterMissions();
+        }}
+      />
+
+      <FirstSessionAskSheet
+        visible={softAskVisible}
+        companyName={state.companyName}
+        onAccept={() => {
+          track(EVENTS.FIRST_SESSION_ASK_ANSWERED, { accepted: true, week: state.week });
+          setSoftAskAccepted(true);
+          setSoftAskVisible(false);
+        }}
+        onDecline={() => {
+          track(EVENTS.FIRST_SESSION_ASK_ANSWERED, { accepted: false, week: state.week });
+          setSoftAskVisible(false);
+        }}
+        onDismissed={() => {
+          if (!softAskAccepted) return;
+          setFirstSessionPermissionAsk(true);
+          setSoftAskAccepted(false);
+        }}
       />
 
       <DayCompleteSheet
@@ -322,9 +599,28 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
             ? () => {
                 setDayCompleteVisible(false);
                 track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'buy_weeks' });
-                setBuyAfterSheet(true);
+                // "Find out now" opens the cliffhanger offering, so the price
+                // it quoted is the price the paywall shows; "Pull an
+                // all-nighter" keeps `out_of_weeks`.
+                setBuyAfterSheet({
+                  trigger: agenda?.kind === 'cliffhanger' ? 'cliffhanger' : 'out_of_weeks',
+                  source: dayCompleteSource === 'chip' ? 'chip' : 'day_complete',
+                });
               }
             : undefined
+        }
+        priceTeaser={priceTeaser}
+        allNighterOffer={
+          firstAllNighterOffered
+            ? {
+                weeks: FIRST_ALL_NIGHTER_WEEKS,
+                onClaim: () => {
+                  setDayCompleteVisible(false);
+                  track(EVENTS.DAY_COMPLETE_DISMISSED, { action: 'first_all_nighter' });
+                  claimFirstAllNighter();
+                },
+              }
+            : null
         }
         onRemindMe={
           reminderOfferable
@@ -346,8 +642,8 @@ export function GameChrome({ buyWeeks }: { buyWeeks: ReturnType<typeof useBuyWee
         }}
         onDismissed={() => {
           if (!buyAfterSheet) return;
-          setBuyAfterSheet(false);
-          openBuyWeeks('out_of_weeks');
+          setBuyAfterSheet(null);
+          openBuyWeeks(buyAfterSheet.trigger, { source: buyAfterSheet.source });
         }}
       />
 

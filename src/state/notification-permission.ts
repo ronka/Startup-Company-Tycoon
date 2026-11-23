@@ -42,9 +42,31 @@ const IS_WEB = Platform.OS === 'web';
 /**
  * Which moment spent the OS's single permission shot. A union rather than a
  * bare string because the whole point of the prop is comparing grant rates
- * between these two buckets — a typo would silently corrupt that comparison.
+ * between these buckets — a typo would silently corrupt that comparison.
+ * `first_session` is a yes on the week-3 soft ask (`first-session-ask.ts`).
  */
-export type PermissionTrigger = 'reminder_optin' | 'second_launch';
+export type PermissionTrigger = 'reminder_optin' | 'second_launch' | 'first_session';
+
+/** Set once the first-session soft ask has been shown, whatever the answer. */
+const FIRST_SESSION_SOFT_ASK_KEY = 'startup-tycoon/notifications/first-session-soft-ask';
+
+/**
+ * Whether this install already saw the first-session soft ask. A failed read
+ * answers `true`: skipping a soft ask is cheap, showing it twice is not.
+ */
+export async function firstSessionSoftAskShown(): Promise<boolean> {
+  if (IS_WEB) return true;
+  try {
+    return (await AsyncStorage.getItem(FIRST_SESSION_SOFT_ASK_KEY)) !== null;
+  } catch {
+    return true;
+  }
+}
+
+/** Latches the first-session soft ask as shown. Written the moment it appears, so a kill mid-sheet doesn't re-ask. */
+export async function markFirstSessionSoftAskShown(): Promise<void> {
+  await AsyncStorage.setItem(FIRST_SESSION_SOFT_ASK_KEY, new Date().toISOString());
+}
 
 /** Guards the OS's one-shot dialog against two callers in the same launch —
  * see `requestNotificationPermissionOnce`. */
