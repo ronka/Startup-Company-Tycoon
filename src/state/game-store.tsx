@@ -25,6 +25,7 @@ import {
   signOut as signOutOfAccount,
   syncEntitlements as syncEntitlementsRequest,
 } from '@/account';
+import { getCurrentRoute } from '@/analytics/current-route';
 import { EVENTS, gameProps, track } from '@/analytics/events';
 import { posthog, registerAnalyticsRelease } from '@/analytics/posthog';
 import { totalHeadcount } from '@/game/balance';
@@ -54,6 +55,8 @@ import {
   type RollBudget,
 } from '@/state/roll-budget';
 import { initialRunHistory, isNewBest, recordRun, type RunHistory } from '@/state/run-history';
+import { finishedMissions, reviewMomentBlockedBy } from '@/state/review-ask';
+import { maxWeekReached, milestonesCrossed } from '@/state/run-milestones';
 import { reportReviewSuppressed, requestReviewOnce } from '@/state/store-review';
 import {
   canRedeemRevive,
@@ -65,9 +68,15 @@ import {
   type RevivePool,
 } from '@/state/revive';
 import {
+  advanceFirstAllNighter,
+  canClaimFirstAllNighter,
+  creditFirstAllNighter,
   creditTransaction,
   creditTransactions,
   dateKey,
+  FIRST_ALL_NIGHTER_WEEKS,
+  initialFirstAllNighterStatus,
+  parseFirstAllNighterStatus,
   grantPurchasedWeeks,
   initialPurchasedWeeksPool,
   INITIAL_FREE_WEEKS,
@@ -79,6 +88,7 @@ import {
   spendWeekFromPools,
   weekBankFullAt,
   WEEKS_BANK_CAP,
+  type FirstAllNighterStatus,
   type PurchasedWeeksPool,
   type WeekBudget,
 } from '@/state/week-budget';
@@ -92,6 +102,19 @@ export const STREAK_STORAGE_KEY = 'startup-tycoon/streak/v1';
 export const PROFILE_STORAGE_KEY = 'startup-tycoon/profile/v1';
 export const RUN_HISTORY_STORAGE_KEY = 'startup-tycoon/run-history/v1';
 export const ROLL_STORAGE_KEY = 'startup-tycoon/rolls/v1';
+/** Local calendar day the closing panel was last shown for. Written by `game-chrome.tsx`; read here as "has this install ever hit a wall". */
+export const DAY_COMPLETE_STORAGE_KEY = 'startup-tycoon/day-complete/last-shown';
+/** The install's one free all-nighter — a `FirstAllNighterStatus` string. */
+export const FIRST_ALL_NIGHTER_STORAGE_KEY = 'startup-tycoon/first-all-nighter/v1';
+/**
+ * Set when a guided run finishes its last mission; cleared once the
+ * `missions_complete` review ask is spent or suppressed. Persisted so a kill
+ * between the mission and the next recap doesn't lose the moment.
+ */
+export const MISSIONS_REVIEW_PENDING_KEY = 'startup-tycoon/store-review/missions-pending';
+
+/** The guided ladder's final mission (`unlocks.ts`): finishing it arms the `missions_complete` review ask. */
+const FINAL_MISSION_ID: QuestId = 'customers';
 
 /**
  * Leftovers of the `initial-free-weeks-v1` experiment (Sep 2026), which shipped
@@ -244,16 +267,17 @@ function armFundingRoundReviewAsk(state: GameState): void {
   // insolvency banner is still on the HQ tab and the run is still in trouble.
   // Pre-action state again: the raise lands cash, but the player's read of the
   // moment was formed by the state they were in when they tapped.
-  if (deriveWeeklyStats(state).insolvent) {
-    reportReviewSuppressed('funding_round', 'insolvent');
-    return;
-  }
+  //
   // Reading `pendingEvent` off the pre-action snapshot is sound here specifically
   // because `ACCEPT_FUNDING_OFFER` never draws a card: what's pending before the raise is
   // what's pending after it. Any future action that both raises and draws would
   // need a live read instead.
-  if (state.pendingEvent) {
-    reportReviewSuppressed('funding_round', 'modal_busy');
+  const blockedBy = reviewMomentBlockedBy({
+    insolvent: deriveWeeklyStats(state).insolvent,
+    modalBusy: state.pendingEvent !== null,
+  });
+  if (blockedBy) {
+    reportReviewSuppressed('funding_round', blockedBy);
     return;
   }
   setTimeout(() => {
@@ -477,6 +501,21 @@ interface GameContextValue {
    * `reason` flavor. No-op if no token is available or no run is active.
    */
   redeemRevive: (reason: string) => void;
+  /**
+   * True while the install sits at its *first* wall with the free all-nighter
+   * unclaimed — the closing panel swaps its buy button for "+3 weeks on us".
+   */
+  firstAllNighterOffered: boolean;
+  /**
+   * Credits the free all-nighter (`FIRST_ALL_NIGHTER_WEEKS` to the free
+   * budget, never the purchased pool) and retires the offer. Returns whether
+   * anything was credited; a double tap credits once.
+   */
+  claimFirstAllNighter: () => boolean;
+  /** A guided run finished its missions and the `missions_complete` review ask is waiting for a recap to ride. */
+  missionsReviewArmed: boolean;
+  /** Disarms the `missions_complete` ask once it's been asked or suppressed. */
+  settleMissionsReview: () => void;
   /** Dev-only escape hatch so playtesting is never rate-limited. Not persisted. */
   devFreePlay: boolean;
   setDevFreePlay: (freePlay: boolean) => void;
@@ -550,6 +589,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // a new personal best. Set in the game-over transition below; cleared on
   // `NEW_GAME` so it never bleeds into the next run's game-over screen.
   const [lastRunWasBest, setLastRunWasBest] = useState(false);
+  // The install's one free all-nighter. Null until the load resolves.
+  const [firstAllNighter, setFirstAllNighter] = useState<FirstAllNighterStatus | null>(null);
+  // Synchronous latch so two taps in one render credit the gift once.
+  const firstAllNighterClaimingRef = useRef(false);
+  // The `wallHitAt` of the wall the gift was claimed at, so the return past it
+  // reports `returned_via: 'first_all_nighter'` rather than 'regen'.
+  const allNighterWallRef = useRef<number | null>(null);
+  const [missionsReviewArmed, setMissionsReviewArmed] = useState(false);
+  // Set by the TICK that empties both pools; read (and cleared) by the diff
+  // effect's `week_advanced`, which carries the `first_wall_at` person property.
+  const wallJustHitAtRef = useRef<string | null>(null);
+  // `session_backgrounded`: when this foreground session began, and how many
+  // weeks it advanced. Reset on every return from the background.
+  // Null until the mount effect below stamps the launch.
+  const sessionStartedAtRef = useRef<number | null>(null);
+  const weeksThisSessionRef = useRef(0);
 
   // Updates the revive pool through both the synchronous ref mirror and React
   // state, so back-to-back reads within one handler (credit → redeem) are
@@ -666,6 +721,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.warn('[game-store] failed to load week budget', err);
         if (!cancelled) setWeekBudget(initialWeekBudget(new Date()));
+      }
+      try {
+        let status = parseFirstAllNighterStatus(await AsyncStorage.getItem(FIRST_ALL_NIGHTER_STORAGE_KEY));
+        if (status === null) {
+          // First launch with this code: a closing panel already on record
+          // means a wall veteran, who doesn't get a "first wall" gift.
+          const daySeen = await AsyncStorage.getItem(DAY_COMPLETE_STORAGE_KEY);
+          status = initialFirstAllNighterStatus(daySeen !== null);
+        }
+        if (!cancelled) setFirstAllNighter(status);
+      } catch (err) {
+        console.warn('[game-store] failed to load first all-nighter', err);
+        // Fail closed: a read error must not hand out a gift.
+        if (!cancelled) setFirstAllNighter('ineligible');
+      }
+      try {
+        const pending = await AsyncStorage.getItem(MISSIONS_REVIEW_PENDING_KEY);
+        if (!cancelled) setMissionsReviewArmed(pending !== null);
+      } catch {
+        // Losing an armed review ask is harmless.
       }
       try {
         const raw = await AsyncStorage.getItem(ROLL_STORAGE_KEY);
@@ -837,6 +912,55 @@ export function GameProvider({ children }: { children: ReactNode }) {
     );
   }, [weekBudget, loading]);
 
+  // Persist the free all-nighter status whenever it changes.
+  useEffect(() => {
+    if (loading || firstAllNighter === null) return;
+    AsyncStorage.setItem(FIRST_ALL_NIGHTER_STORAGE_KEY, firstAllNighter).catch((err) =>
+      console.warn('[game-store] failed to save first all-nighter', err),
+    );
+  }, [firstAllNighter, loading]);
+
+  // `session_backgrounded`: the nearest thing to a quit event. Its own
+  // mount-once listener (not the week-regen one, which only subscribes below
+  // the bank cap and resubscribes on every budget change), reading the latest
+  // values through a ref.
+  const sessionLatestRef = useRef({ state, weekBudget, purchasedWeeks, devFreePlay, profile });
+  useEffect(() => {
+    sessionLatestRef.current = { state, weekBudget, purchasedWeeks, devFreePlay, profile };
+  });
+  useEffect(() => {
+    sessionStartedAtRef.current = Date.now();
+    let backgrounded = false;
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status === 'active') {
+        if (backgrounded) {
+          sessionStartedAtRef.current = Date.now();
+          weeksThisSessionRef.current = 0;
+        }
+        backgrounded = false;
+        return;
+      }
+      if (status !== 'background' || backgrounded) return;
+      backgrounded = true;
+      const latest = sessionLatestRef.current;
+      const run = latest.state;
+      track(EVENTS.SESSION_BACKGROUNDED, {
+        ...(run ? gameProps(run) : {}),
+        session_seconds: Math.round((Date.now() - (sessionStartedAtRef.current ?? Date.now())) / 1_000),
+        weeks_this_session: weeksThisSessionRef.current,
+        at_wall: isWeekBudgetExhausted(latest.weekBudget, latest.purchasedWeeks, latest.devFreePlay),
+        free_weeks_remaining: latest.weekBudget?.weeksRemaining ?? null,
+        purchased_weeks_remaining: latest.purchasedWeeks?.weeksRemaining ?? null,
+        pending_event_id: run?.pendingEvent?.id ?? null,
+        game_over: run?.gameOver ?? null,
+        route: getCurrentRoute(),
+        // A run exists, or the current intro has been completed.
+        onboarding_done: run !== null || latest.profile?.onboardingVersion === ONBOARDING_VERSION,
+      });
+    });
+    return () => subscription.remove();
+  }, []);
+
   // Credit rolls the run has earned from events (the golden standup streak).
   // The engine can only count them — the budget is keyed to a real calendar
   // day, which `src/game/` never sees — so the handoff is a monotone counter
@@ -994,7 +1118,27 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     // A week actually advanced (week only ever increases via TICK).
     if (state.week > prev.week) {
-      track(EVENTS.WEEK_ADVANCED, gameProps(state));
+      weeksThisSessionRef.current += state.week - prev.week;
+      // The TICK that emptied both pools stamps this; the person property is
+      // `$set_once`, so only the install's very first wall sticks.
+      const wallAt = wallJustHitAtRef.current;
+      wallJustHitAtRef.current = null;
+      track(EVENTS.WEEK_ADVANCED, {
+        ...gameProps(state),
+        ...(wallAt ? { hit_wall: true, $set_once: { first_wall_at: wallAt, first_wall_week: state.week } } : {}),
+      });
+      const milestones = milestonesCrossed(prev.week, state.week);
+      if (milestones.length > 0) {
+        const best = maxWeekReached(runHistory?.runs.map((run) => run.weeks) ?? [], state.week);
+        for (const milestone of milestones) {
+          track(EVENTS.RUN_MILESTONE, {
+            ...gameProps(state),
+            milestone,
+            guided: state.unlockSchedule === 'guided-ui',
+            $set: { max_week_reached: best },
+          });
+        }
+      }
     }
     if (state.cliffhangerCardId && state.cliffhangerCardId !== prev.cliffhangerCardId) {
       track(EVENTS.CLIFFHANGER_PINNED, { card_id: state.cliffhangerCardId, week: state.week });
@@ -1095,6 +1239,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!questIds.length) return;
     for (const quest of questIds) track(EVENTS.QUEST_COMPLETED, { quest, week: state.week });
     for (const feature of featuresUnlockedBy(questIds)) track(EVENTS.FEATURE_UNLOCKED, { feature, week: state.week });
+    // The ladder's last rung: arm the review ask for the next Week in Review
+    // dismissal (game-chrome.tsx), never this tick's own frame.
+    if (finishedMissions(questIds, FINAL_MISSION_ID)) {
+      // Armed once the flag is written (or failed to be): either way the
+      // in-memory arm holds for this launch.
+      AsyncStorage.setItem(MISSIONS_REVIEW_PENDING_KEY, new Date().toISOString())
+        .catch(() => {})
+        .then(() => setMissionsReviewArmed(true));
+    }
     dispatch({ type: 'RECORD_QUESTS', questIds });
   }, [state, loading]);
 
@@ -1139,13 +1292,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
           regenCreditedFromRef.current = weekBudget;
           trackRegen(weekBudget, freshBudget, 'live');
         }
+        const returningFromWall = freshBudget.wallHitAt != null;
         if (freshBudget.wallHitAt != null) {
+          const viaAllNighter = allNighterWallRef.current === freshBudget.wallHitAt;
+          allNighterWallRef.current = null;
           track(EVENTS.RETURNED_AFTER_WALL, {
             ...gameProps(state),
             minutes_since_wall: Math.round((now.getTime() - freshBudget.wallHitAt) / 60_000),
             free_weeks_available: freshBudget.weeksRemaining,
             purchased_weeks_available: purchasedWeeks.weeksRemaining,
-            returned_via: freshBudget.weeksRemaining > 0 ? 'regen' : 'purchase',
+            returned_via: viaAllNighter ? 'first_all_nighter' : freshBudget.weeksRemaining > 0 ? 'regen' : 'purchase',
             cliffhanger_card_id: state.cliffhangerCardId ?? null,
           });
         }
@@ -1154,8 +1310,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
         // blocked press: that press must leave the budget object alone.
         const wallHitAt = canSpendAnyWeek(spent.budget, spent.purchased) ? null : now.getTime();
         hitWall = wallHitAt !== null;
+        if (hitWall) wallJustHitAtRef.current = now.toISOString();
         setWeekBudget({ ...spent.budget, wallHitAt });
         setPurchasedWeeks(spent.purchased);
+        // The first wall offers the free all-nighter; getting past it
+        // unclaimed retires the offer.
+        setFirstAllNighter((prev) => (prev === null ? prev : advanceFirstAllNighter(prev, { returningFromWall, hitWall })));
       }
       dispatch(action);
       // The week that empties the pools pins next week's card, so the wall
@@ -1411,6 +1571,34 @@ export function GameProvider({ children }: { children: ReactNode }) {
       applyRevivePool(consumeReviveToken);
       track(EVENTS.REVIVE_REDEEMED, { ...gameProps(state), reason });
       dispatch({ type: 'REVIVE', reason });
+    },
+    firstAllNighterOffered: canClaimFirstAllNighter(
+      firstAllNighter,
+      isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay),
+    ),
+    claimFirstAllNighter: () => {
+      if (firstAllNighterClaimingRef.current) return false;
+      if (!state || !weekBudget) return false;
+      if (!canClaimFirstAllNighter(firstAllNighter, isWeekBudgetExhausted(weekBudget, purchasedWeeks, devFreePlay))) {
+        return false;
+      }
+      firstAllNighterClaimingRef.current = true;
+      // Status first: the persist effect writes it in the same commit as the
+      // weeks, and a terminal status can never be claimed again.
+      setFirstAllNighter('claimed');
+      allNighterWallRef.current = weekBudget.wallHitAt ?? null;
+      setWeekBudget(creditFirstAllNighter(weekBudget));
+      track(EVENTS.FIRST_ALL_NIGHTER_CLAIMED, {
+        ...gameProps(state),
+        weeks_granted: FIRST_ALL_NIGHTER_WEEKS,
+        cliffhanger_card_id: state.cliffhangerCardId ?? null,
+      });
+      return true;
+    },
+    missionsReviewArmed,
+    settleMissionsReview: () => {
+      setMissionsReviewArmed(false);
+      AsyncStorage.removeItem(MISSIONS_REVIEW_PENDING_KEY).catch(() => {});
     },
     devFreePlay,
     setDevFreePlay,

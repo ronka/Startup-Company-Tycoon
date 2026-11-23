@@ -17,7 +17,6 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney, formatWeeks } from '@/lib/format';
-import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
 import { isGuided, isUnlocked } from '@/game/unlocks';
 import { useGame } from '@/state/game-store';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/week-budget';
@@ -33,7 +32,7 @@ import { WEEK_REGEN_MS, WEEKS_BANK_CAP, isWeekBudgetExhausted } from '@/state/we
  * run's unlock and mission-complete banners) — hang off the strip's bottom
  * edge as an overlay, so they float over the screen instead of pushing it down.
  */
-export function Hud({ onBuyWeeks, children }: { onBuyWeeks: (trigger: BuyWeeksTrigger) => void; children?: ReactNode }) {
+export function Hud({ onWallTap, children }: { onWallTap: () => void; children?: ReactNode }) {
   const { state, weekBudget, purchasedWeeks, devFreePlay } = useGame();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -126,7 +125,7 @@ export function Hud({ onBuyWeeks, children }: { onBuyWeeks: (trigger: BuyWeeksTr
       </View>
       <Glow on={guide !== null && !guide.dimmed} style={styles.actionSlot}>
         <NextWeekChip
-          onBuyWeeks={onBuyWeeks}
+          onWallTap={onWallTap}
           style={styles.actionChip}
           onLayout={(event) => {
             // The chip is the strip's last child and the callouts share the strip's
