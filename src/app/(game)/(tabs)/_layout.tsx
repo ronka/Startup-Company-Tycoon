@@ -71,7 +71,13 @@ export default function GameTabsLayout() {
   return (
     <GuideContext.Provider value={guide}>
       <View style={{ flex: 1, backgroundColor: theme.background }}>
-        <Hud onWallTap={() => setWallTapRequest((n) => n + 1)}>
+        <Hud
+          onWallTap={() =>
+            // A paywall iOS dropped leaves isOpen stuck true; open() re-presents
+            // it after LOST_PRESENTATION_MS (and no-ops inside that window).
+            buyWeeks.isOpen ? buyWeeks.open('out_of_weeks', { source: 'chip' }) : setWallTapRequest((n) => n + 1)
+          }
+        >
           <QuestStrip freshUnlocks={freshUnlocks} onDismissUnlocks={dismissUnlocks} />
         </Hud>
         <View style={{ flex: 1 }}>
