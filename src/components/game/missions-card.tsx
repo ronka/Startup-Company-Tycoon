@@ -136,23 +136,47 @@ export function MissionsCard({ state }: { state: GameState }) {
   );
 }
 
+/**
+ * The ladder reads as a list, not a stack of cards: only the current mission
+ * gets a card (accent-tinted, with its bar), done ones go quiet, and rewards
+ * sit as muted footnotes. A one-shot mission's "0 / 1" is only shown once it
+ * is the one being worked on.
+ */
 function MissionRow({ quest }: { quest: MissionView }) {
   const theme = useTheme();
   const done = quest.status === 'done';
   const current = quest.status === 'current';
-  return (
-    <Card tone={current ? 'accent' : 'default'} style={[styles.row, quest.status === 'upcoming' && styles.upcoming]}>
+  const showProgress = current || (!done && (quest.goal > 1 || quest.progress > 0));
+  const body = (
+    <>
       <View style={styles.headerRow}>
-        <ThemedText type="smallBold" themeColor={done ? 'success' : 'text'} numberOfLines={1} style={styles.title}>
-          {done ? '✓' : `${quest.number}.`} {quest.title}
+        <ThemedText
+          type={current ? 'smallBold' : 'small'}
+          themeColor={current ? 'text' : 'textSecondary'}
+          numberOfLines={1}
+          style={styles.title}>
+          {done ? <ThemedText type="small" themeColor="success">✓</ThemedText> : `${quest.number}.`} {quest.title}
         </ThemedText>
-        {done ? null : (
-          <ThemedText type="small" themeColor="textSecondary">{progressText(quest)}</ThemedText>
-        )}
+        {showProgress ? (
+          <ThemedText type="footnote" themeColor="textSecondary" style={styles.progress}>
+            {progressText(quest)}
+          </ThemedText>
+        ) : null}
       </View>
-      <ThemedText type="footnote" themeColor="textSecondary">{quest.reward}</ThemedText>
+      {done ? null : (
+        <ThemedText type="footnote" themeColor="textMuted" numberOfLines={2}>
+          {quest.reward}
+        </ThemedText>
+      )}
       {current ? <ProgressBar percent={(quest.progress / quest.goal) * 100} color={theme.accent} /> : null}
+    </>
+  );
+  return current ? (
+    <Card tone="accent" style={styles.row}>
+      {body}
     </Card>
+  ) : (
+    <View style={[styles.row, styles.plainRow, quest.status === 'upcoming' && styles.upcoming]}>{body}</View>
   );
 }
 
@@ -160,7 +184,9 @@ const styles = StyleSheet.create({
   card: { padding: Spacing.two, gap: Spacing.one },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
   title: { flexShrink: 1 },
-  list: { gap: Spacing.two },
-  row: { padding: Spacing.two, gap: Spacing.one },
-  upcoming: { opacity: 0.6 },
+  list: { gap: Spacing.one },
+  row: { padding: Spacing.two, gap: Spacing.half },
+  plainRow: { paddingHorizontal: Spacing.two + StyleSheet.hairlineWidth },
+  progress: { fontVariant: ['tabular-nums'] },
+  upcoming: { opacity: 0.7 },
 });
