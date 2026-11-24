@@ -7,7 +7,7 @@
  */
 
 import type { GameState } from '../types';
-import { isGuided, nextQuest } from '../unlocks';
+import { isGuided, newlyCompletedQuests, nextQuest } from '../unlocks';
 import { arcCapstoneWeek, arcIndexForWeek, arcStartWeek, type ArcIndex } from './schedule';
 import { ARC_TEMPLATES, baselineFor, templateIdFor } from './templates';
 import type { ArcContext, ArcId, ArcRecord, MissionTemplate } from './types';
@@ -185,4 +185,17 @@ export function arcLadder(state: GameState): ArcLadder | null {
 /** The chapter's pinned mission: the first not yet done. Null when there is none. */
 export function nextArcMission(state: GameState): ArcMissionProgress | null {
   return arcLadder(state)?.missions.find((mission) => mission.status === 'current') ?? null;
+}
+
+/**
+ * Whether a guided quest or chapter mission was genuinely completed — not
+ * merely replaced. The "Mission complete" beat fires when the pinned mission
+ * changes, and at a chapter rollover it changes because the old chapter ended
+ * (say, with its raise never done), which must not read as a win. At the
+ * rollover `syncArc` already holds the new chapter's record, so an old
+ * chapter's unfinished mission is correctly not in it.
+ */
+export function missionCompleted(state: GameState, id: string): boolean {
+  if ((state.questsDone ?? []).includes(id) || (newlyCompletedQuests(state) as string[]).includes(id)) return true;
+  return syncArc(state).arc?.missionsDone.includes(id) ?? false;
 }

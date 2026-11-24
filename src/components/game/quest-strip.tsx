@@ -4,7 +4,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
-import { nextArcMission } from '@/game/arcs';
+import { missionCompleted, nextArcMission } from '@/game/arcs';
 import { FEATURE_LABELS, FEATURE_TERMS, isGuided, nextQuest, unlockedFeatures, type Feature } from '@/game/unlocks';
 import type { GameState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
@@ -70,7 +70,11 @@ export function QuestStrip({
   const nowPinned = state && quest ? { seed: state.createdWithSeed, id: quest.id, title: quest.title } : null;
   if (nowPinned?.id !== pinned?.id || nowPinned?.seed !== pinned?.seed) {
     setPinned(nowPinned);
-    if (pinned && state && pinned.seed === state.createdWithSeed) setCompleted(pinned.title);
+    // Only a mission that was actually met: a chapter rollover also changes the
+    // pinned mission, and an unfinished one must not be announced as done.
+    if (pinned && state && pinned.seed === state.createdWithSeed && missionCompleted(state, pinned.id)) {
+      setCompleted(pinned.title);
+    }
   }
   useEffect(() => {
     if (!completed) return;

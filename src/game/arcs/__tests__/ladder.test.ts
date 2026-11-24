@@ -14,6 +14,7 @@ import {
   incomeGoal,
   isCapstoneWeek,
   isMidpointWeek,
+  missionCompleted,
   nextArcMission,
   syncArc,
 } from '..';
@@ -228,5 +229,31 @@ describe('normalizeSave with chapters', () => {
     expect(syncArc(loaded).arc?.index).toBe(1);
     const unknownId = { ...valid, arc: { ...valid.arc!, id: 'mystery' } } as unknown as GameState;
     expect(normalizeSave(unknownId).arc).toBeUndefined();
+  });
+});
+
+describe('missionCompleted (the "Mission complete" beat)', () => {
+  it('does not announce an unfinished mission when the chapter rolls over', () => {
+    const arc1 = syncArc(guidedDone({ week: 20, lastCapstoneArc: 1 }));
+    expect(nextArcMission(arc1)?.id).toBe('pmf-clevel');
+    const arc2 = { ...arc1, week: 21 };
+    expect(nextArcMission(arc2)?.id).toBe('scale-raise');
+    expect(missionCompleted(arc2, 'pmf-clevel')).toBe(false);
+  });
+
+  it("announces a chapter's last mission when it is met", () => {
+    const before = syncArc(guidedDone({ week: 20 }));
+    expect(missionCompleted(before, 'pmf-capstone')).toBe(false);
+    expect(missionCompleted({ ...before, lastCapstoneArc: 1 }, 'pmf-capstone')).toBe(true);
+  });
+
+  it('announces the last guided quest at the hand-off to the PMF chapter', () => {
+    const almost = run({
+      unlockSchedule: 'guided-ui',
+      questsDone: QUESTS.slice(0, -1).map((q) => q.id),
+      week: 9,
+    });
+    expect(missionCompleted(almost, 'customers')).toBe(true);
+    expect(missionCompleted(run({ unlockSchedule: 'guided-ui', questsDone: [], week: 2 }), 'customers')).toBe(false);
   });
 });
