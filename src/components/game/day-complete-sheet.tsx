@@ -2,12 +2,13 @@ import { StyleSheet, View } from 'react-native';
 
 import { ActionTip } from '@/components/game/action-tip';
 import { BottomSheet } from '@/components/game/bottom-sheet';
+import { CliffhangerCardPreview } from '@/components/game/cliffhanger-card-preview';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { formatMoney } from '@/lib/format';
 import type { PriceTeaser } from '@/purchases';
-import type { ActionNow, TomorrowAgenda } from '@/state/day-close';
+import type { ActionNow, CliffhangerTeaser, TomorrowAgenda } from '@/state/day-close';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP } from '@/state/week-budget';
 
 /**
@@ -26,6 +27,7 @@ export function DayCompleteSheet({
   week,
   stake,
   agenda,
+  cliffhangerCard,
   actionTip,
   onActionTip,
   onBuyWeeks,
@@ -41,6 +43,8 @@ export function DayCompleteSheet({
   /** Founder take-home at the current valuation — the run's score-in-progress. */
   stake: number;
   agenda: TomorrowAgenda | null;
+  /** The pinned card behind a `cliffhanger` agenda: shown with its title, locked choices, and stakes. */
+  cliffhangerCard?: CliffhangerTeaser | null;
   /** Something still worth doing today (a raise), shown as a tappable 💡 row. */
   actionTip?: ActionNow | null;
   onActionTip?: () => void;
@@ -87,7 +91,14 @@ export function DayCompleteSheet({
         <ThemedText type="title">{formatMoney(stake)}</ThemedText>
       </View>
 
-      {agenda ? (
+      {cliffhanger && cliffhangerCard ? (
+        <View style={styles.agenda}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Week {week + 1}
+          </ThemedText>
+          <CliffhangerCardPreview teaser={cliffhangerCard} />
+        </View>
+      ) : agenda ? (
         <View style={styles.agenda}>
           <ThemedText type="small" themeColor="textSecondary">
             {cliffhanger ? 'Next week' : 'Next up'}

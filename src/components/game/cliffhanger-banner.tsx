@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { CliffhangerCardPreview } from '@/components/game/cliffhanger-card-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -10,9 +11,10 @@ import type { CliffhangerTeaser } from '@/state/day-close';
 import { formatClockCountdown, nextWeekRegenAt, type WeekBudget } from '@/state/week-budget';
 
 /**
- * The cliffhanger at the week wall: the card pinned to land next week, teased
- * by its hook rather than its choices, with the real wait until the next free
- * week and, where purchases work, a way to find out now.
+ * The cliffhanger at the week wall: the card pinned to land next week — its
+ * title, hook, its two choices shown locked, and what's at stake — with the
+ * real wait until the next free week and, where purchases work, a way to find
+ * out now. Never the choices' effects: that would close the curiosity gap.
  *
  * Shown for as long as the player sits at the wall, on every tab — unlike the
  * once-a-day closing panel, a player who comes back mid-wait still sees what
@@ -22,12 +24,15 @@ import { formatClockCountdown, nextWeekRegenAt, type WeekBudget } from '@/state/
  */
 export function CliffhangerBanner({
   companyName,
+  week,
   teaser,
   weekBudget,
   priceTeaser,
   onFindOut,
 }: {
   companyName: string;
+  /** The current week; the card lands with the next one. */
+  week: number;
   teaser: CliffhangerTeaser;
   weekBudget: WeekBudget | null;
   /** Live store price for the button; null keeps the plain "Find out now". */
@@ -43,11 +48,11 @@ export function CliffhangerBanner({
       type="surfaceRaised"
       style={[styles.banner, { borderColor: theme.warning }]}
       accessibilityRole="summary"
-      accessibilityLabel={`Next week at ${companyName}: ${teaser.line}${countdown ? ` Find out in ${countdown}.` : ''}`}>
+      accessibilityLabel={`Next week at ${companyName}, week ${week + 1}: ${teaser.title}. ${teaser.teaser} ${teaser.stakes}${countdown ? ` Find out in ${countdown}.` : ''}`}>
       <ThemedText type="sectionLabel" style={{ color: theme.warning }} numberOfLines={1}>
-        Next week…
+        Week {week + 1} at {companyName}…
       </ThemedText>
-      <ThemedText type="smallBold">{teaser.line}</ThemedText>
+      <CliffhangerCardPreview teaser={teaser} compact />
       <View style={styles.footer}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.countdown}>
           {countdown ? `Find out in ${countdown}` : 'Find out next week'}

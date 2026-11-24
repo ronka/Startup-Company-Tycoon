@@ -17,7 +17,7 @@ describe('cliffhangerTeaserFor', () => {
 
   it("names the pinned card's teaser", () => {
     const teaser = cliffhangerTeaserFor(healthy({ cliffhangerCardId: 'scrappy-cofounder-drama' }));
-    expect(teaser).toEqual({ cardId: 'scrappy-cofounder-drama', line: expect.stringContaining('meeting-room door') });
+    expect(teaser).toMatchObject({ cardId: 'scrappy-cofounder-drama', line: expect.stringContaining('meeting-room door') });
   });
 
   it('steps aside while a decision is on screen', () => {

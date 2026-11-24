@@ -9,6 +9,8 @@
 
 import { canRaiseRound, hasRoundsAvailable } from '@/game/balance';
 import { cliffhangerCardFor } from '@/game/engine';
+import { stakesLineFor } from '@/game/events/stakes';
+import type { EventCard } from '@/game/events/types';
 import { type GameState } from '@/game/types';
 import { isUnlocked } from '@/game/unlocks';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
@@ -78,20 +80,44 @@ export function tomorrowAgendaFor(state: GameState | null): TomorrowAgenda | nul
 export interface CliffhangerTeaser {
   /** Card id, for analytics — never rendered. */
   cardId: string;
-  /** One or two short sentences hinting at the dilemma. Rendered verbatim. */
+  /** One or two short sentences hinting at the dilemma: the teaser, or "<title> is coming." Rendered verbatim (agenda, push). */
   line: string;
+  /** The card's title, e.g. "First Big Customer". */
+  title: string;
+  /** The card's teaser; the title when the card predates teasers. */
+  teaser: string;
+  /** The first choice's label — shown locked at the wall, never with its effects. */
+  choiceA: string;
+  /** The second choice's label; null on a one-choice card. A third choice is never shown. */
+  choiceB: string | null;
+  /** One line naming what's at stake across the choices, without saying which choice does what. */
+  stakes: string;
+}
+
+/** What the wall shows for a card: everything needed to tease it, nothing that gives the answer away. */
+export function teaserForCard(card: EventCard): CliffhangerTeaser {
+  const [first, second] = card.choices ?? [];
+  return {
+    cardId: card.id,
+    line: card.teaser ?? `${card.title} is coming.`,
+    title: card.title,
+    teaser: card.teaser ?? card.title,
+    choiceA: first?.label ?? 'Decide',
+    choiceB: second?.label ?? null,
+    stakes: stakesLineFor(card),
+  };
 }
 
 /**
- * The cliffhanger the week wall shows: the pinned card's teaser, or its title
- * for a card written before teasers. Null when nothing is pinned, or while a
- * decision is already on screen.
+ * The cliffhanger the week wall shows: the pinned card's title, teaser, its
+ * first two choices (locked), and a stakes line. Null when nothing is pinned,
+ * or while a decision is already on screen.
  */
 export function cliffhangerTeaserFor(state: GameState | null): CliffhangerTeaser | null {
   if (!state || state.gameOver || state.pendingEvent) return null;
   const card = cliffhangerCardFor(state);
   if (!card) return null;
-  return { cardId: card.id, line: card.teaser ?? `${card.title} is coming.` };
+  return teaserForCard(card);
 }
 
 /** Something the player can do right now, even with no weeks left today. */

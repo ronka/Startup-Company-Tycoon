@@ -170,7 +170,8 @@ export default function HqScreen() {
           ]}
         />
 
-        {guided ? <MissionsCard state={state} /> : null}
+        {/* The guided ladder, then each chapter's (weeks 11–20 and on) — for every run. */}
+        <MissionsCard state={state} />
 
         {insolvent ? <InsolvencyBanner weeksInTheRed={state.weeksInTheRed} /> : null}
 

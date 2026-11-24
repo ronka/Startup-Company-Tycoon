@@ -17,6 +17,8 @@ export {
   syncPostHogAttribute,
 } from './fallback';
 export { purchaseErrorDetails, purchaseErrorProps } from './error-details';
+export { paywallVariablesFor } from './paywall-variables';
+export type { PaywallVariables } from './paywall-variables';
 export { REVIVE_PRICE_LABEL, WEEK_PACKS } from './stub';
 export type { PriceTeaser } from './offering-select';
 export type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { EVENTS, track } from '@/analytics/events';
-import { presentWeeksPaywall, purchaseErrorDetails, purchaseErrorProps } from '@/purchases';
+import { paywallVariablesFor, presentWeeksPaywall, purchaseErrorDetails, purchaseErrorProps } from '@/purchases';
+import { cliffhangerTeaserFor } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
 import { notePurchaseAttemptFailed, notePurchaseSurfaceWorked, purchasesBlocked } from '@/state/purchase-failure-gate';
 import { notePurchaseFailed } from '@/state/store-review';
@@ -105,7 +106,13 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
   open: (trigger: BuyWeeksTrigger, options?: BuyWeeksOpenOptions) => void;
   closeSheet: () => void;
 } {
-  const { reconcileAfterPaywall } = useGame();
+  const { reconcileAfterPaywall, state } = useGame();
+  // Read at tap time by `open`, which is memoised without `state` so its
+  // identity (and every effect keyed to it) doesn't churn every week.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [flow, setFlow] = useState<BuyFlow>(IDLE);
   // Synchronous mirror of `flow`, in the same shape as the store's
   // `purchasedWeeksRef`. Two taps landing in the same render both read the old
@@ -167,10 +174,26 @@ export function useBuyWeeksFlow(runIsLive: boolean): {
       track(EVENTS.PAYWALL_PRESENTATION_ATTEMPTED, { trigger, source, surface: 'revenuecat' });
       // The trigger picks the offering: the cliffhanger prefers its own
       // `weeks_cliffhanger` one when RevenueCat has it (see `offering-select.ts`).
-      presentWeeksPaywall(trigger, () => {
-        if (attempt === attemptRef.current) presentCalledAtRef.current = Date.now();
-        track(EVENTS.PAYWALL_SHOWN, { trigger, source, surface: 'revenuecat' });
-      })
+      // The hosted paywall's `{{ custom.* }}` copy: company and week always,
+      // the pinned card's title, teaser, choices, and stakes for the cliffhanger.
+      const run = stateRef.current;
+      const variables = paywallVariablesFor(
+        { companyName: run?.companyName, week: run?.week, card: cliffhangerTeaserFor(run) },
+        trigger,
+      );
+      presentWeeksPaywall(
+        trigger,
+        () => {
+          if (attempt === attemptRef.current) presentCalledAtRef.current = Date.now();
+          track(EVENTS.PAYWALL_SHOWN, {
+            trigger,
+            source,
+            surface: 'revenuecat',
+            card_id: trigger === 'cliffhanger' ? (cliffhangerTeaserFor(run)?.cardId ?? null) : null,
+          });
+        },
+        variables,
+      )
         .then(async ({ outcome, notPresentedReason, error }) => {
           if (outcome === 'not_presented') {
             track(EVENTS.PAYWALL_NOT_PRESENTED, { trigger, source, surface: 'revenuecat', reason: notPresentedReason });

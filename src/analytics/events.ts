@@ -206,7 +206,10 @@ export const EVENTS = {
   /**
    * The week wall pinned next week's decision card — `{ card_id, week }`.
    * Not sent when the cooldown or an empty deck skipped the pin, so walls
-   * without one are `week_advance_blocked` minus these.
+   * without one are `week_advance_blocked` minus these. Since chapters, also
+   * `{ arc_id, arc_index, beat }` where `beat` is 'capstone' (week 10/20/30…),
+   * 'midpoint' (week 15/25…), or 'wall' (an ordinary cooldown pin). Both this
+   * and `cliffhanger_landed` carry them.
    */
   CLIFFHANGER_PINNED: 'cliffhanger_pinned',
   /** The pinned card landed as a decision — `{ card_id, week }`. Join to `event_decision_made` by `card_id`. */
@@ -330,6 +333,22 @@ export const EVENTS = {
   QUEST_COMPLETED: 'quest_completed',
   /** A guided run unlocked a feature — `{ feature, week }`. Once per feature per run. */
   FEATURE_UNLOCKED: 'feature_unlocked',
+
+  // Chapters (10-week arcs after the guided ladder)
+  /**
+   * A chapter's mission ladder started — `{ arc_id, arc_index, week, start_week,
+   * capstone_week, substituted }`. `week` is when it actually started (an old
+   * save or an early-finished guided ladder starts mid-chapter).
+   */
+  ARC_STARTED: 'arc_started',
+  /** A chapter mission was met — `{ arc_id, arc_index, mission, week, substituted }`. Once per mission per chapter. */
+  ARC_MISSION_COMPLETED: 'arc_mission_completed',
+  /**
+   * The chapter crossed its midpoint week (15, 25, …) — `{ arc_id, arc_index,
+   * week, card_id }`. `card_id` is the mid-chapter card if one was pinned for
+   * it, else null.
+   */
+  ARC_MIDPOINT: 'arc_midpoint',
   /** The recommended action was tapped — `{ action }`. Not sent since the guide tooltips replaced the button (5aef37b); kept for old data. */
   RECOMMENDED_ACTION_TAPPED: 'recommended_action_tapped',
   /** "Skip week" past a recommended hire — `{ action }`. Not sent since 5aef37b, like the above. */
