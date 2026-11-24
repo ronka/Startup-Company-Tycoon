@@ -186,8 +186,6 @@ export function capstoneMission(prefix: string): MissionTemplate {
 
 // ── Templates ───────────────────────────────────────────────────────────────
 
-const chapter = (ctx: ArcContext) => `Chapter ${ctx.arcIndex + 1}`;
-
 export const ARC_TEMPLATES: Record<ArcId, ArcTemplate> = {
   seed: {
     id: 'seed',
@@ -200,7 +198,7 @@ export const ARC_TEMPLATES: Record<ArcId, ArcTemplate> = {
   pmf: {
     id: 'pmf',
     title: () => 'Find product-market fit',
-    goalLine: (ctx) => `${chapter(ctx)}: prove people need this before the week ${ctx.capstoneWeek} decision.`,
+    goalLine: (ctx) => `Prove people need this before the week ${ctx.capstoneWeek} decision.`,
     midOffsetWeeks: 5,
     missions: [
       cLevelMission('pmf'),
@@ -214,7 +212,7 @@ export const ARC_TEMPLATES: Record<ArcId, ArcTemplate> = {
   scale: {
     id: 'scale',
     title: () => 'Scale what works',
-    goalLine: (ctx) => `${chapter(ctx)}: grow into the company the next round is betting on.`,
+    goalLine: () => 'Grow into the company the next round is betting on.',
     midOffsetWeeks: 5,
     missions: [
       raiseMission('scale'),
@@ -228,21 +226,21 @@ export const ARC_TEMPLATES: Record<ArcId, ArcTemplate> = {
   boom: {
     id: 'boom',
     title: () => 'Ride the boom',
-    goalLine: (ctx) => `${chapter(ctx)}: money is cheap. Turn it into revenue before it isn't.`,
+    goalLine: () => "Money is cheap. Turn it into revenue before it isn't.",
     midOffsetWeeks: 5,
     missions: [incomeMission('boom'), cLevelMission('boom'), capstoneMission('boom')],
   },
   reckoning: {
     id: 'reckoning',
     title: () => 'Survive the reckoning',
-    goalLine: (ctx) => `${chapter(ctx)}: the money dried up. Keep the lights on.`,
+    goalLine: () => 'The money dried up. Keep the lights on.',
     midOffsetWeeks: 5,
     missions: [runwayMission('reckoning'), moraleMission('reckoning'), capstoneMission('reckoning')],
   },
   crisis: {
     id: 'crisis',
     title: () => 'Weather the storm',
-    goalLine: (ctx) => `${chapter(ctx)}: one more test before the week ${ctx.capstoneWeek} call.`,
+    goalLine: (ctx) => `One more test before the week ${ctx.capstoneWeek} call.`,
     midOffsetWeeks: 5,
     missions: [runwayMission('crisis'), customersMission('crisis', 1.1, 5), capstoneMission('crisis')],
   },
