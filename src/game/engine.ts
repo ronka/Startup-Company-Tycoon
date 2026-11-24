@@ -6,11 +6,10 @@
 
 import { roll } from './clevels';
 import { applyEventEffects } from './events/apply';
-import { BOOM_DECK } from './events/boom';
 import { drawCadenceWeeks, drawCard, drawFillerCard } from './events/deck';
+import { ERA_DECKS, isPinnable } from './events/decks';
+import { arcCardById, arcIndexForWeek, isArcRecord, isCapstoneWeek, isMidpointWeek, pickCapstone, pickMidpoint } from './arcs';
 import { FILLER_DECK } from './events/fillers';
-import { RECKONING_DECK } from './events/reckoning';
-import { SCRAPPY_DECK } from './events/scrappy';
 import { Era, EventCard } from './events/types';
 import {
   BOOM_START_WEEK_MAX,
@@ -120,12 +119,6 @@ const FOCUS_SWITCH_NEWS: Record<FocusId, { title: string; flavor: string }> = {
   hype: { title: 'Focus: chasing the hype', flavor: 'Marketing over substance — for now.' },
 };
 
-/** Each era draws from its own unique-card deck (Task 6: era-gated draw). */
-const ERA_DECKS: Record<Era, EventCard[]> = {
-  scrappy: SCRAPPY_DECK,
-  boom: BOOM_DECK,
-  reckoning: RECKONING_DECK,
-};
 
 /** Fallback company name for callers that don't collect one (sim script, tests). */
 export const DEFAULT_COMPANY_NAME = 'Newco';
@@ -232,6 +225,9 @@ export function normalizeSave(saved: GameState): GameState {
     cLevels[role] = { hired: slot.hired ?? null, offer: slot.offer ?? null };
   }
   const normalized: GameState = { ...saved, cLevels, rollGrantsEarned: saved.rollGrantsEarned ?? 0 };
+  // Chapters: a malformed arc record (hand-edited or from a broken build) is
+  // dropped rather than trusted — the store starts a fresh one from this save.
+  if (saved.arc !== undefined && !isArcRecord(saved.arc)) delete normalized.arc;
   // Saves from before investor offers: deal the table now, so a run that's
   // already off cooldown sees term sheets the moment it loads.
   return saved.fundingOffers === undefined
@@ -581,41 +577,87 @@ function advanceMarket(
 export const CLIFFHANGER_COOLDOWN_WEEKS = 5;
 
 /**
- * Cards a cliffhanger may pin: this era's undrawn decision cards, never an
- * acquisition offer. Accepting one ends the run, and a player who waited or
- * paid to see what happens next should not find the game over a tap later.
+ * Cards an unscheduled cliffhanger may pin: this era's undrawn decision cards,
+ * never an acquisition offer. Accepting one ends the run, and a player who
+ * waited or paid to see what happens next should not find the game over a tap
+ * later.
  */
 function pinnableDeck(era: Era): EventCard[] {
-  return ERA_DECKS[era].filter(
-    (card) => card.kind === 'decision' && !card.choices?.some((choice) => choice.effects.acquisitionOffer),
-  );
+  return ERA_DECKS[era].filter(isPinnable);
+}
+
+function pinCard(state: GameState, card: EventCard, rng: RngState, extra: Partial<GameState> = {}): GameState {
+  return {
+    ...state,
+    ...extra,
+    rng,
+    cliffhangerCardId: card.id,
+    lastCliffhangerWeek: state.week,
+    // Only a generated card (a crisis template) needs carrying; deck cards are looked up by id.
+    ...(findDeckCard(card.id) ? (state.pinnedCard ? { pinnedCard: null } : {}) : { pinnedCard: card }),
+  };
 }
 
 /**
- * Pins the next decision card for the week wall to tease. Draws from the
- * seeded RNG like any other card, so replays stay deterministic. Pinning while
- * a card is pending is allowed: the pending card is already in
+ * The chapter beat due at this week, if any: the capstone at weeks 10, 20,
+ * 30, … (arc 0's first wall included), or the mid-chapter card at 15, 25, …
+ * Each fires at most once per chapter, and neither waits on the cooldown —
+ * that is for unscheduled walls only.
+ */
+function scheduledPin(state: GameState): GameState | null {
+  const week = state.week;
+  const arcIndex = arcIndexForWeek(week);
+  const templateId = state.arc?.index === arcIndex ? state.arc.id : undefined;
+  if (isCapstoneWeek(week) && (state.lastCapstoneArc ?? -1) < arcIndex) {
+    const card = pickCapstone({ arcIndex, state, templateId });
+    if (card) return pinCard(state, card, state.rng, { lastCapstoneArc: arcIndex });
+  }
+  if (isMidpointWeek(week) && (state.lastMidpointArc ?? -1) < arcIndex) {
+    const card = pickMidpoint({ arcIndex, state, templateId });
+    if (card) return pinCard(state, card, state.rng, { lastMidpointArc: arcIndex });
+  }
+  return null;
+}
+
+/**
+ * Pins the next decision card for the week wall to tease. A chapter beat
+ * (capstone or mid-chapter card) wins when one is due; otherwise it draws from
+ * the seeded RNG like any other card, so replays stay deterministic. Pinning
+ * while a card is pending is allowed: the pending card is already in
  * `drawnEventIds`, and the wall is where the teaser earns its keep.
  */
-function pinCliffhanger(state: GameState): GameState {
+function pinCliffhanger(state: GameState, scheduledOnly = false): GameState {
   if (state.gameOver || state.cliffhangerCardId) return state;
+  const scheduled = scheduledPin(state);
+  if (scheduled) return scheduled;
+  if (scheduledOnly) return state;
   if (state.lastCliffhangerWeek !== undefined && state.week - state.lastCliffhangerWeek < CLIFFHANGER_COOLDOWN_WEEKS) {
     return state;
   }
   const draw = drawCard(pinnableDeck(state.era), state.drawnEventIds, state.storyFlags, state.rng);
   if (!draw.card) return state;
-  return { ...state, rng: draw.rng, cliffhangerCardId: draw.card.id, lastCliffhangerWeek: state.week };
+  return pinCard(state, draw.card, draw.rng);
 }
 
-/** The card pinned to land next week, or null. Looks across every era: an era can turn over on the very tick that delivers it. */
-export function cliffhangerCardFor(state: GameState | null): EventCard | null {
-  const id = state?.cliffhangerCardId;
-  if (!id) return null;
+/** A card from an era deck or the chapter cards, by id. */
+function findDeckCard(id: string): EventCard | null {
   for (const deck of Object.values(ERA_DECKS)) {
     const card = deck.find((c) => c.id === id);
     if (card) return card;
   }
-  return null;
+  return arcCardById(id);
+}
+
+/**
+ * The card pinned to land next week, or null. Looks across every era (an era
+ * can turn over on the very tick that delivers it), the chapter cards, and a
+ * generated crisis card carried on the state.
+ */
+export function cliffhangerCardFor(state: GameState | null): EventCard | null {
+  const id = state?.cliffhangerCardId;
+  if (!id) return null;
+  if (state.pinnedCard?.id === id) return state.pinnedCard;
+  return findDeckCard(id);
 }
 
 /** Ticks down the event countdown and draws/resolves a card once it hits 0. A pinned cliffhanger lands first, whatever the countdown says. */
@@ -630,6 +672,7 @@ function drawEventIfDue(state: GameState): GameState {
       weeksUntilNextEvent: cadence,
       pendingEvent: pinned,
       cliffhangerCardId: null,
+      ...(state.pinnedCard ? { pinnedCard: null } : {}),
     };
   }
   if (state.cliffhangerCardId) state = { ...state, cliffhangerCardId: null };
@@ -798,7 +841,7 @@ export function reduce(state: GameState, action: GameAction): GameState {
       };
     }
     case 'PIN_CLIFFHANGER':
-      return pinCliffhanger(state);
+      return pinCliffhanger(state, action.scheduledOnly);
     case 'ANSWER_EVENT': {
       const card = state.pendingEvent;
       if (!card || card.kind !== 'decision') return state;

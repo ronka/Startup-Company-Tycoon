@@ -17,6 +17,7 @@ import type { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { REVENUECAT_IOS_API_KEY } from './config';
 import { purchaseErrorDetails } from './error-details';
 import { cheapestPriceTeaser, selectWeeksOffering, type PriceTeaser } from './offering-select';
+import { toCustomVariables, type PaywallVariables } from './paywall-variables';
 import { isReviveProduct, shortIdFromProductIdentifier, weeksForProduct } from './product-weeks';
 import {
   reconcilePurchases,
@@ -172,13 +173,34 @@ async function fetchRevivePackage() {
  * throws instead of taking the app down at startup. Callers read that as
  * `not_presented` and fall back to the in-app sheet.
  */
-function loadPaywallUI(): typeof import('react-native-purchases-ui').default | null {
+type PaywallUIModule = typeof import('react-native-purchases-ui');
+
+function loadPaywallModule(): PaywallUIModule | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('react-native-purchases-ui').default;
+    return require('react-native-purchases-ui');
   } catch (err) {
     console.warn('[purchases] RevenueCat paywall UI unavailable in this build', err);
     return null;
+  }
+}
+
+/**
+ * The `customVariables` map for `presentPaywall`, or undefined. Built from the
+ * module's named `CustomVariableValue` export, inside its own try: a binary
+ * whose SDK predates custom variables has no such export (or a different
+ * one), and there the paywall is presented without them — RevenueCat falls
+ * back to the editor defaults — rather than not at all.
+ */
+function buildCustomVariables(mod: PaywallUIModule, vars: PaywallVariables | undefined) {
+  if (!vars) return undefined;
+  try {
+    const factory = mod.CustomVariableValue;
+    if (!factory || typeof factory.string !== 'function' || typeof factory.number !== 'function') return undefined;
+    return toCustomVariables(vars, factory);
+  } catch (err) {
+    console.warn('[purchases] could not build paywall custom variables; presenting without them', err);
+    return undefined;
   }
 }
 
@@ -203,7 +225,9 @@ const PAYWALL_OUTCOMES: Record<PAYWALL_RESULT, PaywallOutcome> = {
 };
 
 /**
- * Presents the RevenueCat-hosted paywall for the `weeks` offering.
+ * Presents the RevenueCat-hosted paywall for the `weeks` offering, with the
+ * run's custom variables (company, week, and — for the cliffhanger — the
+ * pinned card; see `paywall-variables.ts`).
  *
  * Returns only how the screen closed. Crediting is deliberately *not* done
  * here: `presentPaywall()` hands back a `PAYWALL_RESULT` and nothing else — no
@@ -212,10 +236,15 @@ const PAYWALL_OUTCOMES: Record<PAYWALL_RESULT, PaywallOutcome> = {
  * `getCustomerInfo()`-against-the-ledger pass that already guarantees a paid
  * purchase can't be lost or granted twice. One crediting path, one ledger.
  */
-export async function presentWeeksPaywall(trigger: string, onPresented?: () => void): Promise<PaywallPresentation> {
+export async function presentWeeksPaywall(
+  trigger: string,
+  onPresented?: () => void,
+  variables?: PaywallVariables,
+): Promise<PaywallPresentation> {
   if (!configured) return { outcome: 'not_presented', notPresentedReason: 'not_configured' };
-  const ui = loadPaywallUI();
-  if (!ui) return { outcome: 'not_presented', notPresentedReason: 'ui_module_missing' };
+  const mod = loadPaywallModule();
+  const ui = mod?.default;
+  if (!mod || !ui) return { outcome: 'not_presented', notPresentedReason: 'ui_module_missing' };
   let offering: Awaited<ReturnType<typeof fetchWeeksOffering>>;
   try {
     offering = await fetchWeeksOffering(trigger);
@@ -233,8 +262,14 @@ export async function presentWeeksPaywall(trigger: string, onPresented?: () => v
     // This is the first point at which the hosted surface is known to be
     // available. The SDK returns only after it closes, so the caller cannot
     // honestly infer an impression from the eventual outcome.
+    // Built before `onPresented` so nothing between the impression and the
+    // present call can throw. Absent variables mean editor defaults.
+    const customVariables = buildCustomVariables(mod, variables);
     onPresented?.();
-    const result = await ui.presentPaywall({ offering });
+    // One present call, never retried: a rejected present is reported below,
+    // and a second present into the same frame is the iOS hang
+    // (docs/bug-stuck-decision-modal.md).
+    const result = await ui.presentPaywall(customVariables ? { offering, customVariables } : { offering });
     // `?? 'error'` guards the runtime case this table can't: a future SDK
     // returning a member this build has never heard of.
     const outcome = PAYWALL_OUTCOMES[result] ?? 'error';

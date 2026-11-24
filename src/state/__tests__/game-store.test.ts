@@ -182,3 +182,30 @@ describe('storeReducer — guided first weeks', () => {
     expect(revived?.unlockSchedule).toBe('guided-ui');
   });
 });
+
+describe('storeReducer — chapters', () => {
+  it('does not start a chapter while the guided ladder is being climbed', () => {
+    const start = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1, guided: true });
+    expect(storeReducer(start, { type: 'SYNC_ARC' })).toBe(start);
+  });
+
+  it('starts the PMF chapter once the guided ladder is done, then settles', () => {
+    const start = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1, guided: true })!;
+    const allDone = storeReducer(start, {
+      type: 'RECORD_QUESTS',
+      questIds: ['hire-dev', 'hire-sales', 'first-customer', 'five-customers', 'income', 'customers'],
+    });
+    const synced = storeReducer({ ...allDone!, week: 11 }, { type: 'SYNC_ARC' });
+    expect(synced?.arc).toMatchObject({ index: 1, id: 'pmf', startedWeek: 11 });
+    expect(storeReducer(synced, { type: 'SYNC_ARC' })).toBe(synced);
+  });
+
+  it('never writes a chapter field on NEW_GAME or TICK (the sim stays byte-identical)', () => {
+    const start = storeReducer(null, { type: 'NEW_GAME', companyName: 'A', seed: 1 })!;
+    const ticked = storeReducer(start, { type: 'TICK' })!;
+    for (const key of ['arc', 'lastCapstoneArc', 'lastMidpointArc', 'pinnedCard'] as const) {
+      expect(key in start).toBe(false);
+      expect(key in ticked).toBe(false);
+    }
+  });
+});

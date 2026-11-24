@@ -31,6 +31,7 @@ import { posthog, registerAnalyticsRelease } from '@/analytics/posthog';
 import { totalHeadcount } from '@/game/balance';
 import { newGame, normalizeSave, reduce } from '@/game/engine';
 import { featuresUnlockedBy, newlyCompletedQuests, type QuestId } from '@/game/unlocks';
+import { isCapstoneWeek, isMidpointWeek, syncArc } from '@/game/arcs';
 import { standupCardForStreak, standupTierForStreak } from '@/game/events/standup';
 import { ROUND_ORDER, type FocusId, type GameAction, type GameState } from '@/game/types';
 import { deriveWeeklyStats } from '@/lib/derived-stats';
@@ -46,6 +47,7 @@ import {
   type RestoreOutcome,
 } from '@/purchases';
 import { buildSyncPayload, mergeEntitlements, type ServerEntitlements } from '@/purchases/entitlement-sync';
+import { arcMidpointEvent, arcPropsFor, arcSyncEvents, pinBeat } from '@/state/arc-analytics';
 import { initialStreak, updateStreak, type StreakState } from '@/state/daily-streak';
 import {
   initialRollBudget,
@@ -206,7 +208,9 @@ type StoreAction =
   | { type: 'HYDRATE'; state: GameState | null }
   | { type: 'SET_STATE'; state: GameState }
   /** Store-only: marks guided-run quests done so their unlocks stick. The engine never sees it. */
-  | { type: 'RECORD_QUESTS'; questIds: QuestId[] };
+  | { type: 'RECORD_QUESTS'; questIds: QuestId[] }
+  /** Store-only: starts the chapter the run moved into (freezing its baseline) and records missions met. See `syncArc`. */
+  | { type: 'SYNC_ARC' };
 
 /** Exported for testing the store-layer dispatch path without rendering a `GameProvider`. */
 export function storeReducer(state: GameState | null, action: StoreAction): GameState | null {
@@ -230,6 +234,8 @@ export function storeReducer(state: GameState | null, action: StoreAction): Game
       const added = action.questIds.filter((id) => !done.includes(id));
       return added.length ? { ...state, questsDone: [...done, ...added] } : state;
     }
+    case 'SYNC_ARC':
+      return state ? syncArc(state) : state;
     default:
       return state === null ? state : reduce(state, action);
   }
@@ -1141,11 +1147,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       }
     }
     if (state.cliffhangerCardId && state.cliffhangerCardId !== prev.cliffhangerCardId) {
-      track(EVENTS.CLIFFHANGER_PINNED, { card_id: state.cliffhangerCardId, week: state.week });
+      track(EVENTS.CLIFFHANGER_PINNED, {
+        card_id: state.cliffhangerCardId,
+        week: state.week,
+        ...arcPropsFor(state),
+        beat: pinBeat(prev, state),
+      });
     }
     if (prev.cliffhangerCardId && state.pendingEvent?.id === prev.cliffhangerCardId) {
-      track(EVENTS.CLIFFHANGER_LANDED, { card_id: prev.cliffhangerCardId, week: state.week });
+      // The card belongs to the chapter it was pinned in, which is the week before it lands.
+      track(EVENTS.CLIFFHANGER_LANDED, { card_id: prev.cliffhangerCardId, week: state.week, ...arcPropsFor(prev) });
     }
+    const midpoint = arcMidpointEvent(prev, state);
+    if (midpoint) track(EVENTS.ARC_MIDPOINT, midpoint.props);
     // Term sheets that arrived or lapsed this week. A raise or the run ending
     // clears the table, so only diff when neither happened — those offers
     // were withdrawn, not expired.
@@ -1251,6 +1265,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'RECORD_QUESTS', questIds });
   }, [state, loading]);
 
+  // Chapters: start the arc the run just moved into (its baseline frozen now,
+  // so goals never chase the player) and record missions met. Same shape as
+  // the quest effect above; `syncArc` returns the same object when nothing
+  // changed, so this settles after one dispatch.
+  useEffect(() => {
+    if (loading || !state || state.gameOver) return;
+    const next = syncArc(state);
+    if (next === state) return;
+    for (const event of arcSyncEvents(state, next)) {
+      track(event.name === 'arc_started' ? EVENTS.ARC_STARTED : EVENTS.ARC_MISSION_COMPLETED, event.props);
+    }
+    dispatch({ type: 'SYNC_ARC' });
+  }, [state, loading]);
+
   const dispatchWithSnapshot = (action: GameAction) => {
     if (action.type === 'TICK') {
       // Mirrors tick()'s own frozen conditions so the delta baseline only
@@ -1321,7 +1349,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // The week that empties the pools pins next week's card, so the wall
       // can tease it — the cliffhanger. Raw `dispatch`, not a player action:
       // it batches into this commit and stays out of action analytics.
+      //
+      // Chapter beats pin too, wall or not: the capstone at week 10/20/30…
+      // and the mid-chapter card at 15/25/… (`scheduledOnly`, so off the
+      // wall nothing but a chapter beat is ever pinned). `state` is still
+      // pre-tick here, hence `week + 1`.
+      const landingWeek = state.week + 1;
+      const chapterBeat = isCapstoneWeek(landingWeek) || isMidpointWeek(landingWeek);
       if (hitWall) dispatch({ type: 'PIN_CLIFFHANGER' });
+      else if (chapterBeat) dispatch({ type: 'PIN_CLIFFHANGER', scheduledOnly: true });
       // `week_advanced` itself is emitted by the state-diff effect, with the
       // fresh post-tick numbers, once the reducer commits.
       return;

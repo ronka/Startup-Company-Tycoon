@@ -2,12 +2,14 @@ import { StyleSheet, View } from 'react-native';
 
 import { ActionTip } from '@/components/game/action-tip';
 import { BottomSheet } from '@/components/game/bottom-sheet';
+import { CliffhangerCardPreview } from '@/components/game/cliffhanger-card-preview';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 import type { PriceTeaser } from '@/purchases';
-import type { ActionNow, TomorrowAgenda } from '@/state/day-close';
+import type { ActionNow, CliffhangerTeaser, TomorrowAgenda } from '@/state/day-close';
 import { WEEK_REGEN_MS, WEEKS_BANK_CAP } from '@/state/week-budget';
 
 /**
@@ -26,6 +28,7 @@ export function DayCompleteSheet({
   week,
   stake,
   agenda,
+  cliffhangerCard,
   actionTip,
   onActionTip,
   onBuyWeeks,
@@ -41,6 +44,8 @@ export function DayCompleteSheet({
   /** Founder take-home at the current valuation — the run's score-in-progress. */
   stake: number;
   agenda: TomorrowAgenda | null;
+  /** The pinned card behind a `cliffhanger` agenda: the panel's headline, with its choices and stakes. */
+  cliffhangerCard?: CliffhangerTeaser | null;
   /** Something still worth doing today (a raise), shown as a tappable 💡 row. */
   actionTip?: ActionNow | null;
   onActionTip?: () => void;
@@ -69,36 +74,62 @@ export function DayCompleteSheet({
   // A pinned card turns the close into a cliffhanger: the panel ends on what
   // next week brings, and buying weeks becomes finding out.
   const cliffhanger = agenda?.kind === 'cliffhanger';
+  const theme = useTheme();
   return (
     <BottomSheet visible={visible} onClose={onDismiss} onDismissed={onDismissed}>
-      <View style={styles.header}>
-        <ThemedText type="title">{cliffhanger ? 'To be continued…' : "That's the week planned out"}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {companyName} — week {week}
-        </ThemedText>
-      </View>
+      {cliffhanger && cliffhangerCard ? (
+        <>
+          {/* One focal point: the decision. "To be continued…" is its eyebrow
+              (the banner's own warning label), not a second headline. */}
+          <View style={styles.header}>
+            <ThemedText type="sectionLabel" style={{ color: theme.warning }}>
+              To be continued…
+            </ThemedText>
+            <CliffhangerCardPreview teaser={cliffhangerCard} size="prominent" />
+          </View>
+          {/* The number worth protecting overnight, as one quiet row — the
+              company and week are already in the HUD behind the sheet. */}
+          <View style={[styles.stakeRow, { borderColor: theme.border }]}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Your stake
+            </ThemedText>
+            <ThemedText type="smallBold" style={styles.stakeValue}>
+              {formatMoney(stake)}
+            </ThemedText>
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.header}>
+            <ThemedText type="title">{cliffhanger ? 'To be continued…' : "That's the week planned out"}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {companyName} — week {week}
+            </ThemedText>
+          </View>
 
-      {/* The number worth protecting overnight — the run's score so far, not a
-          spent-resource readout. */}
-      <View style={styles.stake}>
-        <ThemedText type="small" themeColor="textSecondary">
-          Your stake
-        </ThemedText>
-        <ThemedText type="title">{formatMoney(stake)}</ThemedText>
-      </View>
+          {/* The number worth protecting overnight — the run's score so far, not a
+              spent-resource readout. */}
+          <View style={styles.stake}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Your stake
+            </ThemedText>
+            <ThemedText type="title">{formatMoney(stake)}</ThemedText>
+          </View>
 
-      {agenda ? (
-        <View style={styles.agenda}>
-          <ThemedText type="small" themeColor="textSecondary">
-            {cliffhanger ? 'Next week' : 'Next up'}
-          </ThemedText>
-          <ThemedText type="smallBold">{agenda.line}</ThemedText>
-        </View>
-      ) : null}
+          {agenda ? (
+            <View style={styles.agenda}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {cliffhanger ? 'Next week' : 'Next up'}
+              </ThemedText>
+              <ThemedText type="smallBold">{agenda.line}</ThemedText>
+            </View>
+          ) : null}
+        </>
+      )}
 
       {actionTip && onActionTip ? <ActionTip action={actionTip} onPress={onActionTip} /> : null}
 
-      <ThemedText type="small" themeColor="textSecondary">
+      <ThemedText type="footnote" themeColor="textMuted">
         A week comes back every {WEEK_REGEN_MS / 60_000} minutes — a full sprint of {WEEKS_BANK_CAP} in{' '}
         {(WEEKS_BANK_CAP * WEEK_REGEN_MS) / 3_600_000} hours.
       </ThemedText>
@@ -139,5 +170,15 @@ const styles = StyleSheet.create({
   },
   agenda: {
     gap: Spacing.half,
+  },
+  stakeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.two,
+  },
+  stakeValue: {
+    fontVariant: ['tabular-nums'],
   },
 });

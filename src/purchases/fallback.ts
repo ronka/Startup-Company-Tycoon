@@ -1,6 +1,7 @@
 import type { PriceTeaser } from './offering-select';
 import type { LaunchReconciliation, PurchaseTransaction, RestoreResult } from './reconciliation';
 import { stubPurchasesClient } from './stub';
+import type { PaywallVariables } from './paywall-variables';
 import type { PaywallPresentation, PurchasesClient } from './types';
 
 /**
@@ -26,7 +27,11 @@ export function configurePurchases(): void {}
  * caller to the in-app `BuyWeeksSheet`, which is the only thing that can work
  * on web, in tests, and in Expo Go anyway.
  */
-export async function presentWeeksPaywall(_trigger: string, _onPresented?: () => void): Promise<PaywallPresentation> {
+export async function presentWeeksPaywall(
+  _trigger: string,
+  _onPresented?: () => void,
+  _variables?: PaywallVariables,
+): Promise<PaywallPresentation> {
   return { outcome: 'not_presented', notPresentedReason: 'not_configured' };
 }
 

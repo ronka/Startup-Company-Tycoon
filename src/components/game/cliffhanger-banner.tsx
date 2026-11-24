@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { CliffhangerCardPreview } from '@/components/game/cliffhanger-card-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -10,9 +11,11 @@ import type { CliffhangerTeaser } from '@/state/day-close';
 import { formatClockCountdown, nextWeekRegenAt, type WeekBudget } from '@/state/week-budget';
 
 /**
- * The cliffhanger at the week wall: the card pinned to land next week, teased
- * by its hook rather than its choices, with the real wait until the next free
- * week and, where purchases work, a way to find out now.
+ * The cliffhanger at the week wall: the card pinned to land next week — its
+ * title, hook, its two choices named, and what's at stake — with the real wait
+ * until the next free week on the eyebrow and, where purchases work, a way to
+ * find out now. Never the choices' effects: that would close the curiosity gap.
+ * Kept to a glance — the closing panel is where the card gets room.
  *
  * Shown for as long as the player sits at the wall, on every tab — unlike the
  * once-a-day closing panel, a player who comes back mid-wait still sees what
@@ -22,12 +25,15 @@ import { formatClockCountdown, nextWeekRegenAt, type WeekBudget } from '@/state/
  */
 export function CliffhangerBanner({
   companyName,
+  week,
   teaser,
   weekBudget,
   priceTeaser,
   onFindOut,
 }: {
   companyName: string;
+  /** The current week; the card lands with the next one. */
+  week: number;
   teaser: CliffhangerTeaser;
   weekBudget: WeekBudget | null;
   /** Live store price for the button; null keeps the plain "Find out now". */
@@ -43,31 +49,31 @@ export function CliffhangerBanner({
       type="surfaceRaised"
       style={[styles.banner, { borderColor: theme.warning }]}
       accessibilityRole="summary"
-      accessibilityLabel={`Next week at ${companyName}: ${teaser.line}${countdown ? ` Find out in ${countdown}.` : ''}`}>
-      <ThemedText type="sectionLabel" style={{ color: theme.warning }} numberOfLines={1}>
-        Next week…
-      </ThemedText>
-      <ThemedText type="smallBold">{teaser.line}</ThemedText>
-      <View style={styles.footer}>
-        <ThemedText type="small" themeColor="textSecondary" style={styles.countdown}>
-          {countdown ? `Find out in ${countdown}` : 'Find out next week'}
+      accessibilityLabel={`Next week at ${companyName}, week ${week + 1}: ${teaser.title}. ${teaser.teaser} ${teaser.stakes}${countdown ? ` Find out in ${countdown}.` : ''}`}>
+      <View style={styles.eyebrow}>
+        <ThemedText type="sectionLabel" style={[styles.eyebrowLabel, { color: theme.warning }]} numberOfLines={1}>
+          Week {week + 1} at {companyName}…
         </ThemedText>
-        {onFindOut ? (
-          <Pressable
-            onPress={onFindOut}
-            accessibilityRole="button"
-            accessibilityLabel={
-              priceTeaser
-                ? `Find out now. ${priceTeaser.weeks} weeks for ${priceTeaser.priceLabel}.`
-                : 'Find out now. Get more weeks.'
-            }
-            style={({ pressed }) => [styles.cta, { backgroundColor: theme.accent }, pressed && styles.pressed]}>
-            <ThemedText type="smallBold" style={{ color: theme.accentInk }}>
-              {priceTeaser ? `Find out now · ${priceTeaser.priceLabel}` : 'Find out now'}
-            </ThemedText>
-          </Pressable>
-        ) : null}
+        <ThemedText type="footnote" themeColor="textMuted" style={styles.countdown}>
+          {countdown ? `in ${countdown}` : 'next week'}
+        </ThemedText>
       </View>
+      <CliffhangerCardPreview teaser={teaser} size="compact" />
+      {onFindOut ? (
+        <Pressable
+          onPress={onFindOut}
+          accessibilityRole="button"
+          accessibilityLabel={
+            priceTeaser
+              ? `Find out now. ${priceTeaser.weeks} weeks for ${priceTeaser.priceLabel}.`
+              : 'Find out now. Get more weeks.'
+          }
+          style={({ pressed }) => [styles.cta, { backgroundColor: theme.accent }, pressed && styles.pressed]}>
+          <ThemedText type="smallBold" style={{ color: theme.accentInk }}>
+            {priceTeaser ? `Find out now · ${priceTeaser.priceLabel}` : 'Find out now'}
+          </ThemedText>
+        </Pressable>
+      ) : null}
     </ThemedView>
   );
 }
@@ -96,18 +102,20 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
   },
-  footer: {
+  eyebrow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: Spacing.two,
-    marginTop: Spacing.half,
+  },
+  eyebrowLabel: {
+    flex: 1,
   },
   countdown: {
-    flex: 1,
     fontVariant: ['tabular-nums'],
   },
   cta: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.half,
     borderRadius: Radius.md,
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,

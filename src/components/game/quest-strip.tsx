@@ -4,6 +4,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { missionCompleted, nextArcMission } from '@/game/arcs';
 import { FEATURE_LABELS, FEATURE_TERMS, isGuided, nextQuest, unlockedFeatures, type Feature } from '@/game/unlocks';
 import type { GameState } from '@/game/types';
 import { useTheme } from '@/hooks/use-theme';
@@ -45,9 +46,10 @@ export function useUnlockMoment(state: GameState | null): [Feature[], () => void
 
 /**
  * The guided run's moments, hanging under the Hud over the screen: the unlock
- * banner and the "Mission complete" beat. The mission itself and what to do
- * next ride on the coach's tooltip (`GuidePointer`), which points at the
- * actual control to tap. Renders nothing outside a guided run.
+ * banner and the "Mission complete" beat — for the guided ladder and, after
+ * it, each chapter's missions. The guided mission itself and what to do next
+ * ride on the coach's tooltip (`GuidePointer`), which points at the actual
+ * control to tap. Unlock banners only ever come from a guided run.
  */
 export function QuestStrip({
   freshUnlocks,
@@ -58,7 +60,8 @@ export function QuestStrip({
 }) {
   const { state } = useGame();
   const theme = useTheme();
-  const quest = state ? nextQuest(state) : null;
+  // The guided ladder's pinned quest, then the current chapter's mission.
+  const quest = state ? (nextQuest(state) ?? nextArcMission(state)) : null;
 
   // "Mission complete": when the pinned quest changes, hold the finished one
   // for a beat.
@@ -67,7 +70,11 @@ export function QuestStrip({
   const nowPinned = state && quest ? { seed: state.createdWithSeed, id: quest.id, title: quest.title } : null;
   if (nowPinned?.id !== pinned?.id || nowPinned?.seed !== pinned?.seed) {
     setPinned(nowPinned);
-    if (pinned && state && pinned.seed === state.createdWithSeed) setCompleted(pinned.title);
+    // Only a mission that was actually met: a chapter rollover also changes the
+    // pinned mission, and an unfinished one must not be announced as done.
+    if (pinned && state && pinned.seed === state.createdWithSeed && missionCompleted(state, pinned.id)) {
+      setCompleted(pinned.title);
+    }
   }
   useEffect(() => {
     if (!completed) return;
@@ -75,7 +82,7 @@ export function QuestStrip({
     return () => clearTimeout(timer);
   }, [completed]);
 
-  if (!state || !isGuided(state) || state.gameOver) return null;
+  if (!state || state.gameOver) return null;
   if (!freshUnlocks.length && !completed) return null;
 
   const terms = freshUnlocks.flatMap((f) => FEATURE_TERMS[f] ?? []);

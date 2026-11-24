@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { accountAvailable } from '@/account';
 import { EVENTS, track, type EventName, type Props } from '@/analytics/events';
 import { BottomSheet } from '@/components/game/bottom-sheet';
+import { CliffhangerCardPreview } from '@/components/game/cliffhanger-card-preview';
 import { AccountSignInHint, LegalLinksRow } from '@/components/game/legal-links-row';
 import { PrimaryButton } from '@/components/game/primary-button';
 import { RestorePurchasesButton } from '@/components/game/restore-purchases-button';
@@ -11,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { purchaseErrorProps, purchasesClient, type PurchaseErrorCode, type WeekPack } from '@/purchases';
 import type { BuyWeeksTrigger } from '@/state/buy-weeks-flow';
+import type { CliffhangerTeaser } from '@/state/day-close';
 import { useGame } from '@/state/game-store';
 import { notePurchaseFailed } from '@/state/store-review';
 
@@ -41,15 +43,19 @@ function trackSheet(event: EventName, trigger: BuyWeeksTrigger, props: Props = {
 export function BuyWeeksSheet({
   visible,
   trigger,
+  cliffhanger,
   onClose,
   onPurchased,
 }: {
   visible: boolean;
   trigger: BuyWeeksTrigger;
+  /** The pinned card, when the sheet stands in for the cliffhanger paywall: the same locked preview the wall showed. */
+  cliffhanger?: CliffhangerTeaser | null;
   onClose: () => void;
   onPurchased: (weeksGranted: number, transactionId: string) => void;
 }) {
-  const { account, signInWithApple } = useGame();
+  const { account, signInWithApple, state } = useGame();
+  const companyName = state?.companyName ?? 'your company';
   const [packs, setPacks] = useState<WeekPack[]>([]);
   const [pendingPackId, setPendingPackId] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<PurchaseErrorCode | null>(null);
@@ -148,12 +154,21 @@ export function BuyWeeksSheet({
   }
 
   return (
-    <BottomSheet visible={visible} onClose={handleDismiss} title="Buy weeks">
-      <ThemedText type="small" themeColor="textSecondary">
-        {trigger === 'hud'
-          ? 'Stock up on weeks for whenever you run out.'
-          : "That's the free weeks planned out — grab more to keep going now."}
-      </ThemedText>
+    <BottomSheet visible={visible} onClose={handleDismiss} title={cliffhanger ? 'Find out now' : 'Buy weeks'}>
+      {cliffhanger ? (
+        <View style={styles.cliffhanger}>
+          <CliffhangerCardPreview teaser={cliffhanger} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Don&apos;t leave {companyName} hanging — grab more weeks and make the call now.
+          </ThemedText>
+        </View>
+      ) : (
+        <ThemedText type="small" themeColor="textSecondary">
+          {trigger === 'hud'
+            ? 'Stock up on weeks for whenever you run out.'
+            : "That's the free weeks planned out — grab more to keep going now."}
+        </ThemedText>
+      )}
 
       <View style={styles.packs}>
         {packs.map((pack) => (
@@ -197,6 +212,9 @@ export function BuyWeeksSheet({
 }
 
 const styles = StyleSheet.create({
+  cliffhanger: {
+    gap: Spacing.two,
+  },
   packs: {
     gap: Spacing.two,
   },

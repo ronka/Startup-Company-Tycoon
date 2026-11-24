@@ -516,6 +516,7 @@ export function GameChrome({
           {cliffhanger ? (
             <CliffhangerBanner
               companyName={state.companyName}
+              week={state.week}
               teaser={cliffhanger}
               weekBudget={weekBudget}
               priceTeaser={priceTeaser}
@@ -584,6 +585,7 @@ export function GameChrome({
         week={state.week}
         stake={stake}
         agenda={agenda}
+        cliffhangerCard={cliffhanger}
         actionTip={actionNow}
         onActionTip={
           actionNow
@@ -651,6 +653,7 @@ export function GameChrome({
         <BuyWeeksSheet
           visible={buyWeeks.sheetTrigger !== null}
           trigger={buyWeeks.sheetTrigger ?? 'hud'}
+          cliffhanger={buyWeeks.sheetTrigger === 'cliffhanger' ? cliffhanger : null}
           onClose={buyWeeks.closeSheet}
           onPurchased={creditPurchase}
         />

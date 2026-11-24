@@ -3,6 +3,7 @@
  * imports may ever appear anywhere under `src/game/`.
  */
 
+import type { ArcRecord } from './arcs/types';
 import { Era, EventCard, NewsEntry, TimedEffect } from './events/types';
 
 export const ROLES = ['devs', 'sales', 'support'] as const;
@@ -319,6 +320,23 @@ export interface GameState {
   cliffhangerCardId?: string | null;
   /** Week the last cliffhanger was pinned, for the cooldown. Unset until the first one. */
   lastCliffhangerWeek?: number;
+  /**
+   * A generated card (a chapter crisis template) pinned as the cliffhanger.
+   * Deck cards are looked up by `cliffhangerCardId`; a generated one has no
+   * deck to live in, so its numbers are frozen here the moment it's pinned.
+   */
+  pinnedCard?: EventCard | null;
+  /** Highest chapter (arc index) whose capstone cliffhanger has been pinned. Unset until the first, and on older saves. */
+  lastCapstoneArc?: number;
+  /** Highest chapter whose mid-chapter card has been pinned. Unset until the first. */
+  lastMidpointArc?: number;
+  /**
+   * The current chapter after the guided first weeks: its missions and the
+   * baseline they scale from. Recorded by the store (`SYNC_ARC`), never by
+   * `newGame()` or `tick()`, so the engine and the sim never see it. Unset on
+   * every save from before chapters — the store starts one on load.
+   */
+  arc?: ArcRecord;
 
   // Eras
   era: Era;
@@ -376,7 +394,16 @@ export type GameAction =
    * the store when a spend empties the play-week pools; the engine only knows
    * it as "the next tick brings this card". No-op when nothing is eligible.
    */
-  | { type: 'PIN_CLIFFHANGER' }
+  | {
+      type: 'PIN_CLIFFHANGER';
+      /**
+       * Set when the store pins because the week is a chapter beat (capstone
+       * week 10/20/30…, or the mid-chapter week 15/25/…) rather than because
+       * the player hit the wall: then only a scheduled card may be pinned, and
+       * an ordinary cooldown pin never happens off the wall.
+       */
+      scheduledOnly?: boolean;
+    }
   | { type: 'GO_PUBLIC' }
   | { type: 'SET_FOCUS'; focus: FocusId }
   /**

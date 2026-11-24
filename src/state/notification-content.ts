@@ -7,7 +7,13 @@
 
 import { deriveWeeklyStats } from '@/lib/derived-stats';
 import { formatMoney } from '@/lib/format';
-import { AGENDA_RUNWAY_WEEKS, raiseAvailable, tomorrowAgendaFor, type TomorrowAgenda } from '@/state/day-close';
+import {
+  AGENDA_RUNWAY_WEEKS,
+  cliffhangerTeaserFor,
+  raiseAvailable,
+  tomorrowAgendaFor,
+  type TomorrowAgenda,
+} from '@/state/day-close';
 import { WEEKS_BANK_CAP } from '@/state/week-budget';
 import type { GameState } from '@/game/types';
 
@@ -21,6 +27,9 @@ export interface NotificationContent {
    */
   kind: TomorrowAgenda['kind'] | 'raise' | 'progress' | 'weeks_back';
 }
+
+/** Longest push title that still fits one lock-screen line on a small iPhone. */
+export const NOTIFICATION_TITLE_MAX = 44;
 
 /** Runway at or below this many weeks is worth a standalone warning — the panel's threshold, by construction. */
 export const LOW_RUNWAY_WARNING_WEEKS = AGENDA_RUNWAY_WEEKS;
@@ -48,8 +57,15 @@ export function notificationContentFor(state: GameState | null): NotificationCon
   }
 
   switch (agenda.kind) {
-    case 'cliffhanger':
-      return { kind: agenda.kind, title: `${state.companyName}: next week`, body: agenda.line };
+    case 'cliffhanger': {
+      // Title names the card when it fits on one lock-screen line; the body
+      // stays the teaser (`agenda.line`), so the panel and the push still say
+      // the same thing. Choices and stakes stay off the push — two lines max.
+      const card = cliffhangerTeaserFor(state);
+      const named = card ? `${state.companyName}: ${card.title}` : null;
+      const title = named && named.length <= NOTIFICATION_TITLE_MAX ? named : `${state.companyName}: next week`;
+      return { kind: agenda.kind, title, body: agenda.line };
+    }
     case 'decision':
       return {
         kind: agenda.kind,
